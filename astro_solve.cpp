@@ -18,6 +18,8 @@
 #include <gphoto2/gphoto2-file.h>
 #include <gphoto2/gphoto2-context.h>
 
+#include <termios.h>
+
 
 // ===================== Параметри апаратури та спостерігача =====================
 struct TelescopeParams {
@@ -55,7 +57,7 @@ static std::tm get_current_utc() {
     return utc;
 }
 
-// можемо працювати або з QHYCCD, або з OpenCV.
+// можемо працювати або з QHYCCD, або з OpenCV, або з Canon
 class CaptureDevice {
 public:
     CaptureDevice() : use_qhy_(false), cam_(nullptr), imgW_(0), imgH_(0), bpp_(0), channels_(0) {}
@@ -262,6 +264,120 @@ private:
     GPContext *canon_ctx_ = nullptr;
 };
 
+// ===================== Підключення до монту SkyWatcher (LX200/SynScan) =====================
+// Мінімальна ASCII-реалізація: :V#, :GR#, :GD#, :Sr hh:mm:ss#, :Sd sdd*mm#, :MS#
+class MountController {
+public:
+    MountController() : fd_(-1), do_sync_(false) {}
+
+    bool openPort(const std::string &port, int baud=9600) {
+        fd_ = ::open(port.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
+        if (fd_ < 0) {
+            std::perror("open mount port");
+            return false;
+        }
+        struct termios tty{};
+        if (tcgetattr(fd_, &tty) != 0) {
+            std::perror("tcgetattr");
+            return false;
+        }
+        cfsetospeed(&tty, baud_to_flag(baud));
+        cfsetispeed(&tty, baud_to_flag(baud));
+        tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+        tty.c_iflag &= ~IGNBRK;
+        tty.c_lflag = 0;
+        tty.c_oflag = 0;
+        tty.c_cc[VMIN]  = 0;
+        tty.c_cc[VTIME] = 10; // 1s
+        tty.c_cflag |= (CLOCAL | CREAD);
+        tty.c_cflag &= ~(PARENB | PARODD);
+        tty.c_cflag &= ~CSTOPB;
+        tty.c_cflag &= ~CRTSCTS;
+        if (tcsetattr(fd_, TCSANOW, &tty) != 0) {
+            std::perror("tcsetattr");
+            return false;
+        }
+        // перевіримо що живий
+        std::string v = sendCommand(":V#");
+        if (v.empty()) {
+            std::cerr << "Mount: no response to :V#\n";
+        } else {
+            std::cout << "Mount version: " << v << "\n";
+        }
+        return true;
+    }
+
+    void enableSync(bool en) { do_sync_ = en; }
+
+    // зчитати поточні RA/DEC
+    bool getRADec(std::string &ra, std::string &dec) {
+        ra  = sendCommand(":GR#");
+        dec = sendCommand(":GD#");
+        return !ra.empty() && !dec.empty();
+    }
+
+    // синхронізуватися на координати з plate solving
+    // ra/dec у градусах → переганяємо у формат LX200
+    bool syncTo(double ra_deg, double dec_deg) {
+        // RA: 0..360 → години
+        double ra_h = ra_deg / 15.0;
+        int h = (int)ra_h;
+        int m = (int)((ra_h - h) * 60.0);
+        int s = (int)((((ra_h - h) * 60.0) - m) * 60.0);
+
+        char ra_cmd[32];
+        std::snprintf(ra_cmd, sizeof(ra_cmd), ":Sr %02d:%02d:%02d#", h, m, s);
+        auto r1 = sendCommand(ra_cmd);
+
+        // DEC: +DD*MM
+        char sign = dec_deg >= 0 ? '+' : '-';
+        double absd = std::fabs(dec_deg);
+        int dd = (int)absd;
+        int dm = (int)((absd - dd) * 60.0);
+        char dec_cmd[32];
+        std::snprintf(dec_cmd, sizeof(dec_cmd), ":Sd %c%02d*%02d#", sign, dd, dm);
+        auto r2 = sendCommand(dec_cmd);
+
+        auto r3 = sendCommand(":MS#"); // slew
+
+        return !r1.empty() && !r2.empty() && !r3.empty();
+    }
+
+    bool isOpen() const { return fd_ >= 0; }
+
+    ~MountController() {
+        if (fd_ >= 0) ::close(fd_);
+    }
+
+private:
+    int fd_;
+    bool do_sync_;
+
+    speed_t baud_to_flag(int baud) {
+        switch (baud) {
+            case 115200: return B115200;
+            case 57600: return B57600;
+            case 38400: return B38400;
+            case 19200: return B19200;
+            default: return B9600;
+        }
+    }
+
+    std::string sendCommand(const std::string &cmd) {
+        if (fd_ < 0) return {};
+        ssize_t w = ::write(fd_, cmd.c_str(), cmd.size());
+        if (w < 0) {
+            std::perror("write mount");
+            return {};
+        }
+        char buf[128];
+        ssize_t r = ::read(fd_, buf, sizeof(buf)-1);
+        if (r <= 0) return {};
+        buf[r] = 0;
+        return std::string(buf);
+    }
+};
+
 // ===================== Детектор зірок =====================
 struct Star {
     cv::Point2d pos;    // координата в пікселях
@@ -422,6 +538,8 @@ struct Args {
     bool single_shot = false;
     bool use_qhy = false;
     bool use_canon = false;
+    std::string mount_port;
+    bool mount_sync = false;
 };
 
 Args parse_args(int argc, char **argv) {
@@ -442,6 +560,10 @@ Args parse_args(int argc, char **argv) {
             a.use_qhy = true;
         } else if (s == "--canon") {
             a.use_canon = true;
+        } else if (s.rfind("--mount-port=",0) == 0) {
+            a.mount_port = s.substr(std::string("--mount-port=").size());
+        } else if (s == "--mount-sync") {
+            a.mount_sync = true;
         }
     }
     return a;
@@ -477,6 +599,16 @@ int main(int argc, char **argv) {
         }
     }
 
+    MountController mount;
+    if (!args.mount_port.empty()) {
+        if (mount.openPort(args.mount_port, 9600)) {
+            std::cout << "Mount connected on " << args.mount_port << "\n";
+            if (args.mount_sync) mount.enableSync(true);
+        } else {
+            std::cerr << "Cannot open mount on " << args.mount_port << "\n";
+        }
+    }
+
     StarDetector detector;
     PlateSolver solver(telescope, observer);
     MotionEstimator motion;
@@ -499,6 +631,23 @@ int main(int argc, char **argv) {
         if (sol.valid) {
             std::cout << "Solved sky: RA=" << sol.ra_deg << " deg, DEC=" << sol.dec_deg
                       << " deg, PA=" << sol.pa_deg << " deg\n";
+
+            // якщо є монтування і нас попросили синхронізуватись — робимо
+            if (mount.isOpen() && args.mount_sync) {
+                if (mount.syncTo(sol.ra_deg, sol.dec_deg)) {
+                    std::cout << "Mount synced to solved coords.\n";
+                } else {
+                    std::cout << "Mount sync failed.\n";
+                }
+            }
+
+            // просто показати поточні координати монту
+            if (mount.isOpen()) {
+                std::string mra, mdec;
+                if (mount.getRADec(mra, mdec)) {
+                    std::cout << "Mount RA=" << mra << " DEC=" << mdec << "\n";
+                }
+            }
         } else {
             std::cout << "Sky solution not found.\n";
         }
