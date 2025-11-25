@@ -1,0 +1,528 @@
+// astro_solve.cpp
+// g++ -std=c++17 -O2 `pkg-config --cflags --libs opencv4 libgphoto2` astro_solve.cpp -lqhyccd -lgphoto2 -o astro_solve
+//
+// TODO: підключити SDK QHYCCD і замінити CaptureDevice на реальний.
+
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <vector>
+#include <chrono>
+#include <cmath>
+#include <optional>
+#include <string>
+#include <sstream>
+
+#include <qhyccd.h>
+
+#include <gphoto2/gphoto2-camera.h>
+#include <gphoto2/gphoto2-file.h>
+#include <gphoto2/gphoto2-context.h>
+
+
+// ===================== Параметри апаратури та спостерігача =====================
+struct TelescopeParams {
+    double focal_length_mm = 400.0;     // фокусна відстань
+    double pixel_size_um   = 4.8;       // розмір пікселя
+    int sensor_width_px    = 1920;
+    int sensor_height_px   = 1080;
+    // з цього можна порахувати масштаб в arcsec/pixel
+    double arcsec_per_pixel() const {
+        // scale["/px] = 206.265 * pixel_size[µm] / focal_length[mm]
+        return 206.265 * (pixel_size_um / 1000.0) / (focal_length_mm / 1000.0);
+    }
+};
+
+struct ObserverParams {
+    double latitude_deg  = 50.4501; // Київ
+    double longitude_deg = 30.5234;
+    double elevation_m   = 150.0;
+    // час беремо з системи або задаємо вручну
+    std::tm utc{};
+    bool has_manual_time = false;
+};
+
+// ===================== Утиліти =====================
+static std::tm get_current_utc() {
+    using namespace std::chrono;
+    auto now = system_clock::now();
+    std::time_t tt = system_clock::to_time_t(now);
+    std::tm utc{};
+#if defined(_WIN32)
+    gmtime_s(&utc, &tt);
+#else
+    gmtime_r(&tt, &utc);
+#endif
+    return utc;
+}
+
+// можемо працювати або з QHYCCD, або з OpenCV.
+class CaptureDevice {
+public:
+    CaptureDevice() : use_qhy_(false), cam_(nullptr), imgW_(0), imgH_(0), bpp_(0), channels_(0) {}
+
+    // --- Canon DSLR через libgphoto2 ---
+    bool open_canon() {
+        use_qhy_ = false;
+        use_canon_ = true;
+
+        GPContext *context = gp_context_new();
+        if (gp_camera_new(&canon_cam_) != GP_OK) {
+            std::cerr << "Canon: cannot allocate camera\n";
+            return false;
+        }
+        int ret = gp_camera_init(canon_cam_, context);
+        if (ret != GP_OK) {
+            std::cerr << "Canon: init failed\n";
+            gp_camera_free(canon_cam_);
+            canon_cam_ = nullptr;
+            return false;
+        }
+
+        canon_ctx_ = context;
+        std::cout << "Canon DSLR connected\n";
+        return true;
+    }
+
+    bool grabFrame(cv::Mat &frame) {
+        if (use_canon_) {
+            if (!canon_cam_) return false;
+            CameraFile *file;
+            CameraFilePath path;
+            strcpy(path.folder, "/");
+            strcpy(path.name, "capture.jpg");
+
+            int ret = gp_camera_capture(canon_cam_, GP_CAPTURE_IMAGE, &path, canon_ctx_);
+            if (ret != GP_OK) {
+                std::cerr << "Canon: capture failed\n";
+                return false;
+            }
+
+            ret = gp_file_new(&file);
+            if (ret != GP_OK) return false;
+
+            ret = gp_camera_file_get(canon_cam_, path.folder, path.name, GP_FILE_TYPE_NORMAL, file, canon_ctx_);
+            if (ret != GP_OK) {
+                std::cerr << "Canon: get file failed\n";
+                gp_file_free(file);
+                return false;
+            }
+
+            const char *data;
+            unsigned long size;
+            gp_file_get_data_and_size(file, &data, &size);
+
+            std::vector<uchar> buf(data, data + size);
+            frame = cv::imdecode(buf, cv::IMREAD_COLOR);
+
+            gp_file_free(file);
+            gp_camera_file_delete(canon_cam_, path.folder, path.name, canon_ctx_);
+
+            return !frame.empty();
+        }
+
+        // решта варіантів нижче (opencv/qhy)
+        if (!use_qhy_) return cap_.read(frame);
+        else return grabFrameQHY(frame);
+    }
+
+    void close_canon() {
+        if (canon_cam_) {
+            gp_camera_exit(canon_cam_, canon_ctx_);
+            gp_camera_free(canon_cam_);
+            canon_cam_ = nullptr;
+            gp_context_unref(canon_ctx_);
+        }
+    }
+
+    // відкрити OpenCV-камеру
+    bool open_opencv(int index = 0) {
+        use_qhy_ = false;
+        cap_.open(index);
+        return cap_.isOpened();
+    }
+
+    // відкрити QHY (першу знайдену)
+    bool open_qhy() {
+        use_qhy_ = true;
+        int ret = InitQHYCCDResource();
+        if (ret != QHYCCD_SUCCESS) {
+            std::cerr << "QHY: InitQHYCCDResource failed: " << ret << "\n";
+            return false;
+        }
+
+        int camCount = ScanQHYCCD();
+        if (camCount <= 0) {
+            std::cerr << "QHY: no cameras found\n";
+            return false;
+        }
+
+        char camId[32];
+        ret = GetQHYCCDId(0, camId);
+        if (ret != QHYCCD_SUCCESS) {
+            std::cerr << "QHY: GetQHYCCDId failed: " << ret << "\n";
+            return false;
+        }
+
+        cam_ = OpenQHYCCD(camId);
+        if (cam_ == nullptr) {
+            std::cerr << "QHY: OpenQHYCCD failed\n";
+            return false;
+        }
+
+        // стрімовий режим
+        ret = SetQHYCCDStreamMode(cam_, 1);
+        if (ret != QHYCCD_SUCCESS) {
+            std::cerr << "QHY: SetQHYCCDStreamMode failed: " << ret << "\n";
+            return false;
+        }
+
+        // ініт камери
+        ret = InitQHYCCD(cam_);
+        if (ret != QHYCCD_SUCCESS) {
+            std::cerr << "QHY: InitQHYCCD failed: " << ret << "\n";
+            return false;
+        }
+
+        // можна тут виставити експозицію/GAIN, якщо потрібно
+        // SetQHYCCDParam(cam_, CONTROL_EXPOSURE, 20000); // 20 ms
+        // SetQHYCCDParam(cam_, CONTROL_GAIN, 10);
+
+        // старт live
+        ret = BeginQHYCCDLive(cam_);
+        if (ret != QHYCCD_SUCCESS) {
+            std::cerr << "QHY: BeginQHYCCDLive failed: " << ret << "\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    bool isOpened() const {
+        if (use_qhy_) return cam_ != nullptr;
+        return cap_.isOpened();
+    }
+
+    bool grabFrame(cv::Mat &frame) {
+        if (!use_qhy_) {
+            return cap_.read(frame);
+        } else {
+            // QHY: читаємо один кадр
+            int ret;
+            unsigned char *imgData = nullptr;
+            ret = GetQHYCCDLiveFrame(cam_, &imgW_, &imgH_, &bpp_, &channels_, nullptr);
+            if (ret != QHYCCD_SUCCESS) {
+                // друга форма з буфером
+                // нам потрібен буфер, давай створимо статичний
+            }
+
+            // краще зробити буфер:
+            static std::vector<unsigned char> buffer;
+            buffer.resize(4096 * 4096 * 2); // з запасом
+            ret = GetQHYCCDLiveFrame(cam_, &imgW_, &imgH_, &bpp_, &channels_, buffer.data());
+            if (ret != QHYCCD_SUCCESS) {
+                std::cerr << "QHY: GetQHYCCDLiveFrame failed: " << ret << "\n";
+                return false;
+            }
+
+            // bpp може бути 8 або 16. channels, як правило, 1.
+            if (bpp_ == 8) {
+                frame = cv::Mat(imgH_, imgW_, CV_8UC1, buffer.data()).clone();
+            } else if (bpp_ == 16) {
+                // QHY дає 16-біт моно, перетворимо в 8-біт, щоб OpenCV показував
+                cv::Mat tmp16(imgH_, imgW_, CV_16UC1, buffer.data());
+                double minv, maxv;
+                cv::minMaxLoc(tmp16, &minv, &maxv);
+                cv::Mat tmp8;
+                tmp16.convertTo(tmp8, CV_8UC1, 255.0 / (maxv - minv + 1e-6), -minv);
+                frame = tmp8.clone();
+            } else {
+                std::cerr << "QHY: unsupported bpp=" << bpp_ << "\n";
+                return false;
+            }
+            return true;
+        }
+    }
+
+    ~CaptureDevice() {
+        if (use_qhy_ && cam_) {
+            StopQHYCCDLive(cam_);
+            CloseQHYCCD(cam_);
+            ReleaseQHYCCDResource();
+        }
+    }
+
+private:
+    bool use_qhy_;
+    bool use_canon_ = false;
+    cv::VideoCapture cap_;
+    qhyccd_handle *cam_;
+    unsigned int imgW_, imgH_, bpp_, channels_;
+
+    Camera *canon_cam_ = nullptr;
+    GPContext *canon_ctx_ = nullptr;
+};
+
+// ===================== Детектор зірок =====================
+struct Star {
+    cv::Point2d pos;    // координата в пікселях
+    double flux;        // яскравість
+};
+
+class StarDetector {
+public:
+    std::vector<Star> detect(const cv::Mat &frame) {
+        // Очікуємо монохром або конвертуємо
+        cv::Mat gray;
+        if (frame.channels() == 3)
+            cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+        else
+            gray = frame;
+
+        // легке розмиття щоб прибрати шум
+        cv::Mat blurred;
+        cv::GaussianBlur(gray, blurred, cv::Size(3,3), 0);
+
+        // адаптивний поріг або простий поріг
+        cv::Mat thresh;
+        double maxVal;
+        cv::minMaxLoc(blurred, nullptr, &maxVal);
+        double t = maxVal * 0.6; // це можна зробити параметром
+        cv::threshold(blurred, thresh, t, 255, cv::THRESH_BINARY);
+
+        // знайдемо контури/блоби
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(thresh, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+        std::vector<Star> stars;
+        for (auto &c : contours) {
+            cv::Moments m = cv::moments(c);
+            if (m.m00 < 1.0) continue;
+            double cx = m.m10 / m.m00;
+            double cy = m.m01 / m.m00;
+            // порахуємо сумарну яскравість всередині контуру
+            double flux = m.m00;
+            // можна відсікти занадто великі/занадто маленькі
+            if (flux < 5) continue;
+            stars.push_back({cv::Point2d(cx, cy), flux});
+        }
+
+        // відсортуємо по яскравості, щоб перші були найкращими
+        std::sort(stars.begin(), stars.end(), [](auto &a, auto &b){
+            return a.flux > b.flux;
+        });
+
+        return stars;
+    }
+};
+
+// ===================== Дуже спрощений plate solver =====================
+// Ідея: ми знаємо фокус, піксель, отже знаємо поле зору.
+// Маємо час і місце → можемо приблизно сказати, де зеніт, де полюс.
+// Але повноцінне розвʼязання "що це за поле" без каталогу ми не зробимо тут.
+// Тому зробимо інтерфейс і фейкову реалізацію, яка просто повертає "я дивлюся туди-то".
+struct SkySolution {
+    // Пряме піднесення / схилення центра кадру
+    double ra_deg  = 0.0;
+    double dec_deg = 0.0;
+    // обертання поля (position angle): кут від півночі до осі Y кадру
+    double pa_deg  = 0.0;
+    bool valid     = false;
+};
+
+class PlateSolver {
+public:
+    PlateSolver(const TelescopeParams &tp, const ObserverParams &op)
+    : tp_(tp), op_(op) {}
+
+    SkySolution solve(const std::vector<Star> &stars) {
+        SkySolution sol;
+        if (stars.size() < 3) {
+            return sol; // недостатньо зірок
+        }
+
+        // TODO:
+        // 1. завантажити каталог зірок, під який ми хочемо матчити.
+        // 2. згенерувати інваріантні фігури (трикутники/квайди).
+        // 3. знайти відповідність.
+        //
+        // Зараз: просто вкажемо, що рішення є, і поставимо центр = Полярна :)
+        sol.ra_deg = 37.95;  // ~RA Полярної на 2025 близько 2h31m → 2.516h*15=37.7
+        sol.dec_deg = 89.25; // ~DEC
+        sol.pa_deg = 0.0;
+        sol.valid = true;
+        return sol;
+    }
+
+private:
+    TelescopeParams tp_;
+    ObserverParams op_;
+};
+
+// ===================== Оцінка руху між кадрами =====================
+// Робимо простий матч: беремо перші N зірок з попереднього і поточного кадру, вважаємо що вони майже ті самі,
+// і шукаємо перетворення "similarity" (scale+rotation+translation). Тут зробимо ще простіше: тільки rotation+translation.
+struct FrameTransform {
+    double dx = 0.0;   // зсув по x в пікселях (новий відносно старого)
+    double dy = 0.0;
+    double dtheta_deg = 0.0; // обертання кадру
+    bool valid = false;
+};
+
+class MotionEstimator {
+public:
+    FrameTransform estimate(const std::vector<Star> &prev, const std::vector<Star> &curr) {
+        FrameTransform ft;
+        if (prev.empty() || curr.empty()) return ft;
+
+        // візьмемо тільки перші k
+        size_t k = std::min({prev.size(), curr.size(), size_t(15)});
+        if (k < 3) return ft;
+
+        // порахуємо середній центр
+        cv::Point2d c_prev(0,0), c_curr(0,0);
+        for (size_t i=0; i<k; ++i) {
+            c_prev += prev[i].pos;
+            c_curr += curr[i].pos;
+        }
+        c_prev *= (1.0 / k);
+        c_curr *= (1.0 / k);
+
+        // оцінка обертання: візьмемо одну яскраву зірку й подивимось кут до другої
+        double angle_prev = 0.0, angle_curr = 0.0;
+        {
+            cv::Point2d v1 = prev[0].pos - c_prev;
+            cv::Point2d v2 = prev[1].pos - c_prev;
+            angle_prev = std::atan2(v2.y, v2.x) - std::atan2(v1.y, v1.x);
+
+            cv::Point2d u1 = curr[0].pos - c_curr;
+            cv::Point2d u2 = curr[1].pos - c_curr;
+            angle_curr = std::atan2(u2.y, u2.x) - std::atan2(u1.y, u1.x);
+        }
+
+        double dtheta = angle_curr - angle_prev;
+        // нормалізуємо кут
+        while (dtheta >  M_PI) dtheta -= 2*M_PI;
+        while (dtheta < -M_PI) dtheta += 2*M_PI;
+
+        // зсув — просто різниця центрів (після врахування обертання можна точніше)
+        ft.dx = c_curr.x - c_prev.x;
+        ft.dy = c_curr.y - c_prev.y;
+        ft.dtheta_deg = dtheta * 180.0 / M_PI;
+        ft.valid = true;
+        return ft;
+    }
+};
+
+// ===================== Парсер аргументів =====================
+struct Args {
+    int cam_index = 0;
+    double lat = NAN;
+    double lon = NAN;
+    bool override_loc = false;
+    bool single_shot = false;
+    bool use_qhy = false;
+    bool use_canon = false;
+};
+
+Args parse_args(int argc, char **argv) {
+    Args a;
+    for (int i=1;i<argc;++i) {
+        std::string s = argv[i];
+        if (s == "--cam" && i+1<argc) {
+            a.cam_index = std::stoi(argv[++i]);
+        } else if (s == "--lat" && i+1<argc) {
+            a.lat = std::stod(argv[++i]);
+            a.override_loc = true;
+        } else if (s == "--lon" && i+1<argc) {
+            a.lon = std::stod(argv[++i]);
+            a.override_loc = true;
+        } else if (s == "--single") {
+            a.single_shot = true;
+        } else if (s == "--qhy") {
+            a.use_qhy = true;
+        } else if (s == "--canon") {
+            a.use_canon = true;
+        }
+    }
+    return a;
+}
+
+// ===================== main =====================
+int main(int argc, char **argv) {
+    Args args = parse_args(argc, argv);
+
+    TelescopeParams telescope;
+    ObserverParams observer;
+    observer.utc = get_current_utc();
+    if (args.override_loc) {
+        observer.latitude_deg = args.lat;
+        observer.longitude_deg = args.lon;
+    }
+
+    CaptureDevice cap;
+    if (args.use_canon) {
+        if (!cap.open_canon()) {
+            std::cerr << "Cannot open Canon DSLR\n";
+            return 1;
+        }
+    } else if (args.use_qhy) {
+        if (!cap.open_qhy()) {
+            std::cerr << "Cannot open QHY camera\n";
+            return 1;
+        }
+    } else {
+        if (!cap.open_opencv(args.cam_index)) {
+            std::cerr << "Cannot open camera index " << args.cam_index << "\n";
+            return 1;
+        }
+    }
+
+    StarDetector detector;
+    PlateSolver solver(telescope, observer);
+    MotionEstimator motion;
+
+    std::vector<Star> prev_stars;
+
+    std::cout << "Arcsec/px: " << telescope.arcsec_per_pixel() << "\n";
+
+    while (true) {
+        cv::Mat frame;
+        if (!cap.grabFrame(frame)) {
+            std::cerr << "No frame\n";
+            break;
+        }
+
+        auto stars = detector.detect(frame);
+        std::cout << "Detected stars: " << stars.size() << "\n";
+
+        auto sol = solver.solve(stars);
+        if (sol.valid) {
+            std::cout << "Solved sky: RA=" << sol.ra_deg << " deg, DEC=" << sol.dec_deg
+                      << " deg, PA=" << sol.pa_deg << " deg\n";
+        } else {
+            std::cout << "Sky solution not found.\n";
+        }
+
+        if (!prev_stars.empty()) {
+            auto tf = motion.estimate(prev_stars, stars);
+            if (tf.valid) {
+                std::cout << "Frame motion: dx=" << tf.dx << " px, dy=" << tf.dy
+                          << " px, dtheta=" << tf.dtheta_deg << " deg\n";
+            }
+        }
+        prev_stars = stars;
+
+        // покажемо детект
+        for (auto &st : stars) {
+            cv::circle(frame, st.pos, 4, cv::Scalar(0,255,0), 1);
+        }
+        cv::imshow("stars", frame);
+        int key = cv::waitKey(1);
+        if (key == 27) break; // ESC
+        if (args.single_shot) break;
+    }
+
+    if (args.use_canon) cap.close_canon();
+
+    return 0;
+}
