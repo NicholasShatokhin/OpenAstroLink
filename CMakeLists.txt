@@ -24,6 +24,8 @@ add_executable(AstroGui
     neuralsolver.h
     controlpanel.cpp
     controlpanel.h
+    astrometry_solver.h
+    astrometry_solver.cpp
 )
 
 target_link_libraries(AstroGui
