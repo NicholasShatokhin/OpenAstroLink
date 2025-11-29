@@ -1,5 +1,10 @@
 #include "mainwindow.h"
 #include "starview.h"
+#include "controlpanel.h"
+#include "guiding.h"
+#include "scheduler.h"
+#include "starcatalog.h"
+#include "neuralsolver.h"
 
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -36,8 +41,8 @@ MainWindow::MainWindow(QWidget *parent)
     leftLayout->addWidget(starView_, 2);
     leftLayout->addLayout(imagesLayout, 1);
 
-    // права панель: параметри і керування монтуванням
-    auto *paramsBox = new QGroupBox("Параметри", this);
+    // right panel: parameters and mount control
+    auto *paramsBox = new QGroupBox("Parameters", this);
     latEdit_ = new QLineEdit("50.4501", this);
     lonEdit_ = new QLineEdit("30.5234", this);
     focalEdit_ = new QLineEdit("400", this);
@@ -54,7 +59,7 @@ MainWindow::MainWindow(QWidget *parent)
     paramsLayout->addWidget(pixelEdit_);
     paramsBox->setLayout(paramsLayout);
 
-    auto *mountBox = new QGroupBox("Монтування", this);
+    auto *mountBox = new QGroupBox("Mount", this);
     mountRaEdit_ = new QLineEdit("0:0:0", this);
     mountDecEdit_ = new QLineEdit("+00*00", this);
     auto *btnMountSync = new QPushButton("Sync to solved", this);
@@ -69,7 +74,7 @@ MainWindow::MainWindow(QWidget *parent)
     mountLayout->addWidget(btnMountSlew);
     mountBox->setLayout(mountLayout);
 
-    auto *btnCapture = new QPushButton("Зняти кадр", this);
+    auto *btnCapture = new QPushButton("Capture frame", this);
     auto *btnSolve   = new QPushButton("Solve", this);
 
     auto *rightLayout = new QVBoxLayout;
@@ -78,6 +83,10 @@ MainWindow::MainWindow(QWidget *parent)
     rightLayout->addWidget(btnCapture);
     rightLayout->addWidget(btnSolve);
     rightLayout->addStretch(1);
+
+    // нова панель керування
+    ctrl_ = new ControlPanel(this);
+    rightLayout->addWidget(ctrl_);
 
     auto *mainLayout = new QHBoxLayout;
     mainLayout->addLayout(leftLayout, 3);
@@ -93,7 +102,34 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowTitle("Astro Solver GUI");
     resize(1200, 700);
+
+    // створюємо модулі
+    guiding_   = std::make_unique<Guiding>();
+    scheduler_ = std::make_unique<Scheduler>();
+    catalog_   = std::make_unique<StarCatalog>();
+    nn_        = std::make_unique<NeuralSolver>();
+
+    // спробуємо підвантажити якийсь каталог (не обовʼязково)
+    catalog_->loadCsv("stars.csv");
+
+    // scheduler — накидати кілька цілей
+    scheduler_->addTarget({"Polaris", 37.95, 89.25});
+    scheduler_->addTarget({"Vega", 279.234, 38.7837});
+    scheduler_->addTarget({"M42", 83.822, -5.391});
+
+    // підʼєднати сигнали панелі
+    connect(ctrl_, &ControlPanel::requestCapture, this, &MainWindow::onCaptureFrame);
+    connect(ctrl_, &ControlPanel::requestSolve,   this, &MainWindow::onSolveFrame);
+    connect(ctrl_, &ControlPanel::requestMountSync, this, &MainWindow::onMountSync);
+    connect(ctrl_, &ControlPanel::requestMountSlew, this, [this](const QString &ra, const QString &dec){
+        Q_UNUSED(ra); Q_UNUSED(dec);
+        onMountSlew();
+    });
+    connect(ctrl_, &ControlPanel::requestNextTarget, this, &MainWindow::onNextTarget);
+    connect(ctrl_, &ControlPanel::requestRunNN, this, &MainWindow::onRunNN);
 }
+
+MainWindow::~MainWindow() = default;
 
 void MainWindow::onCaptureFrame()
 {
@@ -116,6 +152,9 @@ void MainWindow::onSolveFrame()
     starView_->setSolvedCenter(37.95, 89.25);
     starView_->setStars(stars);
 
+    lastSolvedRaDeg_  = 37.95;
+    lastSolvedDecDeg_ = 89.25;
+
     // і намалюємо на "астрометрії" ті ж точки
     QImage img(640, 480, QImage::Format_RGB888);
     img.fill(Qt::black);
@@ -127,6 +166,39 @@ void MainWindow::onSolveFrame()
     }
     p.end();
     astrometryLabel_->setPixmap(QPixmap::fromImage(img).scaled(astrometryLabel_->size(), Qt::KeepAspectRatio));
+}
+
+void MainWindow::onNextTarget()
+{
+    if (!scheduler_) return;
+    auto t = scheduler_->nextTarget();
+    if (!t) return;
+    // показати на зоряній мапі як ціль
+    std::vector<StarPoint> s;
+    s.push_back({QPointF(0,0), 1.0});
+    starView_->setSolvedCenter(t->raDeg, t->decDeg);
+    starView_->setStars(s);
+
+    // і одразу поставити guiding target
+    if (guiding_) {
+        guiding_->setTarget(t->raDeg, t->decDeg);
+    }
+}
+
+void MainWindow::onRunNN()
+{
+    if (!nn_) return;
+    // беремо останнє зображення з astrometryLabel_ (не дуже красиво, але як демо)
+    QPixmap pm = astrometryLabel_->pixmap();   // Qt6: повертає QPixmap за значенням
+    if (pm.isNull())
+        return;
+    QImage img = pm.toImage();
+    auto res = nn_->solve(img);
+    if (res) {
+        starView_->setSolvedCenter(res->raDeg, res->decDeg);
+        lastSolvedRaDeg_  = res->raDeg;
+        lastSolvedDecDeg_ = res->decDeg;
+    }
 }
 
 void MainWindow::onMountSync()

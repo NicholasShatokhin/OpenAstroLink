@@ -14,6 +14,16 @@ add_executable(AstroGui
     mainwindow.h
     starview.cpp
     starview.h
+    guiding.cpp
+    guiding.h
+    scheduler.cpp
+    scheduler.h
+    starcatalog.cpp
+    starcatalog.h
+    neuralsolver.cpp
+    neuralsolver.h
+    controlpanel.cpp
+    controlpanel.h
 )
 
 target_link_libraries(AstroGui

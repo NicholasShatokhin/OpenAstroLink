@@ -20,6 +20,11 @@
 
 #include <termios.h>
 
+// Для ::open, ::read, ::write, ::close, O_RDWR, O_NOCTTY, O_SYNC і т.п.
+#if !defined(_WIN32)
+#  include <fcntl.h>
+#  include <unistd.h>
+#endif
 
 // ===================== Параметри апаратури та спостерігача =====================
 struct TelescopeParams {
@@ -85,6 +90,7 @@ public:
         return true;
     }
 
+    // Єдиний публічний grabFrame для всіх типів камер
     bool grabFrame(cv::Mat &frame) {
         if (use_canon_) {
             if (!canon_cam_) return false;
@@ -204,7 +210,17 @@ public:
         return cap_.isOpened();
     }
 
-    bool grabFrame(cv::Mat &frame) {
+    ~CaptureDevice() {
+        if (use_qhy_ && cam_) {
+            StopQHYCCDLive(cam_);
+            CloseQHYCCD(cam_);
+            ReleaseQHYCCDResource();
+        }
+    }
+
+private:
+    // QHY-гілка винесена в окрему функцію, щоб не дублювати код
+    bool grabFrameQHY(cv::Mat &frame) {
         if (!use_qhy_) {
             return cap_.read(frame);
         } else {
@@ -216,7 +232,7 @@ public:
                 // друга форма з буфером
                 // нам потрібен буфер, давай створимо статичний
             }
-
+    
             // краще зробити буфер:
             static std::vector<unsigned char> buffer;
             buffer.resize(4096 * 4096 * 2); // з запасом
@@ -225,7 +241,7 @@ public:
                 std::cerr << "QHY: GetQHYCCDLiveFrame failed: " << ret << "\n";
                 return false;
             }
-
+    
             // bpp може бути 8 або 16. channels, як правило, 1.
             if (bpp_ == 8) {
                 frame = cv::Mat(imgH_, imgW_, CV_8UC1, buffer.data()).clone();
@@ -242,14 +258,6 @@ public:
                 return false;
             }
             return true;
-        }
-    }
-
-    ~CaptureDevice() {
-        if (use_qhy_ && cam_) {
-            StopQHYCCDLive(cam_);
-            CloseQHYCCD(cam_);
-            ReleaseQHYCCDResource();
         }
     }
 
