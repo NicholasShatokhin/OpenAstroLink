@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <sstream>
+#include <thread>
 
 #include <qhyccd.h>
 
@@ -351,11 +352,34 @@ public:
         return !r1.empty() && !r2.empty() && !r3.empty();
     }
 
+    // відносний рух по RA на deltaRaDeg (градуси)
+    // реалізовано як: зчитати поточні RA/DEC, додати delta до RA і зробити slew
+    bool slewRaOffset(double deltaRaDeg) {
+        if (fd_ < 0) return false;
+        std::string raStr, decStr;
+        if (!getRADec(raStr, decStr)) return false;
+
+        auto raDeg  = parseRaToDeg(raStr);
+        auto decDeg = parseDecToDeg(decStr);
+        if (!raDeg || !decDeg) return false;
+
+        double newRa = *raDeg + deltaRaDeg;
+        // нормалізуємо RA в [0,360)
+        while (newRa < 0.0)   newRa += 360.0;
+        while (newRa >= 360.) newRa -= 360.0;
+
+        return syncTo(newRa, *decDeg);
+    }
+
     bool isOpen() const { return fd_ >= 0; }
 
     ~MountController() {
         if (fd_ >= 0) ::close(fd_);
     }
+
+    // утиліти для парсу RA/DEC
+    static std::optional<double> parseRaToDeg(const std::string &ra);
+    static std::optional<double> parseDecToDeg(const std::string &dec);
 
 private:
     int fd_;
@@ -385,6 +409,59 @@ private:
         return std::string(buf);
     }
 };
+
+// RA у форматі "hh:mm:ss" -> градуси
+std::optional<double> MountController::parseRaToDeg(const std::string &ra)
+{
+    int h=0,m=0,s=0;
+    if (std::sscanf(ra.c_str(), "%d:%d:%d", &h, &m, &s) < 2) return std::nullopt;
+    double hours = h + m/60.0 + s/3600.0;
+    return hours * 15.0;
+}
+
+// DEC у форматі "+dd*mm" або "+dd*mm:ss" -> градуси
+std::optional<double> MountController::parseDecToDeg(const std::string &dec)
+{
+    char signChar = '+';
+    int d=0,m=0,s=0;
+    if (std::sscanf(dec.c_str(), "%c%d*%d:%d", &signChar, &d, &m, &s) < 3) {
+        if (std::sscanf(dec.c_str(), "%c%d*%d", &signChar, &d, &m) < 3)
+            return std::nullopt;
+        s = 0;
+    }
+    double sign = (signChar=='-') ? -1.0 : 1.0;
+    double deg = d + m/60.0 + s/3600.0;
+    return sign * deg;
+}
+
+// ===================== Структури для Polar Alignment (city mode) =====================
+struct PaMeasurement {
+    double mountRaDeg;
+    double mountDecDeg;
+    double solvedRaDeg;
+    double solvedDecDeg;
+};
+
+struct PaResult {
+    double meanRaOffsetDeg;   // solved - mount
+    double meanDecOffsetDeg;  // solved - mount
+    int    samples;
+};
+
+// груба оцінка: середній зсув між покажчиком монту і реальною позицією по всіx вимірах
+static PaResult computePaResult(const std::vector<PaMeasurement> &ms)
+{
+    PaResult r{0,0,0};
+    if (ms.empty()) return r;
+    for (auto &m : ms) {
+        r.meanRaOffsetDeg  += (m.solvedRaDeg  - m.mountRaDeg);
+        r.meanDecOffsetDeg += (m.solvedDecDeg - m.mountDecDeg);
+    }
+    r.samples = (int)ms.size();
+    r.meanRaOffsetDeg  /= r.samples;
+    r.meanDecOffsetDeg /= r.samples;
+    return r;
+}
 
 // ===================== Детектор зірок =====================
 struct Star {
@@ -548,6 +625,9 @@ struct Args {
     bool use_canon = false;
     std::string mount_port;
     bool mount_sync = false;
+    bool polar_align_city = false;
+    int  pa_passes = 5;
+    double pa_step_deg = 20.0;
 };
 
 Args parse_args(int argc, char **argv) {
@@ -566,6 +646,14 @@ Args parse_args(int argc, char **argv) {
             a.single_shot = true;
         } else if (s == "--qhy") {
             a.use_qhy = true;
+        } else if (s == "--pa-city") {
+            a.polar_align_city = true;
+        } else if (s == "--pa-passes" && i+1<argc) {
+            a.pa_passes = std::max(3, std::stoi(argv[++i]));
+        } else if (s == "--pa-step-deg" && i+1<argc) {
+            a.pa_step_deg = std::stod(argv[++i]);
+            if (a.pa_step_deg < 5.0) a.pa_step_deg = 5.0;
+            if (a.pa_step_deg > 60.0) a.pa_step_deg = 60.0;
         } else if (s == "--canon") {
             a.use_canon = true;
         } else if (s.rfind("--mount-port=",0) == 0) {
@@ -575,6 +663,98 @@ Args parse_args(int argc, char **argv) {
         }
     }
     return a;
+}
+
+// ===================== Режим Polar Alignment (city) =====================
+static bool runPolarAlignCity(CaptureDevice &cap,
+                              StarDetector &detector,
+                              PlateSolver &solver,
+                              MountController &mount,
+                              const TelescopeParams &telescope,
+                              const ObserverParams &observer,
+                              const Args &args)
+{
+    if (!mount.isOpen()) {
+        std::cerr << "[PA] Mount is not connected, cannot run polar alignment.\n";
+        return false;
+    }
+
+    std::cout << "[PA] City mode: passes=" << args.pa_passes
+              << " RA step=" << args.pa_step_deg << " deg\n";
+
+    std::vector<PaMeasurement> meas;
+
+    for (int pass = 0; pass < args.pa_passes; ++pass) {
+        std::cout << "[PA] Pass " << (pass+1) << "/" << args.pa_passes << "\n";
+
+        // 1) кадр
+        cv::Mat frame;
+        if (!cap.grabFrame(frame)) {
+            std::cerr << "[PA] No frame from camera\n";
+            break;
+        }
+
+        auto stars = detector.detect(frame);
+        std::cout << "[PA] Detected stars: " << stars.size() << "\n";
+        if (stars.size() < 3) {
+            std::cerr << "[PA] Too few stars for plate solving, try longer exposure.\n";
+        }
+
+        auto sol = solver.solve(stars);
+        if (!sol.valid) {
+            std::cerr << "[PA] Plate solution failed on this pass.\n";
+        } else {
+            std::cout << "[PA] Solved RA=" << sol.ra_deg << " DEC=" << sol.dec_deg << "\n";
+
+            // RA/DEC з монту
+            std::string mra, mdec;
+            if (!mount.getRADec(mra, mdec)) {
+                std::cerr << "[PA] Cannot get RA/DEC from mount.\n";
+            } else {
+                auto mraDeg  = MountController::parseRaToDeg(mra);
+                auto mdecDeg = MountController::parseDecToDeg(mdec);
+                if (!mraDeg || !mdecDeg) {
+                    std::cerr << "[PA] Failed to parse mount RA/DEC: " << mra << " " << mdec << "\n";
+                } else {
+                    PaMeasurement m;
+                    m.mountRaDeg   = *mraDeg;
+                    m.mountDecDeg  = *mdecDeg;
+                    m.solvedRaDeg  = sol.ra_deg;
+                    m.solvedDecDeg = sol.dec_deg;
+                    meas.push_back(m);
+
+                    auto res = computePaResult(meas);
+                    std::cout << "[PA] Samples=" << res.samples
+                              << "  mean RA offset=" << res.meanRaOffsetDeg << " deg"
+                              << "  mean DEC offset=" << res.meanDecOffsetDeg << " deg\n";
+                }
+            }
+        }
+
+        // 2) підготовка до наступного проходу: змістити RA
+        if (pass < args.pa_passes - 1) {
+            double sign = (pass % 2 == 0) ? +1.0 : -1.0; // чергуємо напрямок
+            double step = sign * args.pa_step_deg;
+            std::cout << "[PA] Slew RA by " << step << " deg...\n";
+            if (!mount.slewRaOffset(step)) {
+                std::cerr << "[PA] RA offset slew failed.\n";
+                break;
+            }
+            // даємо монтуванню час доїхати
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        }
+    }
+
+    auto res = computePaResult(meas);
+    if (res.samples >= 3) {
+        std::cout << "[PA] Final city-mode PA estimate:\n"
+                  << "      mean RA offset (solved - mount)  = " << res.meanRaOffsetDeg  << " deg\n"
+                  << "      mean DEC offset (solved - mount) = " << res.meanDecOffsetDeg << " deg\n"
+                  << "    (наближено: крутити полярну вісь так, щоб ці офсети прямували до 0)\n";
+        return true;
+    }
+    std::cout << "[PA] Not enough valid samples for reliable result.\n";
+    return false;
 }
 
 // ===================== main =====================
@@ -624,6 +804,19 @@ int main(int argc, char **argv) {
     std::vector<Star> prev_stars;
 
     std::cout << "Arcsec/px: " << telescope.arcsec_per_pixel() << "\n";
+
+    // Якщо увімкнений режим міського Polar Alignment — запускаємо його і завершуємо
+    if (args.polar_align_city) {
+        MountController mount;
+        if (!args.mount_port.empty()) {
+            if (!mount.openPort(args.mount_port, 9600)) {
+                std::cerr << "[PA] Cannot open mount on " << args.mount_port << "\n";
+                return 1;
+            }
+        }
+        bool ok = runPolarAlignCity(cap, detector, solver, mount, telescope, observer, args);
+        return ok ? 0 : 2;
+    }
 
     while (true) {
         cv::Mat frame;
