@@ -10,13 +10,13 @@ class MainWindow final : public QMainWindow {
 public: explicit MainWindow(ObservatoryController *controller,QWidget *parent=nullptr);
 private:
     QWidget *buildDevicesTab(); QWidget *buildCaptureTab(); QWidget *buildMountTab(); QWidget *buildFocusTab(); QWidget *buildPolarTab(); QWidget *buildSchedulerTab(); QWidget *buildServerTab(); QWidget *buildProfileTab();
-    void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap();
+    void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap(); void refreshMountStatus(); void updateMountStatusFromState(const QJsonObject &state);
     ObservatoryController *c_{};
     QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QTextEdit *log_{};
     QImage lastImage_;
     QComboBox *cameraBackend_{}; QLineEdit *cameraEndpoint_{}; QComboBox *mountBackend_{}; QLineEdit *mountEndpoint_{}; QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{};
     QDoubleSpinBox *exposure_{}; QComboBox *solverBackend_{}; QLineEdit *catalogPath_{}; QLineEdit *modelPath_{}; QSpinBox *gain_{}; QDoubleSpinBox *hintRa_{}; QDoubleSpinBox *hintDec_{}; QDoubleSpinBox *hintRadius_{};
-    QDoubleSpinBox *mountRa_{}; QDoubleSpinBox *mountDec_{};
+    QDoubleSpinBox *mountRa_{}; QDoubleSpinBox *mountDec_{}; QLabel *mountStatus_{};
     QSpinBox *focusPosition_{}; QComboBox *focusMode_{}; QSpinBox *focusRange_{}; QSpinBox *coarseStep_{}; QSpinBox *fineStep_{}; QSpinBox *focusFrames_{};
     QDoubleSpinBox *polarStep_{}; QLabel *polarSamples_{}; QLabel *polarResult_{};
     QLineEdit *targetName_{}; QDoubleSpinBox *targetRa_{}; QDoubleSpinBox *targetDec_{}; QDoubleSpinBox *targetExposure_{}; QSpinBox *targetRepeats_{}; QListWidget *targetList_{}; std::vector<SessionTarget> targets_;

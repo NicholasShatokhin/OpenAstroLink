@@ -107,14 +107,14 @@ void ApplicationController::requestSystemLocation(){
     emit logMessage("Qt Positioning was not available at build time; enter location manually");
 #endif
 }
-bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->slewTo(t,e);emitState();return ok;}
-bool ApplicationController::syncMount(const EquatorialCoord&t,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->syncTo(t,e);emitState();return ok;}
+bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->slewTo(t,e);if(ok)emit logMessage(QString("Mount slew accepted: RA=%1°, DEC=%2°").arg(t.raDeg,0,'f',6).arg(t.decDeg,0,'f',6));emitState();return ok;}
+bool ApplicationController::syncMount(const EquatorialCoord&t,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->syncTo(t,e);if(ok)emit logMessage(QString("Mount sync: RA=%1°, DEC=%2°").arg(t.raDeg,0,'f',6).arg(t.decDeg,0,'f',6));emitState();return ok;}
 bool ApplicationController::mountStatus(MountStatus&s,QString*e)const{if(!mount_){if(e)*e="No mount connected";return false;}return mount_->status(s,e);}
 bool ApplicationController::focuserStatus(FocuserStatus&s,QString*e)const{if(!focuser_){if(e)*e="No focuser connected";return false;}return focuser_->status(s,e);}
 bool ApplicationController::moveFocuser(int p,QString*e){if(!focuser_){if(e)*e="No focuser connected";return false;}bool ok=focuser_->moveAbsolute(p,e);emitState();return ok;}
 bool ApplicationController::haltFocuser(QString*e){if(!focuser_){if(e)*e="No focuser connected";return false;}return focuser_->halt(e);}
-bool ApplicationController::setMountTracking(bool v,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->setTracking(v,e);emitState();return ok;}
-bool ApplicationController::parkMount(bool v,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->park(v,e);emitState();return ok;}
+bool ApplicationController::setMountTracking(bool v,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->setTracking(v,e);if(ok)emit logMessage(QString("Mount tracking %1").arg(v?"ON":"OFF"));emitState();return ok;}
+bool ApplicationController::parkMount(bool v,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->park(v,e);if(ok)emit logMessage(QString("Mount %1").arg(v?"parked":"unparked"));emitState();return ok;}
 bool ApplicationController::pulseGuide(GuideDirection d,int ms,QString*e){if(!mount_){if(e)*e="No mount connected";return false;}return mount_->pulseGuide(d,ms,e);}
 GuidingStatus ApplicationController::startGuiding(){if(lastSolve_.success)guiding_.setTarget({lastSolve_.raDeg,lastSolve_.decDeg});auto s=guiding_.status();auto j=QJsonObject{{"active",s.active},{"raErrorArcsec",s.raErrorArcsec},{"decErrorArcsec",s.decErrorArcsec},{"rmsArcsec",s.rmsArcsec}};emit guidingChanged(j);if(oalWsServer_)oalWsServer_->broadcast("guidingUpdate",j);return s;}
 GuidingStatus ApplicationController::stopGuiding(){guiding_.stop();auto s=guiding_.status();auto j=QJsonObject{{"active",s.active},{"raErrorArcsec",s.raErrorArcsec},{"decErrorArcsec",s.decErrorArcsec},{"rmsArcsec",s.rmsArcsec}};emit guidingChanged(j);if(oalWsServer_)oalWsServer_->broadcast("guidingUpdate",j);return s;}
