@@ -1,0 +1,188 @@
+openapi: 3.1.0
+info:
+  title: OpenAstroLink API
+  version: 0.2.0
+  description: Reference API exposed by OpenAstroSuite.
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /devices:
+    get:
+      summary: List connected/exported devices
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /state:
+    get:
+      summary: Current aggregate observatory state
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /mounts/{id}/status:
+    get:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /mounts/{id}/slew:
+    post:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EquatorialCoord' }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /mounts/{id}/sync:
+    post:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EquatorialCoord' }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /focusers/{id}/status:
+    get:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /focusers/{id}/move:
+    post:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position]
+              properties: { position: { type: integer, minimum: 0 } }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /cameras/{id}/capture:
+    post:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExposureRequest' }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /solve:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hintRaDeg: { type: number, minimum: 0, maximum: 360 }
+                hintDecDeg: { type: number, minimum: -90, maximum: 90 }
+                hintFovDeg: { type: number, exclusiveMinimum: 0 }
+                searchRadiusDeg: { type: number, exclusiveMinimum: 0 }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /autofocus/{id}/run:
+    post:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AutofocusRequest' }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /motion/estimate:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /observer/system-location:
+    post: { responses: { '202': { $ref: '#/components/responses/Success' } } }
+  /guider/default/start:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /guider/default/stop:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /guider/default/status:
+    get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /polar-align/sample:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /polar-align/ra-offset:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deltaDeg]
+              properties: { deltaDeg: { type: number } }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /polar-align/estimate:
+    get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /sessions:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SessionRequest' }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /sessions/current:
+    get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+components:
+  parameters:
+    DeviceId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string }
+  schemas:
+    EquatorialCoord:
+      type: object
+      required: [raDeg, decDeg]
+      properties:
+        raDeg: { type: number, minimum: 0, maximum: 360 }
+        decDeg: { type: number, minimum: -90, maximum: 90 }
+    ExposureRequest:
+      type: object
+      properties:
+        exposureSec: { type: number, exclusiveMinimum: 0, default: 1 }
+        binX: { type: integer, minimum: 1, default: 1 }
+        binY: { type: integer, minimum: 1, default: 1 }
+        gain: { type: integer, default: 0 }
+        offset: { type: integer, default: 0 }
+        includeImage: { type: boolean, default: true }
+    AutofocusRequest:
+      type: object
+      properties:
+        mode: { type: string, enum: [stars, planet, bahtinov], default: stars }
+        rangeSteps: { type: integer, minimum: 100, default: 1600 }
+        coarseStep: { type: integer, minimum: 1, default: 200 }
+        fineStep: { type: integer, minimum: 1, default: 40 }
+        framesPerPosition: { type: integer, minimum: 1, default: 3 }
+        settleMs: { type: integer, minimum: 0, default: 400 }
+        autoPlanetRoi: { type: boolean, default: true }
+    SessionRequest:
+      type: object
+      required: [name, targets]
+      properties:
+        name: { type: string }
+        targets:
+          type: array
+          items:
+            type: object
+            required: [name, raDeg, decDeg]
+            properties:
+              name: { type: string }
+              raDeg: { type: number }
+              decDeg: { type: number }
+              exposureSec: { type: number, default: 30 }
+              repeats: { type: integer, default: 1 }
+              filter: { type: string }
+    Envelope:
+      type: object
+      required: [ok, error, data]
+      properties:
+        ok: { type: boolean }
+        error:
+          oneOf:
+            - type: 'null'
+            - type: object
+              properties:
+                code: { type: string }
+                message: { type: string }
+                details: {}
+        data: {}
+  responses:
+    Success:
+      description: Standard OAL envelope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }

@@ -1,0 +1,42 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "default-release",
+      "displayName": "Default Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "OAS_BUILD_EXAMPLE_DRIVER": "ON"
+      }
+    },
+    {
+      "name": "windows-vs2022",
+      "displayName": "Windows Visual Studio 2022",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/vs2022",
+      "cacheVariables": {
+        "OAS_BUILD_EXAMPLE_DRIVER": "ON"
+      }
+    },
+    {
+      "name": "hardware-linux-release",
+      "displayName": "Linux/RPi with optional hardware backends",
+      "inherits": "default-release",
+      "binaryDir": "${sourceDir}/build/hardware-release",
+      "cacheVariables": {
+        "OAS_ENABLE_QHY": "ON",
+        "OAS_ENABLE_GPHOTO2": "ON",
+        "OAS_ENABLE_INDI": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default-release", "configurePreset": "default-release" },
+    { "name": "windows-vs2022", "configurePreset": "windows-vs2022", "configuration": "Release" },
+    { "name": "hardware-linux-release", "configurePreset": "hardware-linux-release" }
+  ]
+}
