@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=OpenAstroSuite (Local Observatory)
+Comment=Control the OpenAstroLink node running on this computer
+Exec=/usr/local/bin/OpenAstroSuite --node http://127.0.0.1:8080
+Terminal=false
+Categories=Science;Astronomy;

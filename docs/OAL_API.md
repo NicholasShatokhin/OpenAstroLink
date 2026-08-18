@@ -1,10 +1,24 @@
-# OpenAstroLink HTTP API v0.2
+# OpenAstroLink HTTP API — v0.2.2 reference implementation
 
-Envelope:
+Envelope remains:
 
 ```json
 {"ok":true,"error":null,"data":{}}
 ```
+
+## Node/client bootstrap added in 0.2.2
+
+- `GET /api/v1/node/info` — node version, HTTP/WS ports, execution location.
+- `GET /api/v1/node/backends` — camera/mount/focuser/solver backend lists available **on the node**.
+- `GET /api/v1/profile`
+- `POST /api/v1/profile`
+- `POST /api/v1/devices/connect` — `{type, backend, endpoint}`; the device is opened by the node and the binding is persisted.
+- `POST /api/v1/devices/disconnect-all`
+- `POST /api/v1/solver/select`
+- `POST /api/v1/solver/catalog`
+- `POST /api/v1/solver/model`
+
+These endpoints are what let the same Qt GUI control a local Raspberry Pi node or a remote node without owning hardware in the GUI process.
 
 ## Discovery/state
 
@@ -14,57 +28,55 @@ Envelope:
 ## Mount
 
 - `GET /api/v1/mounts/{id}/status`
-- `POST /api/v1/mounts/{id}/slew` — `{raDeg, decDeg}`
+- `POST /api/v1/mounts/{id}/slew`
 - `POST /api/v1/mounts/{id}/sync`
-- `POST /api/v1/mounts/{id}/tracking` — `{enabled}`
-- `POST /api/v1/mounts/{id}/park` — `{parked}`
-- `POST /api/v1/mounts/{id}/pulse-guide` — `{direction, durationMs}`
+- `POST /api/v1/mounts/{id}/tracking`
+- `POST /api/v1/mounts/{id}/park`
+- `POST /api/v1/mounts/{id}/pulse-guide`
 
 ## Focuser
 
 - `GET /api/v1/focusers/{id}/status`
-- `POST /api/v1/focusers/{id}/move` — `{position}`
-- `POST /api/v1/focusers/{id}/move-relative` — `{delta}`
+- `POST /api/v1/focusers/{id}/move`
+- `POST /api/v1/focusers/{id}/move-relative`
 - `POST /api/v1/focusers/{id}/halt`
 
-## Camera/analysis
+## Camera / analysis
 
+- `GET /api/v1/cameras/{id}/status`
 - `POST /api/v1/cameras/{id}/capture`
 - `POST /api/v1/solve`
 - `POST /api/v1/autofocus/{id}/run`
-
-`capture` може повертати PNG як Base64 для простоти референсної реалізації. Для великих астрокамер виробнича версія повинна використовувати окреме binary/frame endpoint або object storage.
-
-## Motion and observer
-
 - `POST /api/v1/motion/estimate`
-- `POST /api/v1/observer/system-location`
+
+The reference remote GUI still asks capture for a PNG preview in Base64. This is deliberately temporary until the P0 binary data plane.
 
 ## Guiding
 
 - `POST /api/v1/guider/default/start`
+- `POST /api/v1/guider/default/update`
 - `POST /api/v1/guider/default/stop`
 - `GET /api/v1/guider/default/status`
 
 ## Polar alignment
 
+- `POST /api/v1/polar-align/clear`
 - `POST /api/v1/polar-align/sample`
-- `POST /api/v1/polar-align/ra-offset` — `{deltaDeg}`
+- `POST /api/v1/polar-align/ra-offset`
 - `GET /api/v1/polar-align/estimate`
+
+The estimator state is node-local; remote clients do not reproduce the polar math locally.
 
 ## Sessions
 
 - `POST /api/v1/sessions`
 - `GET /api/v1/sessions/current`
+- `POST /api/v1/sessions/current/stop`
+
+The current scheduler is still only a state model; durable execution is a later increment.
 
 ## WebSocket
 
-Messages:
+The remote GUI subscribes to the node event port returned by `/api/v1/node/info` and handles `state`, `solveResult`, `autofocusProgress`, `autofocusResult`, `guidingUpdate`, `sessionUpdate`, and `motion`.
 
-```json
-{
-  "type": "state|solveResult|autofocusProgress|autofocusResult|guidingUpdate|sessionUpdate",
-  "timestampUtc": "...",
-  "payload": {}
-}
-```
+Sequence/replay/resume semantics remain a P0 task.

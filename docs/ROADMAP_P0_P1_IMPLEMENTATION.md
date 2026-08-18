@@ -375,12 +375,14 @@ native serial transport додається лише за наявності пі
 # Рекомендована послідовність pull requests / releases
 
 1. `v0.2.1` — Gemini EAF compatibility profile + docs.
-2. `v0.3-alpha1` — identity/capabilities/discovery + Problem Details + test harness.
-3. `v0.3-alpha2` — operations + cancel + idempotency + locks; focuser/AF first.
-4. `v0.3-alpha3` — security/safety baseline.
-5. `v0.3-alpha4` — FITS/RAW data plane.
-6. `v0.3-alpha5` — sequenced/replayable events.
-7. `v0.3-beta1` — full P0 conformance/fault-injection matrix, migration cleanup.
-8. `v0.4` line — P1 device/services/automation work.
+2. `v0.2.2` — Raspberry Pi headless `openastrolink-node`, split core/GUI, local-or-remote thin GUI control, persisted device bindings.
+3. `v0.2.3 First Light` — mount abort/limits, QHY HIL, Gemini HIL, ASTAP adapter and first-light workflow gates.
+4. `v0.3-alpha1` — identity/capabilities/discovery + Problem Details + test harness.
+5. `v0.3-alpha2` — operations + cancel + idempotency + locks; focuser/AF first.
+6. `v0.3-alpha3` — security/safety baseline.
+7. `v0.3-alpha4` — FITS/RAW data plane.
+8. `v0.3-alpha5` — sequenced/replayable events.
+9. `v0.3-beta1` — full P0 conformance/fault-injection matrix, migration cleanup.
+10. `v0.4` line — P1 device/services/automation work.
 
 Release numbers are working labels; protocol compatibility, not calendar timing, determines promotion.

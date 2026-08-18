@@ -2,6 +2,7 @@
 #include "oal/driver_api.h"
 #include <QDir>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QLibrary>
 
 namespace oas {

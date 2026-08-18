@@ -1,5 +1,5 @@
 #pragma once
-#include "core/application_controller.h"
+#include "core/observatory_controller.h"
 #include <QMainWindow>
 
 class QComboBox; class QLineEdit; class QDoubleSpinBox; class QSpinBox; class QLabel; class QTextEdit; class QListWidget; class QGraphicsScene; class QCheckBox;
@@ -7,11 +7,11 @@ class QComboBox; class QLineEdit; class QDoubleSpinBox; class QSpinBox; class QL
 namespace oas {
 class MainWindow final : public QMainWindow {
     Q_OBJECT
-public: explicit MainWindow(ApplicationController *controller,QWidget *parent=nullptr);
+public: explicit MainWindow(ObservatoryController *controller,QWidget *parent=nullptr);
 private:
     QWidget *buildDevicesTab(); QWidget *buildCaptureTab(); QWidget *buildMountTab(); QWidget *buildFocusTab(); QWidget *buildPolarTab(); QWidget *buildSchedulerTab(); QWidget *buildServerTab(); QWidget *buildProfileTab();
     void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap();
-    ApplicationController *c_{};
+    ObservatoryController *c_{};
     QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QTextEdit *log_{};
     QImage lastImage_;
     QComboBox *cameraBackend_{}; QLineEdit *cameraEndpoint_{}; QComboBox *mountBackend_{}; QLineEdit *mountEndpoint_{}; QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{};

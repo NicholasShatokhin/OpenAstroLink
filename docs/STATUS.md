@@ -1,22 +1,27 @@
-# Матриця зрілості
+# Матриця зрілості — v0.2.2
 
 | Модуль | Статус | Коментар |
 |---|---|---|
-| Simulated camera/mount/focuser | Робочий baseline | Для першого запуску і API тестів |
-| OpenCV/UVC camera | Робочий baseline | Якість exposure control залежить від драйвера камери |
-| Serial LX200 | Робочий baseline | GOTO/Sync/RA-DEC; park/tracking/pulse guide залежать від профілю пристрою |
-| ASCOM Alpaca mount/focuser | Реалізовано | HTTP Device API; потрібен Alpaca server/device |
-| GeminiAstro EAF | Compatibility profile додано | Alpaca або INDI transport; hardware validation ще не виконано; native USB protocol не заявляється |
-| OAL client/server | Реалізовано | Mount/focuser/camera, solve, AF, guide, polar, sessions |
-| QHY SDK | Опційний | Single-frame API; не перевірено на конкретній моделі у цьому середовищі |
-| Canon/libgphoto2 | Опційний | Capture/download; керування bulb/shutter settings потребує model-specific config |
-| INDI XML backend | Експериментальний | Стандартні property names; конкретний драйвер може відрізнятись |
-| Star detector | Реалізовано | Adaptive threshold + connected components + HFR |
-| Triangle solver | Прототип | Потребує hint/невеликого каталогу; не blind full-sky production solver |
-| Neural solver | Інтерфейс | Runtime/model не включені |
-| Autofocus stars/planet | Реалізовано | Coarse/fine + multiple-frame median |
-| Bahtinov | Базова метрика | Не повний geometric spike displacement algorithm |
-| Guiding | Базова closed-loop логіка | Потребує регулярних solved/guide measurements |
-| Polar alignment | Реалізована математика | Потребує ≥2 якісних solve з RA rotation; краще 3–7 |
-| Scheduler | Модель стану | Повна автоматична execution state machine ще не реалізована |
-| Native OAL plug-ins | ABI + loader | Приклад є; адаптація plug-in devices до GUI registry — наступний крок |
+| `oas_core` separation | Реалізовано | Core/algorithms/backends/OAL no longer require Qt Widgets |
+| `openastrolink-node` | Реалізовано structurally | Headless `QCoreApplication`, HTTP/WS, device auto-connect; target build still required on RPi |
+| GUI local-node mode | Реалізовано | Connects to `127.0.0.1:8080`; same UI can run on RPi monitor/keyboard |
+| GUI remote-node mode | Реалізовано | Thin HTTP/WS client; algorithms execute on node |
+| Embedded GUI core | Збережено | Developer/simulator fallback, not preferred production RPi topology |
+| Persistent device bindings | Реалізовано | Successful camera/mount/focuser connections are restored on node boot |
+| Simulated camera/mount/focuser | Робочий baseline | First node/API test target |
+| OpenCV/UVC camera | Робочий baseline | Exposure behaviour depends on OS/driver |
+| Serial LX200 | Робочий baseline | GOTO/Sync; capability hardening pending |
+| ASCOM Alpaca mount/focuser | Реалізовано | Mainly relevant outside native Linux/INDI path |
+| GeminiAstro EAF | Compatibility profile | INDI/Alpaca bridge; real Gemini hardware validation still pending |
+| QHY SDK | Опційний | Single-frame path exists; RPi/QHY HIL and continuous planetary mode pending |
+| INDI XML backend | Експериментальний | Suitable for first RPi integration tests; exact driver properties need HIL validation |
+| OAL HTTP/WS | Expanded | Node discovery/config/profile/solver/device control plus existing astronomy endpoints |
+| Star detector | Реалізовано | Existing implementation |
+| Triangle solver | Prototype | ASTAP adapter still required for production first-light workflow |
+| Autofocus | Algorithmically implemented | Runs on node in remote mode; hardware tuning pending |
+| Polar alignment math | Реалізовано | Runs on node in remote mode; automated wizard/orchestration still pending |
+| Guiding | Basic | Calibration/dither/recovery pending |
+| Scheduler | State model only | Not yet durable execution engine |
+| Security/TLS/auth | P0 pending | **Do not expose node directly to public Internet** |
+| Async operations/locks | P0 pending | Current long commands are still synchronous HTTP requests |
+| FITS/RAW data plane | P0 pending | Preview/Base64 path remains for this architecture increment |

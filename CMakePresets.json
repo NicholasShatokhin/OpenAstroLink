@@ -4,11 +4,13 @@
   "configurePresets": [
     {
       "name": "default-release",
-      "displayName": "Default Release",
+      "displayName": "Default Release (GUI + node)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "OAS_BUILD_GUI": "ON",
+        "OAS_BUILD_NODE": "ON",
         "OAS_BUILD_EXAMPLE_DRIVER": "ON"
       }
     },
@@ -19,24 +21,42 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/vs2022",
       "cacheVariables": {
+        "OAS_BUILD_GUI": "ON",
+        "OAS_BUILD_NODE": "ON",
         "OAS_BUILD_EXAMPLE_DRIVER": "ON"
       }
     },
     {
-      "name": "hardware-linux-release",
-      "displayName": "Linux/RPi with optional hardware backends",
+      "name": "rpi4-observatory-release",
+      "displayName": "Raspberry Pi 4 observatory (QHY + INDI)",
       "inherits": "default-release",
-      "binaryDir": "${sourceDir}/build/hardware-release",
+      "binaryDir": "${sourceDir}/build/rpi4-observatory",
       "cacheVariables": {
+        "OAS_BUILD_GUI": "ON",
+        "OAS_BUILD_NODE": "ON",
         "OAS_ENABLE_QHY": "ON",
-        "OAS_ENABLE_GPHOTO2": "ON",
-        "OAS_ENABLE_INDI": "ON"
+        "OAS_ENABLE_INDI": "ON",
+        "OAS_ENABLE_GPHOTO2": "OFF"
+      }
+    },
+    {
+      "name": "node-sim-release",
+      "displayName": "Headless node only (simulated/basic backends)",
+      "inherits": "default-release",
+      "binaryDir": "${sourceDir}/build/node-sim",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF",
+        "OAS_BUILD_NODE": "ON",
+        "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_INDI": "OFF",
+        "OAS_ENABLE_GPHOTO2": "OFF"
       }
     }
   ],
   "buildPresets": [
     { "name": "default-release", "configurePreset": "default-release" },
     { "name": "windows-vs2022", "configurePreset": "windows-vs2022", "configuration": "Release" },
-    { "name": "hardware-linux-release", "configurePreset": "hardware-linux-release" }
+    { "name": "rpi4-observatory-release", "configurePreset": "rpi4-observatory-release" },
+    { "name": "node-sim-release", "configurePreset": "node-sim-release" }
   ]
 }

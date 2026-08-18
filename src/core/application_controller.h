@@ -6,9 +6,8 @@
 #include "algorithms/polar_alignment.h"
 #include "algorithms/scheduler.h"
 #include "core/interfaces.h"
+#include "core/observatory_controller.h"
 #include "core/settings.h"
-#include <QImage>
-#include <QObject>
 #include <memory>
 
 #ifdef OAS_HAVE_POSITIONING
@@ -20,77 +19,77 @@ class OalServer;
 class OalWsServer;
 class StarCatalog;
 
-class ApplicationController final : public QObject {
+class ApplicationController final : public ObservatoryController {
     Q_OBJECT
 public:
     explicit ApplicationController(QObject *parent=nullptr);
     ~ApplicationController() override;
 
-    TelescopeProfile profile() const{return profile_;}
-    void setProfile(const TelescopeProfile &profile);
-    QStringList cameraBackends() const;
-    QStringList mountBackends() const;
-    QStringList focuserBackends() const;
-    QStringList solverBackends() const{return {"catalog-pattern","neural"};}
-    bool selectSolver(const QString &name,QString *error=nullptr);
-    bool loadCatalog(const QString &path,QString *error=nullptr);
-    bool loadNeuralModel(const QString &path,QString *error=nullptr);
+    QString controlMode() const override { return "embedded-core"; }
+    QString endpointDescription() const override { return "in-process"; }
+    bool isRemote() const override { return false; }
 
-    bool connectCamera(const QString &backend,const QString &endpoint,QString *error=nullptr);
-    bool connectMount(const QString &backend,const QString &endpoint,QString *error=nullptr);
-    bool connectFocuser(const QString &backend,const QString &endpoint,QString *error=nullptr);
-    void disconnectAll();
+    TelescopeProfile profile() const override{return profile_;}
+    void setProfile(const TelescopeProfile &profile) override;
+    QStringList cameraBackends() const override;
+    QStringList mountBackends() const override;
+    QStringList focuserBackends() const override;
+    QStringList solverBackends() const override{return {"catalog-pattern","neural"};}
+    bool selectSolver(const QString &name,QString *error=nullptr) override;
+    bool loadCatalog(const QString &path,QString *error=nullptr) override;
+    bool loadNeuralModel(const QString &path,QString *error=nullptr) override;
 
-    bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr);
-    SolveResult solveLast(const SolveHint &hint={});
-    AutofocusResult autofocus(const AutofocusRequest &request);
-    FrameMotion estimateLastMotion();
-    void requestSystemLocation();
+    bool connectCamera(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
+    bool connectMount(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
+    bool connectFocuser(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
+    void disconnectAll() override;
+    bool restoreConfiguredDevices(QStringList *errors=nullptr);
 
-    bool slewMount(const EquatorialCoord &target,QString *error=nullptr);
-    bool syncMount(const EquatorialCoord &target,QString *error=nullptr);
-    bool mountStatus(MountStatus &status,QString *error=nullptr) const;
-    bool focuserStatus(FocuserStatus &status,QString *error=nullptr) const;
-    bool moveFocuser(int position,QString *error=nullptr);
-    bool haltFocuser(QString *error=nullptr);
-    bool setMountTracking(bool enabled,QString *error=nullptr);
-    bool parkMount(bool parked,QString *error=nullptr);
-    bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr);
+    bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
+    SolveResult solveLast(const SolveHint &hint={}) override;
+    AutofocusResult autofocus(const AutofocusRequest &request) override;
+    FrameMotion estimateLastMotion() override;
+    void requestSystemLocation() override;
 
-    GuidingStatus startGuiding();
-    GuidingStatus stopGuiding();
-    GuidingStatus guideUsingLastSolve();
-    GuidingStatus guidingStatus() const{return guiding_.status();}
+    bool slewMount(const EquatorialCoord &target,QString *error=nullptr) override;
+    bool syncMount(const EquatorialCoord &target,QString *error=nullptr) override;
+    bool mountStatus(MountStatus &status,QString *error=nullptr) const override;
+    bool focuserStatus(FocuserStatus &status,QString *error=nullptr) const override;
+    bool moveFocuser(int position,QString *error=nullptr) override;
+    bool haltFocuser(QString *error=nullptr) override;
+    bool setMountTracking(bool enabled,QString *error=nullptr) override;
+    bool parkMount(bool parked,QString *error=nullptr) override;
+    bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
 
-    void clearPolarSamples();
-    bool addPolarSample(QString *error=nullptr);
-    bool slewPolarRaOffset(double deltaDeg,QString *error=nullptr);
-    PolarAlignmentResult estimatePolarAlignment() const;
+    GuidingStatus startGuiding() override;
+    GuidingStatus stopGuiding() override;
+    GuidingStatus guideUsingLastSolve() override;
+    GuidingStatus guidingStatus() const override{return guiding_.status();}
+
+    void clearPolarSamples() override;
+    bool addPolarSample(QString *error=nullptr) override;
+    bool slewPolarRaOffset(double deltaDeg,QString *error=nullptr) override;
+    PolarAlignmentResult estimatePolarAlignment() override;
+    int polarSampleCount() const{return int(polarSamples_.size());}
+
+    bool setSessionPlan(const QString &name,const std::vector<SessionTarget> &targets,
+                        QString *error=nullptr) override;
+    bool startSession(QString *error=nullptr) override;
+    void stopSession() override;
+    SessionStatus sessionStatus() const override{return scheduler_.status();}
 
     Scheduler &scheduler(){return scheduler_;}
-    const CameraFrame &lastFrame() const{return lastFrame_;}
-    const SolveResult &lastSolve() const{return lastSolve_;}
+    const CameraFrame &lastFrame() const override{return lastFrame_;}
+    const SolveResult &lastSolve() const override{return lastSolve_;}
 
-    bool startOalServer(quint16 httpPort,bool websocketEnabled,quint16 wsPort,QString *error=nullptr);
-    void stopOalServer();
-    bool oalRunning() const;
+    bool startOalServer(quint16 httpPort,bool websocketEnabled,quint16 wsPort,QString *error=nullptr) override;
+    void stopOalServer() override;
+    bool oalRunning() const override;
 
     QJsonArray devicesJson() const;
     QJsonObject cameraStatusJson() const;
     QJsonObject stateJson() const;
-
-signals:
-    void logMessage(const QString &message);
-    void frameCaptured(const QImage &image,const QString &frameId);
-    void solveCompleted(const QJsonObject &result);
-    void autofocusProgress(const QJsonObject &sample);
-    void autofocusCompleted(const QJsonObject &result);
-    void guidingChanged(const QJsonObject &status);
-    void polarSampleCountChanged(int count);
-    void sessionChanged(const QJsonObject &status);
-    void stateChanged(const QJsonObject &state);
-    void motionEstimated(const QJsonObject &motion);
-    void profileChanged();
+    QJsonObject nodeInfoJson() const;
 
 private:
     static QImage toQImage(const cv::Mat &image);

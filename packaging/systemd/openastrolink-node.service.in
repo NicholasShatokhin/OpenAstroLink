@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenAstroLink headless observatory node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@OAL_USER@
+Group=@OAL_USER@
+ExecStart=/usr/local/bin/openastrolink-node --http-port 8080 --ws-port 8090
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

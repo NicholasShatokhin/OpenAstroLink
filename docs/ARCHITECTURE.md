@@ -1,65 +1,83 @@
 # Архітектура
 
+## v0.2.2: ядро більше не прив'язане до GUI
+
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ Qt GUI                                                       │
-│ Devices │ Capture/Solve │ Mount/Guide │ Focus │ Polar │ OAL │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-                     ApplicationController
-                               │
-        ┌──────────────────────┼───────────────────────┐
-        │                      │                       │
-     ICamera                 IMount                 IFocuser
-        │                      │                       │
-  Sim/OpenCV/QHY/       Sim/Serial/Alpaca/      Sim/Alpaca/OAL/
-  Canon/OAL              OAL/INDI                INDI
-        │                      │                       │
-        └─────────────── algorithms ──────────────────┘
-          StarDetector, CatalogSolver, Autofocus,
-          Guiding, PolarAlignment, Scheduler
-                               │
-               ┌───────────────┴───────────────┐
-               │                               │
-          OAL HTTP API                   OAL WebSocket
+                   ┌───────────────────────────┐
+                   │ OpenAstroSuite Qt GUI     │
+                   │ presentation only         │
+                   └─────────────┬─────────────┘
+                                 │ ObservatoryController
+                 ┌───────────────┴────────────────┐
+                 │                                │
+        local-node / remote-node             embedded/dev
+                 │                                │
+     RemoteObservatoryController          ApplicationController
+          HTTP + WebSocket                       │
+                 │                                │
+                 ▼                                │
+┌───────────────────────────────────────────┐     │
+│ openastrolink-node                        │     │
+│ ApplicationController                    │◄────┘ conceptual same core
+│                                           │
+│ ICamera / IMount / IFocuser               │
+│ solve / autofocus / guide / polar/session │
+│ OAL HTTP + WebSocket                      │
+└──────┬─────────────┬──────────────┬────────┘
+       │             │              │
+      QHY          Gemini          Mount
+                    EAF
 ```
 
-## Головний принцип
+### Production model on Raspberry Pi
 
-GUI, OAL HTTP server і внутрішні алгоритми не мають власних копій класів пристроїв. Вони викликають `ApplicationController`, який володіє єдиними активними `ICamera`, `IMount` та `IFocuser`.
+`openastrolink-node` is the hardware owner and runs under `systemd`. A GUI attached to the Pi connects to `127.0.0.1`; a GUI on another computer connects to the Pi's LAN/VPN address. Both clients control the same core and therefore see the same active devices and state.
 
-## Шари
+Closing either GUI must not stop the node. High-level astronomy actions are sent to the node and execute there.
 
-### `core`
+### Embedded mode
 
-- спільні типи;
-- інтерфейси пристроїв;
-- налаштування;
-- `ApplicationController`.
+The old in-process topology is retained as **Embedded core (developer mode)**. It is useful for simulation and development, but it is not the recommended RPi observatory topology because a GUI process should not own production hardware.
 
-### `backends`
+## Code layers
 
-Перекладають стандартизовані операції ядра у конкретний транспорт/SDK.
+### `oas_core`
 
-### `algorithms`
+Static library containing:
 
-Не знають про GUI або HTTP. Отримують кадри та інтерфейси пристроїв.
+- `ApplicationController`;
+- device interfaces and active backends;
+- autofocus/guiding/polar/scheduler algorithms;
+- OAL HTTP/WebSocket server;
+- settings and device binding persistence.
 
-### `oal`
+It contains no Widgets/UI code and is linked by `openastrolink-node`.
 
-- REST API;
-- WebSocket events;
-- plug-in ABI/loader.
+### `openastrolink-node`
+
+`QCoreApplication` entry point. It restores persisted device bindings, starts HTTP/WebSocket, and remains alive independently of any GUI.
+
+### `ObservatoryController`
+
+GUI-facing abstract contract. `MainWindow` no longer depends directly on `ApplicationController`.
+
+Implementations:
+
+- `ApplicationController` — local embedded execution;
+- `RemoteObservatoryController` — thin HTTP/WebSocket proxy to a node.
 
 ### `gui`
 
-Виключно presentation layer.
+Presentation layer only in node mode. It may render preview frames and results, but it does not run autofocus, solve, polar alignment or hardware operations locally when connected to a node.
+
+## Device ownership and persistence
+
+Successful camera/mount/focuser connections are persisted by the node. On reboot the node can auto-connect the same backend/endpoints. This is required so an RPi can recover without a local desktop session.
 
 ## Полярне вирівнювання
 
-Кожен plate solve задає орієнтацію камери у небесній системі. Відносна матриця орієнтацій після повороту лише RA має власний вектор — реальну механічну вісь RA. Вісь усереднюється за кількома проходами, порівнюється з NCP і переводиться у локальні Alt/Az поправки.
+The existing RA-axis mathematics remains in `ApplicationController`/`PolarAlignmentEstimator`. In remote mode these operations are invoked through OAL endpoints, so the samples and estimator state live on the Raspberry Pi, not in the remote GUI.
 
+## Security boundary
 
-## Hardware compatibility profiles
-
-`gemini-eaf` є першим named hardware compatibility profile поверх `IFocuser`. Він делегує vendor-supported Alpaca/INDI transport, але зберігає власну OAL/backend identity. Це тимчасовий міст до P0 typed capabilities: клієнт не повинен виводити можливості пристрою лише з назви профілю. Деталі: `GEMINI_EAF.md`.
+v0.2.2 makes the process/network boundary explicit but does not yet implement the P0 TLS/auth/scope/safety policy. Until that increment, node ports are for a trusted LAN/VPN only.

@@ -1,21 +1,39 @@
 # Платформи
 
+## Raspberry Pi 4 — primary deployment target for v0.2.2
+
+Use 64-bit Raspberry Pi OS, Release build and preferably Ninja. Build both the headless node and the GUI if a local monitor/keyboard may be attached:
+
+```bash
+cmake -S . -B build-rpi -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DOAS_BUILD_NODE=ON \
+  -DOAS_BUILD_GUI=ON \
+  -DOAS_ENABLE_QHY=ON \
+  -DOAS_ENABLE_INDI=ON
+cmake --build build-rpi -j$(nproc)
+```
+
+Install `openastrolink-node` as a systemd service using `scripts/install_rpi_node.sh`. The local GUI should normally connect to `http://127.0.0.1:8080`; a remote GUI connects to the Pi LAN/VPN address. This ensures the hardware/core survives GUI closure and does not depend on an X/Wayland login session.
+
+QHY requires an ARM-compatible QHYCCD SDK installation visible to CMake. INDI mode in this repository is a minimal built-in XML/TCP client, so an `indiserver` plus the appropriate vendor/mount/focuser drivers still runs separately.
+
+Do not expose current unauthenticated OAL ports to the public Internet.
+
 ## Windows
 
-Рекомендовано Qt 6.4+ MSVC kit і OpenCV того самого ABI. Serial endpoint: `COM3`. ASCOM використовується через Alpaca HTTP, тому COM interop не потрібен.
+Qt 6.4+ MSVC kit and OpenCV of the same ABI are recommended. The GUI can run either with an embedded development core or as a remote client to the Raspberry Pi:
 
-QHY: вкажіть `QHYCCD_INCLUDE_DIR` і `QHYCCD_LIBRARY` або додайте SDK у стандартні CMake search paths.
+```text
+OpenAstroSuite --node http://<rpi-address>:8080
+```
 
-Canon/libgphoto2 зазвичай простіше залишити вимкненим на Windows або збирати через окремий package manager.
+ASCOM equipment can still be reached through Alpaca/ASCOM Remote where appropriate.
 
-## Linux
+## Linux desktop
 
-Qt/OpenCV можуть бути системними або власною інсталяцією Qt. Для serial потрібні права на `/dev/ttyUSB*`/`/dev/ttyACM*`.
-
-## Raspberry Pi
-
-Збирати Release, бажано з Ninja. Для великих кадрів обмежити resolution/ROI. OAL server корисний як edge-node, а GUI може працювати на іншій машині через OAL.
+Same model as Raspberry Pi. `openastrolink-node` can run separately from the GUI, or the GUI can use embedded developer mode. Serial devices require permissions for `/dev/ttyUSB*`/`/dev/ttyACM*`.
 
 ## macOS
 
-Qt/OpenCV і libgphoto2 можуть бути встановлені package manager. QHY SDK на macOS може вимагати firmware initialization відповідно до документації конкретної версії SDK.
+The GUI can be used primarily as a remote OAL node client. Local embedded backends depend on the availability of Qt/OpenCV/vendor SDKs for the platform.

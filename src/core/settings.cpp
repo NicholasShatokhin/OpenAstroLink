@@ -25,10 +25,30 @@ void AppSettings::saveProfile(const TelescopeProfile &p) const {
 }
 bool AppSettings::oalEnabled() const { return settings_.value("server/enabled", false).toBool(); }
 quint16 AppSettings::oalPort() const { return settings_.value("server/port", 8080).value<quint16>(); }
-bool AppSettings::wsEnabled() const { return settings_.value("server/wsEnabled", false).toBool(); }
+bool AppSettings::wsEnabled() const { return settings_.value("server/wsEnabled", true).toBool(); }
 quint16 AppSettings::wsPort() const { return settings_.value("server/wsPort", 8090).value<quint16>(); }
 void AppSettings::saveServer(bool e, quint16 p, bool we, quint16 wp) const {
-    settings_.setValue("server/enabled", e); settings_.setValue("server/port", p);
-    settings_.setValue("server/wsEnabled", we); settings_.setValue("server/wsPort", wp);
+    settings_.setValue("server/enabled", e);
+    settings_.setValue("server/port", p);
+    settings_.setValue("server/wsEnabled", we);
+    settings_.setValue("server/wsPort", wp);
 }
+DeviceBinding AppSettings::loadBinding(const QString &prefix) const {
+    DeviceBinding b;
+    b.backend = settings_.value(prefix + "/backend").toString();
+    b.endpoint = settings_.value(prefix + "/endpoint").toString();
+    b.autoConnect = settings_.value(prefix + "/autoConnect", false).toBool();
+    return b;
+}
+void AppSettings::saveBinding(const QString &prefix, const DeviceBinding &b) const {
+    settings_.setValue(prefix + "/backend", b.backend);
+    settings_.setValue(prefix + "/endpoint", b.endpoint);
+    settings_.setValue(prefix + "/autoConnect", b.autoConnect);
+}
+DeviceBinding AppSettings::cameraBinding() const { return loadBinding("devices/camera"); }
+DeviceBinding AppSettings::mountBinding() const { return loadBinding("devices/mount"); }
+DeviceBinding AppSettings::focuserBinding() const { return loadBinding("devices/focuser"); }
+void AppSettings::saveCameraBinding(const DeviceBinding &b) const { saveBinding("devices/camera", b); }
+void AppSettings::saveMountBinding(const DeviceBinding &b) const { saveBinding("devices/mount", b); }
+void AppSettings::saveFocuserBinding(const DeviceBinding &b) const { saveBinding("devices/focuser", b); }
 } // namespace oas

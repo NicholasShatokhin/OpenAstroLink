@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.1 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,20 +12,23 @@ option(OAS_ENABLE_GPHOTO2 "Enable Canon/libgphoto2 backend" OFF)
 option(OAS_ENABLE_INDI "Enable experimental built-in INDI XML client backends" OFF)
 option(OAS_BUILD_TESTS "Build lightweight tests" OFF)
 option(OAS_BUILD_EXAMPLE_DRIVER "Build the example native OAL plug-in" ON)
+option(OAS_BUILD_GUI "Build the OpenAstroSuite Qt GUI client" ON)
+option(OAS_BUILD_NODE "Build the headless openastrolink-node service" ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS
-    Core Gui Widgets Network SerialPort WebSockets HttpServer)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network SerialPort WebSockets HttpServer)
+if(OAS_BUILD_GUI)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
+endif()
 find_package(OpenCV 4 REQUIRED COMPONENTS core imgproc imgcodecs videoio calib3d)
 find_package(Qt6 6.4 QUIET COMPONENTS Positioning)
 
-set(OAS_SOURCES
+set(OAS_CORE_SOURCES
+    src/core/observatory_controller.h
     src/core/application_controller.h
     src/algorithms/scheduler.h
     src/oal/oal_server.h
     src/oal/oal_ws_server.h
     src/oal/driver_plugin_loader.h
-    src/gui/main_window.h
-    src/app/main.cpp
     src/core/settings.cpp
     src/core/application_controller.cpp
     src/backends/simulated_devices.cpp
@@ -48,63 +51,72 @@ set(OAS_SOURCES
     src/oal/oal_server.cpp
     src/oal/oal_ws_server.cpp
     src/oal/driver_plugin_loader.cpp
-    src/gui/main_window.cpp
 )
 
 if(OAS_ENABLE_QHY)
     find_path(QHYCCD_INCLUDE_DIR qhyccd.h REQUIRED)
     find_library(QHYCCD_LIBRARY NAMES qhyccd REQUIRED)
-    list(APPEND OAS_SOURCES src/backends/qhy_camera.cpp)
+    list(APPEND OAS_CORE_SOURCES src/backends/qhy_camera.cpp)
 endif()
 
 if(OAS_ENABLE_GPHOTO2)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GPHOTO2 REQUIRED libgphoto2)
-    list(APPEND OAS_SOURCES src/backends/canon_camera.cpp)
+    list(APPEND OAS_CORE_SOURCES src/backends/canon_camera.cpp)
 endif()
 
 if(OAS_ENABLE_INDI)
-    list(APPEND OAS_SOURCES src/backends/indi_devices.cpp)
+    list(APPEND OAS_CORE_SOURCES src/backends/indi_devices.cpp)
 endif()
 
-add_executable(OpenAstroSuite ${OAS_SOURCES})
-
-target_include_directories(OpenAstroSuite PRIVATE
+add_library(oas_core STATIC ${OAS_CORE_SOURCES})
+target_include_directories(oas_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${OpenCV_INCLUDE_DIRS}
 )
-
-target_compile_definitions(OpenAstroSuite PRIVATE
+target_compile_definitions(oas_core PUBLIC
     OAS_VERSION="${PROJECT_VERSION}"
     $<$<BOOL:${OAS_ENABLE_QHY}>:OAS_HAVE_QHY>
     $<$<BOOL:${OAS_ENABLE_GPHOTO2}>:OAS_HAVE_GPHOTO2>
     $<$<BOOL:${OAS_ENABLE_INDI}>:OAS_HAVE_INDI>
 )
-
-target_link_libraries(OpenAstroSuite PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::SerialPort
-    Qt6::WebSockets Qt6::HttpServer
+target_link_libraries(oas_core PUBLIC
+    Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort Qt6::WebSockets Qt6::HttpServer
     ${OpenCV_LIBS}
 )
 
 if(OAS_ENABLE_QHY)
-    target_include_directories(OpenAstroSuite PRIVATE ${QHYCCD_INCLUDE_DIR})
-    target_link_libraries(OpenAstroSuite PRIVATE ${QHYCCD_LIBRARY})
+    target_include_directories(oas_core PRIVATE ${QHYCCD_INCLUDE_DIR})
+    target_link_libraries(oas_core PUBLIC ${QHYCCD_LIBRARY})
 endif()
-
 if(OAS_ENABLE_GPHOTO2)
-    target_include_directories(OpenAstroSuite PRIVATE ${GPHOTO2_INCLUDE_DIRS})
-    target_link_directories(OpenAstroSuite PRIVATE ${GPHOTO2_LIBRARY_DIRS})
-    target_link_libraries(OpenAstroSuite PRIVATE ${GPHOTO2_LIBRARIES})
+    target_include_directories(oas_core PRIVATE ${GPHOTO2_INCLUDE_DIRS})
+    target_link_directories(oas_core PRIVATE ${GPHOTO2_LIBRARY_DIRS})
+    target_link_libraries(oas_core PUBLIC ${GPHOTO2_LIBRARIES})
 endif()
-
-
 if(TARGET Qt6::Positioning)
-    target_link_libraries(OpenAstroSuite PRIVATE Qt6::Positioning)
-    target_compile_definitions(OpenAstroSuite PRIVATE OAS_HAVE_POSITIONING)
+    target_link_libraries(oas_core PUBLIC Qt6::Positioning)
+    target_compile_definitions(oas_core PUBLIC OAS_HAVE_POSITIONING)
 endif()
 
+if(OAS_BUILD_GUI)
+    add_executable(OpenAstroSuite
+        src/app/main.cpp
+        src/gui/main_window.h
+        src/gui/main_window.cpp
+        src/core/remote_observatory_controller.h
+        src/core/remote_observatory_controller.cpp
+    )
+    target_link_libraries(OpenAstroSuite PRIVATE oas_core Qt6::Widgets)
+    install(TARGETS OpenAstroSuite RUNTIME DESTINATION bin)
+endif()
+
+if(OAS_BUILD_NODE)
+    add_executable(openastrolink-node src/node/main.cpp)
+    target_link_libraries(openastrolink-node PRIVATE oas_core)
+    install(TARGETS openastrolink-node RUNTIME DESTINATION bin)
+endif()
 
 if(OAS_BUILD_EXAMPLE_DRIVER)
     add_library(oal_sim_driver SHARED examples/oal_sim_driver.cpp)
@@ -120,5 +132,6 @@ if(OAS_BUILD_EXAMPLE_DRIVER)
         ARCHIVE DESTINATION plugins)
 endif()
 
-install(TARGETS OpenAstroSuite RUNTIME DESTINATION bin)
 install(DIRECTORY config docs DESTINATION share/OpenAstroSuite)
+install(FILES packaging/systemd/openastrolink-node.service.in DESTINATION share/OpenAstroSuite/systemd)
+install(FILES packaging/linux/openastrosuite-local.desktop DESTINATION share/applications)

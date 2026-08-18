@@ -1,11 +1,46 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.0
+  version: 0.2.2
   description: Reference API exposed by OpenAstroSuite.
 servers:
   - url: http://localhost:8080/api/v1
 paths:
+  /node/info:
+    get:
+      summary: Headless node identity and event endpoint metadata
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /node/backends:
+    get:
+      summary: Backends available on this node
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /profile:
+    get:
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+    post:
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /devices/connect:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, backend]
+              properties:
+                type: { type: string, enum: [camera, mount, focuser] }
+                backend: { type: string }
+                endpoint: { type: string }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /devices/disconnect-all:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /solver/select:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /solver/catalog:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /solver/model:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /devices:
     get:
       summary: List connected/exported devices
@@ -91,8 +126,12 @@ paths:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /guider/default/stop:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /guider/default/update:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /guider/default/status:
     get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /polar-align/clear:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /polar-align/sample:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /polar-align/ra-offset:
@@ -116,6 +155,8 @@ paths:
       responses: { '200': { $ref: '#/components/responses/Success' } }
   /sessions/current:
     get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /sessions/current/stop:
+    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
 components:
   parameters:
     DeviceId:

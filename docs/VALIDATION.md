@@ -1,19 +1,35 @@
-# Validation performed for the consolidated package
+# Validation — v0.2.2 Raspberry Pi node split
 
-Validation updated for the 0.2.1 GeminiAstro EAF increment on 17 August 2026.
+Validation updated 18 August 2026 for the headless-node / local-or-remote GUI increment.
 
-The consolidation environment does not contain Qt 6 or OpenCV development packages, so a complete application link/build cannot be executed here.
+The consolidation container does not contain Qt 6 development packages, so a complete Qt application build/link cannot be performed here. CMake reaches `find_package(Qt6)` and stops specifically because `Qt6Config.cmake` is absent. This package is therefore **structurally validated, not target-built or hardware-validated**.
 
-The following checks were completed:
+Checks completed:
 
-1. `python3 tools/project_smoke_check.py` passes after adding the Gemini EAF backend.
-2. Project structure and brace-balance smoke checks pass for all `.cpp` and `.h` files.
-3. Every project-local quoted include resolves to a file under `src/` or `include/`.
-4. Every source/header path referenced by `CMakeLists.txt` exists, including `gemini_eaf_focuser.*`.
-5. `docs/openapi.yaml` parses as OpenAPI 3.1 and currently contains the existing API surface; the P0 operations/capabilities migration has **not** yet been applied to the implementation.
-6. The standalone native OAL example plug-in remains part of the package.
-7. CMake configuration detects the compiler and reaches `find_package(Qt6)`; it stops only because Qt 6 is not installed in this validation container.
-8. Gemini EAF support is structurally wired into `ApplicationController`, CMake and GUI backend selection.
-9. No hardware-in-the-loop Gemini test has been performed in this environment. The backend is therefore labelled a **compatibility profile**, not hardware-validated or native-serial production support.
+1. `python3 tools/project_smoke_check.py` — PASS.
+2. `python3 tools/node_architecture_check.py` — PASS.
+3. All project-local quoted includes resolve under `src/` or `include/`.
+4. CMake now defines separate `oas_core`, `OpenAstroSuite`, and `openastrolink-node` targets.
+5. `MainWindow` depends on `ObservatoryController`, not directly on `ApplicationController`.
+6. `RemoteObservatoryController` proxies capture, solve, autofocus, mount/focuser control, guiding, polar alignment, profile/solver setup and sessions to OAL endpoints.
+7. `openastrolink-node` restores persisted device bindings and starts HTTP/WebSocket independently of any GUI.
+8. OAL reference server exposes node bootstrap/backend/profile/device-configuration endpoints required by the remote GUI.
+9. A systemd template and RPi install helper are present.
+10. Existing Gemini EAF compatibility profile remains wired through Alpaca/INDI.
+11. No QHY, Gemini, mount, INDI-server or Raspberry Pi hardware-in-the-loop test has been performed in this environment.
+12. P0 security, async operation resources/locks and the binary science-frame data plane are still pending; the current network API must stay on a trusted LAN/VPN.
 
-Before using real equipment, build on the target platform and first test with simulated devices. Then follow `docs/GEMINI_EAF.md`, starting with small safe moves and the hardware validation checklist.
+Target validation sequence on the Raspberry Pi should be:
+
+```text
+build node+GUI
+→ start node with --no-autoconnect
+→ connect GUI to localhost
+→ simulated camera/mount/focuser
+→ reboot and verify systemd persistence
+→ remote GUI from second computer
+→ INDI mount/focuser
+→ QHY single-frame capture
+```
+
+Only after those gates pass should the telescope be moved under real sky control.

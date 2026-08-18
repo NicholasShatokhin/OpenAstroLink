@@ -1,10 +1,12 @@
 # OpenAstroSuite / OpenAstroLink
 
-Це зведений C++/Qt 6 проєкт, створений із усіх фрагментів та патчів у розмові. Він не є механічним склеюванням попередніх відповідей: суперечливі класи об’єднано, неправдиві заглушки відділено від робочих реалізацій, а всі GUI, REST і WebSocket дії використовують одні й ті самі об’єкти пристроїв.
+Версія 0.2.2 вводить окремий headless observatory core для Raspberry Pi. `openastrolink-node` володіє обладнанням і алгоритмами, а той самий Qt GUI може керувати вузлом локально (`127.0.0.1`) або віддалено через OAL HTTP/WebSocket. Старий embedded-core режим збережено як developer fallback.
 
 ## Що входить
 
-- Qt 6 GUI: кадр, астрометричний overlay, проста карта зірок, налаштування профілю.
+- `oas_core` — окрема бібліотека ядра без Qt Widgets.
+- `openastrolink-node` — headless `QCoreApplication` для RPi/systemd.
+- Qt 6 GUI: локальний node client, remote node client або embedded developer core; кадр, астрометричний overlay, карта зірок, профіль.
 - Камери:
   - симулятор;
   - UVC/OpenCV;
@@ -33,7 +35,7 @@
 - Guiding engine з розрахунком похибки та pulse-guide через бекенд монтування.
 - Polar alignment за реальною оцінкою осі RA з кількох solved orientations.
 - Scheduler/session model.
-- OAL REST API + WebSocket events.
+- OAL REST API + WebSocket events, включно з node bootstrap/config endpoints для thin GUI client.
 - Стабільний C ABI для майбутніх OAL plug-in драйверів і приклад драйвера.
 
 ## Швидкий старт
@@ -49,7 +51,14 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-Перший запуск рекомендується робити з трьома `simulated` бекендами. Це дозволяє перевірити GUI, OAL API, autofocus, scheduler і solve-потік без обладнання.
+Для Raspberry Pi рекомендований запуск — окремий node service плюс GUI-клієнт. Першу перевірку все одно роби з трьома `simulated` backends.
+
+```bash
+./build/openastrolink-node --http-port 8080 --ws-port 8090
+./build/OpenAstroSuite --node http://127.0.0.1:8080
+```
+
+На іншому комп'ютері запускається той самий GUI з адресою RPi. Якщо до RPi підключено монітор і клавіатуру, GUI підключається до локального node через `127.0.0.1`, тому закриття GUI не зупиняє ядро або обладнання.
 
 ## Опційні бекенди
 
@@ -90,6 +99,7 @@ cmake -S . -B build \
 - `docs/OAL_API.md`
 - `docs/BUILD_PLATFORMS.md`
 - `docs/GEMINI_EAF.md`
+- `docs/RPI_NODE.md`
 - `docs/ROADMAP_P0_P1_IMPLEMENTATION.md`
 
 ## Перевірка цього пакета
