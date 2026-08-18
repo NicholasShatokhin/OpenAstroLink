@@ -73,6 +73,7 @@ public:
     bool startOalServer(quint16,bool,quint16,QString *error=nullptr) override;
     void stopOalServer() override;
     bool oalRunning() const override{return true;}
+    void refreshState() override;
 
 private slots:
     void onWsText(const QString &message);

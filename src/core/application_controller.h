@@ -85,6 +85,7 @@ public:
     bool startOalServer(quint16 httpPort,bool websocketEnabled,quint16 wsPort,QString *error=nullptr) override;
     void stopOalServer() override;
     bool oalRunning() const override;
+    void refreshState() override;
 
     QJsonArray devicesJson() const;
     QJsonObject cameraStatusJson() const;
@@ -92,6 +93,7 @@ public:
     QJsonObject nodeInfoJson() const;
 
 private:
+    void disconnectDevices(bool clearAutoConnect);
     static QImage toQImage(const cv::Mat &image);
     void emitState();
     std::shared_ptr<ICamera> camera_;

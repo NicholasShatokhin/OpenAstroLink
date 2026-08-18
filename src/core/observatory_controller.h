@@ -81,6 +81,11 @@ public:
     virtual void stopOalServer() = 0;
     virtual bool oalRunning() const = 0;
 
+    // Request a fresh complete state snapshot. Remote clients use this after
+    // connecting/reconnecting so GUI state does not depend on having observed
+    // earlier WebSocket events.
+    virtual void refreshState() = 0;
+
 signals:
     void logMessage(const QString &message);
     void frameCaptured(const QImage &image, const QString &frameId);

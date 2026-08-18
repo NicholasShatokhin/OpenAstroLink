@@ -23,7 +23,7 @@ RemoteObservatoryController::RemoteObservatoryController(QUrl base,QObject *pare
     QString p=base_.path();while(p.endsWith('/'))p.chop(1);if(p.endsWith("/api/v1"))p.chop(7);base_.setPath(p);
     wsReconnect_.setInterval(3000);wsReconnect_.setSingleShot(false);
     connect(&ws_,&QWebSocket::textMessageReceived,this,&RemoteObservatoryController::onWsText);
-    connect(&ws_,&QWebSocket::connected,this,[this](){wsReconnect_.stop();emit logMessage("Connected to OAL event stream");});
+    connect(&ws_,&QWebSocket::connected,this,[this](){wsReconnect_.stop();emit logMessage("Connected to OAL event stream");refreshState();});
     connect(&ws_,&QWebSocket::disconnected,this,[this](){emit logMessage("OAL event stream disconnected; commands still use HTTP");if(wsUrl_.isValid()&&!wsReconnect_.isActive())wsReconnect_.start();});
     connect(&wsReconnect_,&QTimer::timeout,this,[this](){if(ws_.state()==QAbstractSocket::UnconnectedState&&wsUrl_.isValid())ws_.open(wsUrl_);});
 }
@@ -35,6 +35,7 @@ bool RemoteObservatoryController::probe(QString*e){
     QJsonValue d;auto r=http_.get(api("node/info"),3000);if(!accepted(r,&d,e))return false;
     if(!refreshMetadata(e))return false;openEventStream(d.toObject());emit logMessage("Using remote OAL core at "+base_.toString());return true;
 }
+void RemoteObservatoryController::refreshState(){QJsonValue d;QString e;if(accepted(http_.get(api("state"),3000),&d,&e))emit stateChanged(d.toObject());else emit logMessage("State refresh failed: "+e);}
 bool RemoteObservatoryController::refreshMetadata(QString*e)const{
     QJsonValue d;auto r=http_.get(api("node/backends"),3000);if(!accepted(r,&d,e))return false;auto o=d.toObject();
     auto arr=[](const QJsonValue&v){QStringList x;for(auto i:v.toArray())x<<i.toString();return x;};cameraBackends_=arr(o.value("camera"));mountBackends_=arr(o.value("mount"));focuserBackends_=arr(o.value("focuser"));solverBackends_=arr(o.value("solver"));
@@ -51,10 +52,10 @@ bool RemoteObservatoryController::selectSolver(const QString&n,QString*e){return
 bool RemoteObservatoryController::loadCatalog(const QString&p,QString*e){return accepted(http_.postJson(api("solver/catalog"),{{"path",p}}),nullptr,e);}
 bool RemoteObservatoryController::loadNeuralModel(const QString&p,QString*e){return accepted(http_.postJson(api("solver/model"),{{"path",p}}),nullptr,e);}
 static bool connectRemoteDevice(HttpJsonClient &h,const QUrl&u,const QString&t,const QString&b,const QString&ep,QString*e){auto r=h.postJson(u,{{"type",t},{"backend",b},{"endpoint",ep}},30000);if(!r.ok()||!r.json.value("ok").toBool()){if(e)*e=r.error.isEmpty()?r.json.value("error").toObject().value("message").toString("Device connect failed"):r.error;return false;}return true;}
-bool RemoteObservatoryController::connectCamera(const QString&b,const QString&ep,QString*e){bool ok=connectRemoteDevice(http_,api("devices/connect"),"camera",b,ep,e);if(ok)emit logMessage("Camera configured on node: "+b);return ok;}
-bool RemoteObservatoryController::connectMount(const QString&b,const QString&ep,QString*e){bool ok=connectRemoteDevice(http_,api("devices/connect"),"mount",b,ep,e);if(ok)emit logMessage("Mount configured on node: "+b);return ok;}
-bool RemoteObservatoryController::connectFocuser(const QString&b,const QString&ep,QString*e){bool ok=connectRemoteDevice(http_,api("devices/connect"),"focuser",b,ep,e);if(ok)emit logMessage("Focuser configured on node: "+b);return ok;}
-void RemoteObservatoryController::disconnectAll(){QString e;if(!accepted(http_.postJson(api("devices/disconnect-all"),{}),nullptr,&e))emit logMessage(e);}
+bool RemoteObservatoryController::connectCamera(const QString&b,const QString&ep,QString*e){bool ok=connectRemoteDevice(http_,api("devices/connect"),"camera",b,ep,e);if(ok){emit logMessage("Camera configured on node: "+b);refreshState();}return ok;}
+bool RemoteObservatoryController::connectMount(const QString&b,const QString&ep,QString*e){bool ok=connectRemoteDevice(http_,api("devices/connect"),"mount",b,ep,e);if(ok){emit logMessage("Mount configured on node: "+b);refreshState();}return ok;}
+bool RemoteObservatoryController::connectFocuser(const QString&b,const QString&ep,QString*e){bool ok=connectRemoteDevice(http_,api("devices/connect"),"focuser",b,ep,e);if(ok){emit logMessage("Focuser configured on node: "+b);refreshState();}return ok;}
+void RemoteObservatoryController::disconnectAll(){QString e;if(!accepted(http_.postJson(api("devices/disconnect-all"),{}),nullptr,&e))emit logMessage(e);else refreshState();}
 bool RemoteObservatoryController::capture(const ExposureRequest&r,CameraFrame*out,QString*e){
     QJsonObject q{{"exposureSec",r.exposureSec},{"binX",r.binX},{"binY",r.binY},{"gain",r.gain},{"offset",r.offset},{"includeImage",true}};if(r.roi.width>0&&r.roi.height>0)q["roi"]=QJsonObject{{"x",r.roi.x},{"y",r.roi.y},{"width",r.roi.width},{"height",r.roi.height}};
     QJsonValue d;int timeout=std::max(120000,int(r.exposureSec*1000.0)+60000);if(!accepted(http_.postJson(api("cameras/main/capture"),q,timeout),&d,e))return false;auto o=d.toObject();CameraFrame f;f.id=o.value("frameId").toString();f.capturedUtc=QDateTime::fromString(o.value("capturedUtc").toString(),Qt::ISODateWithMs);f.exposureSec=r.exposureSec;f.gain=r.gain;f.source="remote-node";
@@ -70,8 +71,8 @@ bool RemoteObservatoryController::slewMount(const EquatorialCoord&t,QString*e){r
 bool RemoteObservatoryController::syncMount(const EquatorialCoord&t,QString*e){return accepted(http_.postJson(api("mounts/main/sync"),coordToJson(t)),nullptr,e);}
 bool RemoteObservatoryController::mountStatus(MountStatus&s,QString*e)const{QJsonValue d;if(!accepted(http_.get(api("mounts/main/status")),&d,e))return false;auto o=d.toObject();s.connection=ConnectionState::Connected;s.coordinate={o.value("raDeg").toDouble(),o.value("decDeg").toDouble()};s.tracking=o.value("tracking").toBool();s.slewing=o.value("slewing").toBool();s.parked=o.value("parked").toBool();s.pierSide=o.value("pierSide").toString("unknown");return true;}
 bool RemoteObservatoryController::focuserStatus(FocuserStatus&s,QString*e)const{QJsonValue d;if(!accepted(http_.get(api("focusers/main/status")),&d,e))return false;auto o=d.toObject();s.connection=ConnectionState::Connected;s.position=o.value("position").toInt();s.moving=o.value("moving").toBool();if(o.contains("temperatureC"))s.temperatureC=o.value("temperatureC").toDouble();return true;}
-bool RemoteObservatoryController::moveFocuser(int p,QString*e){return accepted(http_.postJson(api("focusers/main/move"),{{"position",p}},120000),nullptr,e);}
-bool RemoteObservatoryController::haltFocuser(QString*e){return accepted(http_.postJson(api("focusers/main/halt"),{}),nullptr,e);}
+bool RemoteObservatoryController::moveFocuser(int p,QString*e){bool ok=accepted(http_.postJson(api("focusers/main/move"),{{"position",p}},120000),nullptr,e);if(ok)refreshState();return ok;}
+bool RemoteObservatoryController::haltFocuser(QString*e){bool ok=accepted(http_.postJson(api("focusers/main/halt"),{}),nullptr,e);if(ok)refreshState();return ok;}
 bool RemoteObservatoryController::setMountTracking(bool v,QString*e){return accepted(http_.postJson(api("mounts/main/tracking"),{{"enabled",v}}),nullptr,e);}
 bool RemoteObservatoryController::parkMount(bool v,QString*e){return accepted(http_.postJson(api("mounts/main/park"),{{"parked",v}},120000),nullptr,e);}
 bool RemoteObservatoryController::pulseGuide(GuideDirection d,int ms,QString*e){return accepted(http_.postJson(api("mounts/main/pulse-guide"),{{"direction",guideName(d)},{"durationMs",ms}}),nullptr,e);}

@@ -43,7 +43,7 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
 #endif
     connect(&scheduler_,&Scheduler::statusChanged,this,[this](const SessionStatus&s){auto j=sessionJson(s);emit sessionChanged(j);if(oalWsServer_)oalWsServer_->broadcast("sessionUpdate",j);emitState();});
 }
-ApplicationController::~ApplicationController(){stopOalServer();disconnectAll();}
+ApplicationController::~ApplicationController(){stopOalServer();disconnectDevices(false);}
 void ApplicationController::setProfile(const TelescopeProfile&p){profile_=p;settings_.saveProfile(p);emit profileChanged();emitState();}
 QStringList ApplicationController::cameraBackends()const{QStringList x{"simulated","opencv","oal"};
 #ifdef OAS_HAVE_QHY
@@ -84,7 +84,12 @@ bool ApplicationController::connectFocuser(const QString&b,const QString&e,QStri
 else if(b=="indi")d=std::make_shared<IndiFocuser>(e);
 #endif
 else{if(err)*err="Unknown focuser backend";return false;}if(!d->connectDevice(err))return false;focuser_=std::move(d);settings_.saveFocuserBinding({b,e,true});emit logMessage("Focuser connected: "+focuser_->displayName());emitState();return true;}
-void ApplicationController::disconnectAll(){if(camera_)camera_->disconnectDevice();if(mount_)mount_->disconnectDevice();if(focuser_)focuser_->disconnectDevice();camera_.reset();mount_.reset();focuser_.reset();emitState();}
+void ApplicationController::disconnectAll(){disconnectDevices(true);}
+void ApplicationController::disconnectDevices(bool clearAutoConnect){
+    if(camera_)camera_->disconnectDevice();if(mount_)mount_->disconnectDevice();if(focuser_)focuser_->disconnectDevice();camera_.reset();mount_.reset();focuser_.reset();
+    if(clearAutoConnect){auto c=settings_.cameraBinding();c.autoConnect=false;settings_.saveCameraBinding(c);auto m=settings_.mountBinding();m.autoConnect=false;settings_.saveMountBinding(m);auto f=settings_.focuserBinding();f.autoConnect=false;settings_.saveFocuserBinding(f);}
+    emitState();
+}
 bool ApplicationController::restoreConfiguredDevices(QStringList *errors){
     bool allOk=true;
     auto restore=[&](const QString &kind,const DeviceBinding &b,auto fn){
@@ -131,9 +136,10 @@ void ApplicationController::stopSession(){scheduler_.stop();}
 bool ApplicationController::startOalServer(quint16 hp,bool we,quint16 wp,QString*e){if(!oalServer_)oalServer_=std::make_unique<OalServer>(this);if(!oalServer_->start(hp,e))return false;if(we){if(!oalWsServer_)oalWsServer_=std::make_unique<OalWsServer>(this);if(!oalWsServer_->start(wp,e)){oalServer_->stop();return false;}}settings_.saveServer(true,hp,we,wp);emit logMessage(QString("OAL server listening on %1; WebSocket %2").arg(hp).arg(we?QString::number(wp):"disabled"));return true;}
 void ApplicationController::stopOalServer(){if(oalWsServer_)oalWsServer_->stop();if(oalServer_)oalServer_->stop();settings_.saveServer(false,settings_.oalPort(),false,settings_.wsPort());}
 bool ApplicationController::oalRunning()const{return oalServer_&&oalServer_->isRunning();}
-QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type){if(d)a.append(QJsonObject{{"id",d->id()},{"type",type},{"name",d->displayName()},{"backend",d->backendName()},{"connected",d->connectionState()==ConnectionState::Connected}});};add(camera_,"camera");add(mount_,"mount");add(focuser_,"focuser");return a;}
+void ApplicationController::refreshState(){emitState();}
+QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const DeviceBinding&binding){if(d)a.append(QJsonObject{{"id",d->id()},{"type",type},{"name",d->displayName()},{"backend",d->backendName()},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected}});};add(camera_,"camera",settings_.cameraBinding());add(mount_,"mount",settings_.mountBinding());add(focuser_,"focuser",settings_.focuserBinding());return a;}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();}return j;}
-QJsonObject ApplicationController::stateJson()const{QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked}};FocuserStatus f;if(focuserStatus(f,nullptr))j["focuser"]=QJsonObject{{"position",f.position},{"moving",f.moving}};auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
+QJsonObject ApplicationController::stateJson()const{QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide}};FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
 QJsonObject ApplicationController::nodeInfoJson()const{
     return {{"nodeId",QCoreApplication::applicationName()+"@"+QSysInfo::machineHostName()},
             {"version",QString::fromLatin1(OAS_VERSION)},
