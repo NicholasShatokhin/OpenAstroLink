@@ -1,6 +1,7 @@
 #include "backends/simulated_devices.h"
 #include <QDateTime>
 #include <QRandomGenerator>
+#include <QThread>
 #include <opencv2/imgproc.hpp>
 #include <cmath>
 #include <atomic>
@@ -14,6 +15,14 @@ bool SimulatedCamera::connectDevice(QString *) { state_ = ConnectionState::Conne
 void SimulatedCamera::disconnectDevice() { state_ = ConnectionState::Disconnected; }
 bool SimulatedCamera::capture(const ExposureRequest &request, CameraFrame &frame, QString *error) {
     if (state_ != ConnectionState::Connected) { if (error) *error = "Camera is disconnected"; return false; }
+    abortRequested_.store(false, std::memory_order_relaxed);
+    // Simulate a real exposure so the operation/cancellation path can be tested.
+    const qint64 totalMs = std::max<qint64>(0, qint64(std::llround(request.exposureSec * 1000.0)));
+    for (qint64 waited = 0; waited < totalMs; waited += 20) {
+        if (abortRequested_.load(std::memory_order_relaxed)) { if (error) *error = "Exposure aborted"; return false; }
+        QThread::msleep(static_cast<unsigned long>(std::min<qint64>(20, totalMs - waited)));
+    }
+    if (abortRequested_.load(std::memory_order_relaxed)) { if (error) *error = "Exposure aborted"; return false; }
     cv::Mat img(960, 1280, CV_16UC1, cv::Scalar(600));
     // Keep the same artificial sky between frames so motion, solve and
     // autofocus tests are repeatable. Blur depends on the shared simulated
@@ -36,7 +45,7 @@ bool SimulatedCamera::capture(const ExposureRequest &request, CameraFrame &frame
     cv::Mat noise(img.size(), CV_16SC1);
     cv::randn(noise, 0, 90);
     cv::add(img, noise, img, cv::noArray(), CV_16UC1);
-    frame.id = QString("sim-%1-%2").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddTHHmmsszzz")).arg(++frameNo_);
+    frame.id = QString("sim-%1-%2").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddTHHmmsszzz")).arg(frameNo_.fetch_add(1) + 1);
     frame.image = img;
     frame.capturedUtc = QDateTime::currentDateTimeUtc();
     frame.exposureSec = request.exposureSec;
@@ -44,11 +53,16 @@ bool SimulatedCamera::capture(const ExposureRequest &request, CameraFrame &frame
     frame.source = id();
     return true;
 }
+bool SimulatedCamera::abortExposure(QString *) {
+    abortRequested_.store(true, std::memory_order_relaxed);
+    return state_ == ConnectionState::Connected;
+}
 
 bool SimulatedMount::connectDevice(QString *) { QMutexLocker l(&mutex_); state_=ConnectionState::Connected; status_.connection=state_; status_.coordinate={83.8221,-5.3911}; status_.tracking=true; return true; }
 void SimulatedMount::disconnectDevice() { QMutexLocker l(&mutex_); state_=ConnectionState::Disconnected; status_.connection=state_; }
 bool SimulatedMount::status(MountStatus &s, QString *error) { QMutexLocker l(&mutex_); if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;} s=status_; return true; }
 bool SimulatedMount::slewTo(const EquatorialCoord &t, QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}status_.slewing=true;status_.coordinate=t;status_.slewing=false;status_.parked=false;return true;}
+bool SimulatedMount::abortMotion(QString*){QMutexLocker l(&mutex_);status_.slewing=false;return state_==ConnectionState::Connected;}
 bool SimulatedMount::syncTo(const EquatorialCoord &t, QString *error){return slewTo(t,error);}
 bool SimulatedMount::setTracking(bool e, QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}status_.tracking=e;return true;}
 bool SimulatedMount::park(bool e, QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}status_.parked=e;status_.tracking=!e;return true;}

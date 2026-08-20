@@ -1,18 +1,99 @@
 #pragma once
 #ifdef OAS_HAVE_INDI
+
 #include "core/interfaces.h"
-#include <QTcpSocket>
+#include <utility>
 
 namespace oas {
-struct IndiEndpoint { QString host{"127.0.0.1"}; quint16 port{7624}; QString device; static IndiEndpoint parse(const QString&); };
+
+struct IndiEndpoint {
+    QString host{"127.0.0.1"};
+    quint16 port{7624};
+    QString device;
+    static IndiEndpoint parse(const QString &text);
+    QString normalized() const;
+};
+
+struct IndiDeviceInfo {
+    QString name;
+    QStringList properties;
+};
+
+QList<IndiDeviceInfo> discoverIndiDevices(const QString &host = "127.0.0.1",
+                                          quint16 port = 7624,
+                                          int timeoutMs = 2500,
+                                          QString *error = nullptr);
+
 class IndiXmlClient {
 public:
-    explicit IndiXmlClient(IndiEndpoint ep):ep_(std::move(ep)){}
-    bool connectServer(QString*);void close();bool setConnection(bool,QString*);QByteArray queryProperty(const QString&,int,QString*);bool sendNumber(const QString&,const QList<QPair<QString,double>>&,QString*);bool sendSwitch(const QString&,const QList<QPair<QString,bool>>&,QString*);
-    static bool number(const QByteArray&,const QString&,double&);static bool switchValue(const QByteArray&,const QString&,bool&);
-private:bool write(const QByteArray&,QString*);IndiEndpoint ep_;QTcpSocket socket_;
+    explicit IndiXmlClient(IndiEndpoint endpoint) : ep_(std::move(endpoint)) {}
+
+    bool connectServer(QString *error);
+    void close();
+    bool setConnection(bool connected, QString *error);
+    QByteArray queryProperty(const QString &name, int timeoutMs, QString *error);
+    bool propertyExists(const QString &name, int timeoutMs = 1000);
+    bool sendNumber(const QString &property,
+                    const QList<QPair<QString, double>> &values,
+                    QString *error);
+    bool sendSwitch(const QString &property,
+                    const QList<QPair<QString, bool>> &values,
+                    QString *error);
+
+    const IndiEndpoint &endpoint() const { return ep_; }
+
+    static bool number(const QByteArray &xml, const QString &name, double &value);
+    static bool switchValue(const QByteArray &xml, const QString &name, bool &value);
+    static QString vectorState(const QByteArray &xml, const QString &property);
+
+private:
+    bool waitConnectionState(bool wantConnected, int timeoutMs, QString *error);
+
+    IndiEndpoint ep_;
 };
-class IndiMount final : public IMount {public:explicit IndiMount(QString endpoint):client_(IndiEndpoint::parse(endpoint)){}QString id()const override{return"indi-mount";}QString displayName()const override{return"INDI telescope";}QString backendName()const override{return"indi";}ConnectionState connectionState()const override{return state_;}bool connectDevice(QString*e=nullptr)override;void disconnectDevice()override;bool status(MountStatus&,QString*e=nullptr)override;bool slewTo(const EquatorialCoord&,QString*e=nullptr)override;bool syncTo(const EquatorialCoord&,QString*e=nullptr)override;bool setTracking(bool,QString*e=nullptr)override;bool park(bool,QString*e=nullptr)override;bool pulseGuide(GuideDirection,int,QString*e=nullptr)override;private:IndiXmlClient client_;ConnectionState state_{ConnectionState::Disconnected};};
-class IndiFocuser final : public IFocuser {public:explicit IndiFocuser(QString endpoint):client_(IndiEndpoint::parse(endpoint)){}QString id()const override{return"indi-focuser";}QString displayName()const override{return"INDI focuser";}QString backendName()const override{return"indi";}ConnectionState connectionState()const override{return state_;}bool connectDevice(QString*e=nullptr)override;void disconnectDevice()override;bool status(FocuserStatus&,QString*e=nullptr)override;bool moveAbsolute(int,QString*e=nullptr)override;bool moveRelative(int,QString*e=nullptr)override;bool halt(QString*e=nullptr)override;private:IndiXmlClient client_;ConnectionState state_{ConnectionState::Disconnected};};
-}
+
+class IndiMount final : public IMount {
+public:
+    explicit IndiMount(QString endpoint);
+    QString id() const override { return "indi-mount"; }
+    QString displayName() const override { return deviceName_; }
+    QString backendName() const override { return "indi"; }
+    ConnectionState connectionState() const override { return state_; }
+    bool connectDevice(QString *error = nullptr) override;
+    void disconnectDevice() override;
+    bool status(MountStatus &, QString *error = nullptr) override;
+    bool slewTo(const EquatorialCoord &, QString *error = nullptr) override;
+    bool abortMotion(QString *error = nullptr) override;
+    bool syncTo(const EquatorialCoord &, QString *error = nullptr) override;
+    bool setTracking(bool, QString *error = nullptr) override;
+    bool park(bool, QString *error = nullptr) override;
+    bool pulseGuide(GuideDirection, int, QString *error = nullptr) override;
+
+private:
+    IndiXmlClient client_;
+    QString deviceName_;
+    ConnectionState state_{ConnectionState::Disconnected};
+};
+
+class IndiFocuser final : public IFocuser {
+public:
+    explicit IndiFocuser(QString endpoint);
+    QString id() const override { return "indi-focuser"; }
+    QString displayName() const override { return deviceName_; }
+    QString backendName() const override { return "indi"; }
+    ConnectionState connectionState() const override { return state_; }
+    bool connectDevice(QString *error = nullptr) override;
+    void disconnectDevice() override;
+    bool status(FocuserStatus &, QString *error = nullptr) override;
+    bool moveAbsolute(int, QString *error = nullptr) override;
+    bool moveRelative(int, QString *error = nullptr) override;
+    bool halt(QString *error = nullptr) override;
+
+private:
+    IndiXmlClient client_;
+    QString deviceName_;
+    ConnectionState state_{ConnectionState::Disconnected};
+};
+
+} // namespace oas
 #endif

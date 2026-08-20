@@ -81,3 +81,8 @@ The existing RA-axis mathematics remains in `ApplicationController`/`PolarAlignm
 ## Security boundary
 
 v0.2.2 makes the process/network boundary explicit but does not yet implement the P0 TLS/auth/scope/safety policy. Until that increment, node ports are for a trusted LAN/VPN only.
+
+
+## v0.2.3 operation-model update
+
+The process boundary introduced in v0.2.2 is now used by a node-local `OperationManager`. Autofocus and mount slew can outlive the initiating HTTP request, publish progress over the event stream, and reserve their hardware resources. The GUI can be closed/reconnected without owning execution. Camera/mount/focuser also have independent disconnect commands. Exposure/solve/session migration, idempotency and durable resume remain pending.

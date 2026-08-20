@@ -1,6 +1,7 @@
 #pragma once
 #include "core/interfaces.h"
 #include <QMutex>
+#include <atomic>
 
 namespace oas {
 
@@ -13,10 +14,13 @@ public:
     bool connectDevice(QString *error = nullptr) override;
     void disconnectDevice() override;
     bool capture(const ExposureRequest &request, CameraFrame &frame, QString *error = nullptr) override;
+    bool canAbortExposure() const override { return true; }
+    bool abortExposure(QString *error = nullptr) override;
     QSize sensorSize() const override { return {1280, 960}; }
 private:
     ConnectionState state_{ConnectionState::Disconnected};
-    int frameNo_{0};
+    std::atomic_bool abortRequested_{false};
+    std::atomic_int frameNo_{0};
 };
 
 class SimulatedMount final : public IMount {
@@ -29,6 +33,7 @@ public:
     void disconnectDevice() override;
     bool status(MountStatus &status, QString *error = nullptr) override;
     bool slewTo(const EquatorialCoord &target, QString *error = nullptr) override;
+    bool abortMotion(QString *error = nullptr) override;
     bool syncTo(const EquatorialCoord &target, QString *error = nullptr) override;
     bool setTracking(bool enabled, QString *error = nullptr) override;
     bool park(bool enabled, QString *error = nullptr) override;

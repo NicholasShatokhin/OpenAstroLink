@@ -386,3 +386,31 @@ native serial transport додається лише за наявності пі
 10. `v0.4` line — P1 device/services/automation work.
 
 Release numbers are working labels; protocol compatibility, not calendar timing, determines promotion.
+
+
+## Implemented increment: v0.2.3 — first P0 operation vertical slice
+
+Implemented now:
+
+- generic node-local operation manager and resource lock table;
+- states `queued/running/succeeded/failed/cancelled`, progress/result/problem snapshots and cancellation;
+- async `autofocus.run` locking `camera+focuser`;
+- async `mount.slew` locking `mount`, plus hardware abort path;
+- REST operation list/get/cancel and WebSocket operation snapshots;
+- lock-aware direct camera/focuser/mount commands;
+- independent camera/mount/focuser disconnect;
+- GUI Operations tab and reconnect rehydration.
+
+The next P0.2 migrations are async exposure, solve, park/session execution and then idempotency. This version deliberately does not claim the whole P0 operation model complete.
+
+## v0.2.5 checkpoint — RPi first hardware path
+
+Implemented before the next observing HIL gate:
+
+- ASTAP CLI production adapter and RPi autodetection/environment configuration;
+- direct QHY SDK single-frame backend hardened for exact camera IDs and process-level SDK initialization;
+- INDI mount/focuser standard-property mapping with exact device discovery and worker-thread-safe TCP usage;
+- Gemini EAF RPi path through INDI;
+- `oal-hardware-probe`, RPi bootstrap and INDI/node systemd helpers.
+
+Next after HIL: make solve a cancellable operation, add closed-loop target resolver/recenter, automate the polar-alignment capture/slew/solve wizard, add QHY continuous planetary capture/SER, and persist DSO science frames through the OAL data plane.

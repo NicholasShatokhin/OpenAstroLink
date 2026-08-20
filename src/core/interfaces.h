@@ -21,6 +21,13 @@ public:
 class ICamera : public IDevice {
 public:
     virtual bool capture(const ExposureRequest &request, CameraFrame &frame, QString *error = nullptr) = 0;
+    // Long exposures are wrapped by the OAL operation layer. Backends that can
+    // interrupt an in-progress exposure should override these two methods.
+    virtual bool canAbortExposure() const { return false; }
+    virtual bool abortExposure(QString *error = nullptr) {
+        if (error) *error = "Camera backend does not support exposure abort";
+        return false;
+    }
     virtual QSize sensorSize() const = 0;
 };
 
@@ -28,6 +35,7 @@ class IMount : public IDevice {
 public:
     virtual bool status(MountStatus &status, QString *error = nullptr) = 0;
     virtual bool slewTo(const EquatorialCoord &target, QString *error = nullptr) = 0;
+    virtual bool abortMotion(QString *error = nullptr) = 0;
     virtual bool syncTo(const EquatorialCoord &target, QString *error = nullptr) = 0;
     virtual bool setTracking(bool enabled, QString *error = nullptr) = 0;
     virtual bool park(bool enabled, QString *error = nullptr) = 0;

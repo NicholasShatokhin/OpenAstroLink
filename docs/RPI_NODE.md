@@ -1,6 +1,6 @@
 # Raspberry Pi 4 observatory node
 
-Version 0.2.2 introduces a real process boundary between the observatory core and the GUI.
+Version 0.2.5 keeps the v0.2.2 process boundary and adds the first RPi hardware path for QHY + INDI mount/Gemini + ASTAP.
 
 ## Runtime model
 
@@ -56,7 +56,7 @@ The service template starts:
 openastrolink-node --http-port 8080 --ws-port 8090
 ```
 
-The node listens on the LAN. The current 0.2.2 API has **no production authentication/TLS yet**, so do not expose ports 8080/8090 directly to the public Internet. Use a trusted isolated LAN or VPN until P0 security is implemented.
+The node listens on the LAN. The current v0.2.5 API has **no production authentication/TLS yet**, so do not expose ports 8080/8090 directly to the public Internet. Use a trusted isolated LAN or VPN until P0 security is implemented.
 
 ## Local GUI with monitor and keyboard
 
@@ -108,30 +108,16 @@ Mount:   indi       endpoint: 127.0.0.1:7624/<exact mount INDI device name>
 
 Exact INDI device names must match what the installed INDI drivers publish.
 
-## What 0.2.2 does and does not finish
+## v0.2.5 first-hardware update
 
-Implemented in this increment:
+The process/node architecture above is now paired with:
 
-- separate `oas_core` library;
-- separate `openastrolink-node` headless executable;
-- GUI control abstraction (`ObservatoryController`);
-- remote GUI proxy (`RemoteObservatoryController`);
-- startup choice: local node / remote node / embedded developer core;
-- remote configuration of camera/mount/focuser;
-- remote profile and solver control;
-- remote capture, solve, autofocus, guiding, polar-alignment and session commands;
-- WebSocket event subscription in the remote GUI;
-- persisted hardware bindings and node auto-connect;
-- systemd service template and install helper.
+- `AstapSolver` CLI adapter with executable/database environment overrides;
+- exact-name INDI discovery and standard mount/focuser mappings;
+- per-call INDI TCP sessions safe for operation worker threads;
+- direct QHY SDK camera selection by index or exact camera ID;
+- process-lifetime QHY SDK initialization and cancellable single-frame acquisition;
+- `oal-hardware-probe`;
+- bootstrap and persistent INDI systemd helpers.
 
-Still intentionally pending:
-
-- ASTAP production solver adapter;
-- QHY continuous planetary video/SER path;
-- durable capture/session execution engine;
-- mount emergency abort/capability limits;
-- P0 authentication/TLS/safety layer;
-- P0 async operation resources and resource locks;
-- binary FITS/RAW data plane.
-
-So 0.2.2 establishes the **deployment/control boundary** needed for the telescope, but is not yet the complete first-light observing workflow.
+See `docs/RPI_FIRST_HARDWARE.md` for the target installation and HIL qualification sequence. Planetary live/SER, async solve, the automated polar wizard, durable DSO execution, FITS/RAW data plane and security/safety hardening remain pending.

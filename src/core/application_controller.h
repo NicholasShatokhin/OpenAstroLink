@@ -6,6 +6,7 @@
 #include "algorithms/polar_alignment.h"
 #include "algorithms/scheduler.h"
 #include "core/interfaces.h"
+#include "core/operation_manager.h"
 #include "core/observatory_controller.h"
 #include "core/settings.h"
 #include <memory>
@@ -18,6 +19,7 @@ namespace oas {
 class OalServer;
 class OalWsServer;
 class StarCatalog;
+class AstapSolver;
 
 class ApplicationController final : public ObservatoryController {
     Q_OBJECT
@@ -34,7 +36,7 @@ public:
     QStringList cameraBackends() const override;
     QStringList mountBackends() const override;
     QStringList focuserBackends() const override;
-    QStringList solverBackends() const override{return {"catalog-pattern","neural"};}
+    QStringList solverBackends() const override;
     bool selectSolver(const QString &name,QString *error=nullptr) override;
     bool loadCatalog(const QString &path,QString *error=nullptr) override;
     bool loadNeuralModel(const QString &path,QString *error=nullptr) override;
@@ -42,16 +44,26 @@ public:
     bool connectCamera(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectMount(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectFocuser(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
-    void disconnectAll() override;
+    bool disconnectCamera(QString *error=nullptr) override;
+    bool disconnectMount(QString *error=nullptr) override;
+    bool disconnectFocuser(QString *error=nullptr) override;
+    bool disconnectAll(QString *error=nullptr) override;
     bool restoreConfiguredDevices(QStringList *errors=nullptr);
 
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
+    QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
+    QString startAutofocus(const AutofocusRequest &request,QString *error=nullptr) override;
+    bool cancelOperation(const QString &operationId,QString *error=nullptr) override;
+    QJsonObject operation(const QString &operationId,QString *error=nullptr) const override;
+    QJsonArray operations(bool activeOnly=false) const override;
     FrameMotion estimateLastMotion() override;
     void requestSystemLocation() override;
 
     bool slewMount(const EquatorialCoord &target,QString *error=nullptr) override;
+    bool abortMountMotion(QString *error=nullptr) override;
+    QString startMountSlew(const EquatorialCoord &target,QString *error=nullptr);
     bool syncMount(const EquatorialCoord &target,QString *error=nullptr) override;
     bool mountStatus(MountStatus &status,QString *error=nullptr) const override;
     bool focuserStatus(FocuserStatus &status,QString *error=nullptr) const override;
@@ -89,11 +101,14 @@ public:
 
     QJsonArray devicesJson() const;
     QJsonObject cameraStatusJson() const;
+    bool frameById(const QString &frameId,CameraFrame &frame,QString *error=nullptr) const;
     QJsonObject stateJson() const;
     QJsonObject nodeInfoJson() const;
 
 private:
     void disconnectDevices(bool clearAutoConnect);
+    bool ensureResourcesAvailable(const QStringList &resources,QString *error=nullptr) const;
+    void commitCapturedFrame(const CameraFrame &frame);
     static QImage toQImage(const cv::Mat &image);
     void emitState();
     std::shared_ptr<ICamera> camera_;
@@ -102,6 +117,7 @@ private:
     std::shared_ptr<StarCatalog> catalog_;
     std::shared_ptr<IPlateSolver> solver_;
     std::shared_ptr<IPlateSolver> catalogSolver_;
+    std::shared_ptr<AstapSolver> astapSolver_;
     std::shared_ptr<INeuralSolver> neuralSolver_;
     TelescopeProfile profile_;
     CameraFrame previousFrame_;
@@ -114,6 +130,7 @@ private:
     PolarAlignmentEstimator polarEstimator_;
     std::vector<PolarSample> polarSamples_;
     Scheduler scheduler_;
+    OperationManager operations_;
     AppSettings settings_;
     std::unique_ptr<OalServer> oalServer_;
     std::unique_ptr<OalWsServer> oalWsServer_;

@@ -106,3 +106,7 @@ hardware capture для **поточної** firmware. План:
 
 Це узгоджується з принципом OAL: capability має бути виявленою властивістю конкретного драйвера,
 а не припущенням клієнта про бренд або модель.
+
+## Raspberry Pi v0.2.5 qualification path
+
+On Linux/RPi the recommended OAL endpoint is `indi:127.0.0.1:7624/Exact Device Name`. Use `oal-hardware-probe` to obtain the exact INDI device name and verify that the driver exposes `ABS_FOCUS_POSITION` before running autofocus. The OAL Gemini profile continues to avoid an undocumented direct USB protocol; the transport is the vendor-supported INDI path.

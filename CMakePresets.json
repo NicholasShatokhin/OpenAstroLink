@@ -1,6 +1,10 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "default-release",
@@ -36,7 +40,9 @@
         "OAS_BUILD_NODE": "ON",
         "OAS_ENABLE_QHY": "ON",
         "OAS_ENABLE_INDI": "ON",
-        "OAS_ENABLE_GPHOTO2": "OFF"
+        "OAS_ENABLE_GPHOTO2": "OFF",
+        "OAS_BUILD_HARDWARE_PROBE": "ON",
+        "CMAKE_INSTALL_PREFIX": "/usr/local"
       }
     },
     {
@@ -49,14 +55,28 @@
         "OAS_BUILD_NODE": "ON",
         "OAS_ENABLE_QHY": "OFF",
         "OAS_ENABLE_INDI": "OFF",
-        "OAS_ENABLE_GPHOTO2": "OFF"
+        "OAS_ENABLE_GPHOTO2": "OFF",
+        "OAS_BUILD_HARDWARE_PROBE": "ON"
       }
     }
   ],
   "buildPresets": [
-    { "name": "default-release", "configurePreset": "default-release" },
-    { "name": "windows-vs2022", "configurePreset": "windows-vs2022", "configuration": "Release" },
-    { "name": "rpi4-observatory-release", "configurePreset": "rpi4-observatory-release" },
-    { "name": "node-sim-release", "configurePreset": "node-sim-release" }
+    {
+      "name": "default-release",
+      "configurePreset": "default-release"
+    },
+    {
+      "name": "windows-vs2022",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Release"
+    },
+    {
+      "name": "rpi4-observatory-release",
+      "configurePreset": "rpi4-observatory-release"
+    },
+    {
+      "name": "node-sim-release",
+      "configurePreset": "node-sim-release"
+    }
   ]
 }

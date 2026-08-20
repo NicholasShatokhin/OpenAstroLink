@@ -6,11 +6,18 @@ OAL_USER="${SUDO_USER:-pi}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 install -m 0755 "$ROOT_DIR/$BUILD_DIR/openastrolink-node" /usr/local/bin/openastrolink-node
+if [[ -x "$ROOT_DIR/$BUILD_DIR/oal-hardware-probe" ]]; then
+  install -m 0755 "$ROOT_DIR/$BUILD_DIR/oal-hardware-probe" /usr/local/bin/oal-hardware-probe
+fi
 if [[ -x "$ROOT_DIR/$BUILD_DIR/OpenAstroSuite" ]]; then
   install -m 0755 "$ROOT_DIR/$BUILD_DIR/OpenAstroSuite" /usr/local/bin/OpenAstroSuite
   install -m 0644 "$ROOT_DIR/packaging/linux/openastrosuite-local.desktop" /usr/local/share/applications/openastrosuite-local.desktop
 fi
 
+install -d -m 0755 /etc/openastrolink
+if [[ ! -e /etc/openastrolink/node.env ]]; then
+  install -m 0644 "$ROOT_DIR/packaging/systemd/openastrolink-node.env.example" /etc/openastrolink/node.env
+fi
 sed "s/@OAL_USER@/$OAL_USER/g" "$ROOT_DIR/packaging/systemd/openastrolink-node.service.in" > /etc/systemd/system/openastrolink-node.service
 systemctl daemon-reload
 systemctl enable --now openastrolink-node.service
@@ -19,6 +26,9 @@ echo "Installed OpenAstroLink node for user $OAL_USER."
 echo "Check: systemctl status openastrolink-node"
 echo "Logs:  journalctl -u openastrolink-node -f"
 echo "HTTP: http://$(hostname -I | awk '{print $1}'):8080/api/v1/node/info"
+if command -v oal-hardware-probe >/dev/null 2>&1; then
+  echo "Hardware probe: oal-hardware-probe"
+fi
 if [[ -x /usr/local/bin/OpenAstroSuite ]]; then
   echo "Local GUI: OpenAstroSuite --node http://127.0.0.1:8080"
 fi

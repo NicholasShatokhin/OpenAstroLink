@@ -1,6 +1,6 @@
 # Платформи
 
-## Raspberry Pi 4 — primary deployment target for v0.2.2
+## Raspberry Pi 4 — primary deployment target for v0.2.3
 
 Use 64-bit Raspberry Pi OS, Release build and preferably Ninja. Build both the headless node and the GUI if a local monitor/keyboard may be attached:
 
@@ -37,3 +37,8 @@ Same model as Raspberry Pi. `openastrolink-node` can run separately from the GUI
 ## macOS
 
 The GUI can be used primarily as a remote OAL node client. Local embedded backends depend on the availability of Qt/OpenCV/vendor SDKs for the platform.
+
+
+## v0.2.3 dependency note
+
+The P0 operation manager uses `Qt6::Concurrent`; install the Qt Concurrent development component together with the existing Core/Network/HTTP Server/WebSockets modules.

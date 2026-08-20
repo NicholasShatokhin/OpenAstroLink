@@ -1,6 +1,5 @@
 #pragma once
 #include <QJsonObject>
-#include <QNetworkAccessManager>
 #include <QUrl>
 #include <QUrlQuery>
 #include <optional>
@@ -14,7 +13,6 @@ public:
     Reply putForm(const QUrl &url, const QUrlQuery &form, int timeoutMs = 10000);
 private:
     Reply wait(class QNetworkReply *reply, int timeoutMs);
-    QNetworkAccessManager manager_;
 };
 QUrl appendPath(const QUrl &base, const QString &part);
 }

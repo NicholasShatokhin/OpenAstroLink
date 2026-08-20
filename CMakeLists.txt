@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.2 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.5 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,13 +9,14 @@ set(CMAKE_AUTORCC ON)
 
 option(OAS_ENABLE_QHY "Enable QHYCCD SDK backend" OFF)
 option(OAS_ENABLE_GPHOTO2 "Enable Canon/libgphoto2 backend" OFF)
-option(OAS_ENABLE_INDI "Enable experimental built-in INDI XML client backends" OFF)
+option(OAS_ENABLE_INDI "Enable built-in INDI XML client backends" OFF)
 option(OAS_BUILD_TESTS "Build lightweight tests" OFF)
 option(OAS_BUILD_EXAMPLE_DRIVER "Build the example native OAL plug-in" ON)
 option(OAS_BUILD_GUI "Build the OpenAstroSuite Qt GUI client" ON)
 option(OAS_BUILD_NODE "Build the headless openastrolink-node service" ON)
+option(OAS_BUILD_HARDWARE_PROBE "Build oal-hardware-probe diagnostics utility" ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network SerialPort WebSockets HttpServer)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network SerialPort WebSockets HttpServer Concurrent)
 if(OAS_BUILD_GUI)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
 endif()
@@ -25,12 +26,14 @@ find_package(Qt6 6.4 QUIET COMPONENTS Positioning)
 set(OAS_CORE_SOURCES
     src/core/observatory_controller.h
     src/core/application_controller.h
+    src/core/operation_manager.h
     src/algorithms/scheduler.h
     src/oal/oal_server.h
     src/oal/oal_ws_server.h
     src/oal/driver_plugin_loader.h
     src/core/settings.cpp
     src/core/application_controller.cpp
+    src/core/operation_manager.cpp
     src/backends/simulated_devices.cpp
     src/backends/opencv_camera.cpp
     src/backends/serial_lx200_mount.cpp
@@ -42,6 +45,8 @@ set(OAS_CORE_SOURCES
     src/algorithms/star_detector.cpp
     src/algorithms/star_catalog.cpp
     src/algorithms/pattern_plate_solver.cpp
+    src/algorithms/astap_solver.cpp
+    src/algorithms/astap_solver.h
     src/algorithms/motion_estimator.cpp
     src/algorithms/autofocus_engine.cpp
     src/algorithms/guiding_engine.cpp
@@ -54,8 +59,15 @@ set(OAS_CORE_SOURCES
 )
 
 if(OAS_ENABLE_QHY)
-    find_path(QHYCCD_INCLUDE_DIR qhyccd.h REQUIRED)
-    find_library(QHYCCD_LIBRARY NAMES qhyccd REQUIRED)
+    set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root (contains include/qhyccd.h and lib/libqhyccd.so)")
+    find_path(QHYCCD_INCLUDE_DIR qhyccd.h
+        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
+        PATH_SUFFIXES include usr/local/include
+        REQUIRED)
+    find_library(QHYCCD_LIBRARY NAMES qhyccd
+        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
+        PATH_SUFFIXES lib lib64 usr/local/lib
+        REQUIRED)
     list(APPEND OAS_CORE_SOURCES src/backends/qhy_camera.cpp)
 endif()
 
@@ -82,7 +94,7 @@ target_compile_definitions(oas_core PUBLIC
     $<$<BOOL:${OAS_ENABLE_INDI}>:OAS_HAVE_INDI>
 )
 target_link_libraries(oas_core PUBLIC
-    Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort Qt6::WebSockets Qt6::HttpServer
+    Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort Qt6::WebSockets Qt6::HttpServer Qt6::Concurrent
     ${OpenCV_LIBS}
 )
 
@@ -118,6 +130,13 @@ if(OAS_BUILD_NODE)
     install(TARGETS openastrolink-node RUNTIME DESTINATION bin)
 endif()
 
+
+if(OAS_BUILD_HARDWARE_PROBE)
+    add_executable(oal-hardware-probe src/tools/hardware_probe.cpp)
+    target_link_libraries(oal-hardware-probe PRIVATE oas_core)
+    install(TARGETS oal-hardware-probe RUNTIME DESTINATION bin)
+endif()
+
 if(OAS_BUILD_EXAMPLE_DRIVER)
     add_library(oal_sim_driver SHARED examples/oal_sim_driver.cpp)
     target_include_directories(oal_sim_driver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -133,5 +152,6 @@ if(OAS_BUILD_EXAMPLE_DRIVER)
 endif()
 
 install(DIRECTORY config docs DESTINATION share/OpenAstroSuite)
-install(FILES packaging/systemd/openastrolink-node.service.in DESTINATION share/OpenAstroSuite/systemd)
+install(FILES packaging/systemd/openastrolink-node.service.in packaging/systemd/openastrolink-node.env.example packaging/systemd/openastrolink-indi.service DESTINATION share/OpenAstroSuite/systemd)
+install(FILES packaging/indi/indi-drivers.conf.example DESTINATION share/OpenAstroSuite/indi)
 install(FILES packaging/linux/openastrosuite-local.desktop DESTINATION share/applications)

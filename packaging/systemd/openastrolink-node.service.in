@@ -1,12 +1,13 @@
 [Unit]
 Description=OpenAstroLink headless observatory node
-After=network-online.target
+After=network-online.target openastrolink-indi.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=@OAL_USER@
 Group=@OAL_USER@
+EnvironmentFile=-/etc/openastrolink/node.env
 ExecStart=/usr/local/bin/openastrolink-node --http-port 8080 --ws-port 8090
 Restart=on-failure
 RestartSec=3

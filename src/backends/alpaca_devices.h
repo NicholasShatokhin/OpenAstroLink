@@ -23,6 +23,7 @@ public:
     bool connectDevice(QString *error=nullptr) override; void disconnectDevice() override;
     bool status(MountStatus&,QString *error=nullptr) override;
     bool slewTo(const EquatorialCoord&,QString *error=nullptr) override;
+    bool abortMotion(QString *error=nullptr) override;
     bool syncTo(const EquatorialCoord&,QString *error=nullptr) override;
     bool setTracking(bool,QString *error=nullptr) override;
     bool park(bool,QString *error=nullptr) override;

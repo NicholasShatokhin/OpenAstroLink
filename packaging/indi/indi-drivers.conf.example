@@ -1,0 +1,8 @@
+# Exact INDI driver executable names, separated by spaces.
+# Do NOT guess them: list installed drivers with:
+#   find /usr/bin -maxdepth 1 -type f -name 'indi_*' | sort
+# and identify your mount/focuser drivers.
+#
+# Example only (replace with drivers actually installed for your hardware):
+# INDI_DRIVERS="indi_eqmod_telescope indi_some_focuser"
+INDI_DRIVERS=""

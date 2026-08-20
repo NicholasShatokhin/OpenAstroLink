@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.2
+  version: 0.2.5
   description: Reference API exposed by OpenAstroSuite.
 servers:
   - url: http://localhost:8080/api/v1
@@ -33,8 +33,41 @@ paths:
                 backend: { type: string }
                 endpoint: { type: string }
       responses: { '200': { $ref: '#/components/responses/Success' } }
+  /devices/{type}/disconnect:
+    post:
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema: { type: string, enum: [camera, mount, focuser] }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/Success' }
   /devices/disconnect-all:
-    post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/Success' }
+  /operations:
+    get:
+      summary: List operation resources, newest first
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /operations/active:
+    get:
+      summary: List queued/running operations
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /operations/{id}:
+    get:
+      parameters: [ { $ref: '#/components/parameters/OperationId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '404': { $ref: '#/components/responses/Success' }
+  /operations/{id}/cancel:
+    post:
+      parameters: [ { $ref: '#/components/parameters/OperationId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/Success' }
   /solver/select:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /solver/catalog:
@@ -63,6 +96,10 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/EquatorialCoord' }
+      responses: { '202': { $ref: '#/components/responses/Success' } }
+  /mounts/{id}/abort:
+    post:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
       responses: { '200': { $ref: '#/components/responses/Success' } }
   /mounts/{id}/sync:
     post:
@@ -96,7 +133,14 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ExposureRequest' }
-      responses: { '200': { $ref: '#/components/responses/Success' } }
+      responses: { '202': { $ref: '#/components/responses/Success' } }
+  /frames/{id}/preview:
+    get:
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      summary: Fetch PNG preview for a recently captured frame
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '404': { $ref: '#/components/responses/Success' }
   /solve:
     post:
       requestBody:
@@ -117,7 +161,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/AutofocusRequest' }
-      responses: { '200': { $ref: '#/components/responses/Success' } }
+      responses: { '202': { $ref: '#/components/responses/Success' } }
   /motion/estimate:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /observer/system-location:
@@ -159,6 +203,11 @@ paths:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
 components:
   parameters:
+    OperationId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string }
     DeviceId:
       in: path
       name: id
@@ -207,6 +256,30 @@ components:
               exposureSec: { type: number, default: 30 }
               repeats: { type: integer, default: 1 }
               filter: { type: string }
+    Operation:
+      type: object
+      required: [id, kind, state, progress, cancelSupported, resourceLocks]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        state: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
+        progress: { type: number, minimum: 0, maximum: 1 }
+        phase: { type: string }
+        cancelSupported: { type: boolean }
+        cancelRequested: { type: boolean }
+        resourceLocks:
+          type: array
+          items: { type: string }
+        createdAtUtc: { type: string, format: date-time }
+        updatedAtUtc: { type: string, format: date-time }
+        startedAtUtc: { type: string, format: date-time }
+        finishedAtUtc: { type: string, format: date-time }
+        progressDetail: { type: object }
+        result: {}
+        problem:
+          oneOf:
+            - type: 'null'
+            - type: object
     Envelope:
       type: object
       required: [ok, error, data]

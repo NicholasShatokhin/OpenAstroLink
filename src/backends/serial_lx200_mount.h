@@ -14,6 +14,7 @@ public:
     void disconnectDevice() override;
     bool status(MountStatus &status, QString *error = nullptr) override;
     bool slewTo(const EquatorialCoord &target, QString *error = nullptr) override;
+    bool abortMotion(QString *error = nullptr) override;
     bool syncTo(const EquatorialCoord &target, QString *error = nullptr) override;
     bool setTracking(bool enabled, QString *error = nullptr) override;
     bool park(bool enabled, QString *error = nullptr) override;
@@ -25,5 +26,7 @@ private:
     static QByteArray raString(double deg);
     static QByteArray decString(double deg);
     QString portName_; int baud_{9600}; ConnectionState state_{ConnectionState::Disconnected}; QSerialPort serial_;
+    bool slewActive_{false};
+    EquatorialCoord slewTarget_{};
 };
 }

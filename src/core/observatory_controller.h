@@ -37,15 +37,25 @@ public:
     virtual bool connectCamera(const QString &backend, const QString &endpoint, QString *error = nullptr) = 0;
     virtual bool connectMount(const QString &backend, const QString &endpoint, QString *error = nullptr) = 0;
     virtual bool connectFocuser(const QString &backend, const QString &endpoint, QString *error = nullptr) = 0;
-    virtual void disconnectAll() = 0;
+    virtual bool disconnectCamera(QString *error = nullptr) = 0;
+    virtual bool disconnectMount(QString *error = nullptr) = 0;
+    virtual bool disconnectFocuser(QString *error = nullptr) = 0;
+    virtual bool disconnectAll(QString *error = nullptr) = 0;
 
     virtual bool capture(const ExposureRequest &request, CameraFrame *out = nullptr, QString *error = nullptr) = 0;
+    // Preferred UI/API path: exposure is an operation and returns immediately.
+    virtual QString startCapture(const ExposureRequest &request, QString *error = nullptr) = 0;
     virtual SolveResult solveLast(const SolveHint &hint = {}) = 0;
     virtual AutofocusResult autofocus(const AutofocusRequest &request) = 0;
+    virtual QString startAutofocus(const AutofocusRequest &request, QString *error = nullptr) = 0;
+    virtual bool cancelOperation(const QString &operationId, QString *error = nullptr) = 0;
+    virtual QJsonObject operation(const QString &operationId, QString *error = nullptr) const = 0;
+    virtual QJsonArray operations(bool activeOnly = false) const = 0;
     virtual FrameMotion estimateLastMotion() = 0;
     virtual void requestSystemLocation() = 0;
 
     virtual bool slewMount(const EquatorialCoord &target, QString *error = nullptr) = 0;
+    virtual bool abortMountMotion(QString *error = nullptr) = 0;
     virtual bool syncMount(const EquatorialCoord &target, QString *error = nullptr) = 0;
     virtual bool mountStatus(MountStatus &status, QString *error = nullptr) const = 0;
     virtual bool focuserStatus(FocuserStatus &status, QString *error = nullptr) const = 0;
@@ -98,6 +108,7 @@ signals:
     void stateChanged(const QJsonObject &state);
     void motionEstimated(const QJsonObject &motion);
     void profileChanged();
+    void operationChanged(const QJsonObject &operation);
 };
 
 } // namespace oas

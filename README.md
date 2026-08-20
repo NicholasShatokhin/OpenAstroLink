@@ -1,6 +1,6 @@
 # OpenAstroSuite / OpenAstroLink
 
-Версія 0.2.2 вводить окремий headless observatory core для Raspberry Pi. `openastrolink-node` володіє обладнанням і алгоритмами, а той самий Qt GUI може керувати вузлом локально (`127.0.0.1`) або віддалено через OAL HTTP/WebSocket. Старий embedded-core режим збережено як developer fallback.
+Версія 0.2.5 додає перший практичний Raspberry Pi hardware path поверх асинхронного node: production-adapter до ASTAP, hardened INDI mount/focuser transport, direct QHY SDK single-frame path і `oal-hardware-probe`. `openastrolink-node` володіє обладнанням і алгоритмами; той самий Qt GUI керує ним локально (`127.0.0.1`) або віддалено через OAL HTTP/WebSocket. Autofocus тепер є cancellable operation з lock-ами `camera+focuser`, mount slew — cancellable operation з lock-ом `mount`, а окремі camera/mount/focuser можна disconnect незалежно.
 
 ## Що входить
 
@@ -11,21 +11,21 @@
   - симулятор;
   - UVC/OpenCV;
   - віддалена OAL-камера;
-  - QHY SDK — опційно;
+  - QHY SDK — опційно; у v0.2.5 підтримує exact camera ID, 16-bit where available, ROI/binning/gain/offset та exposure abort;
   - Canon DSLR через libgphoto2 — опційно.
 - Монтування:
   - симулятор;
   - LX200/SynScan-подібний serial через `QSerialPort`;
   - ASCOM Alpaca;
   - OAL;
-  - INDI XML client — опційний експериментальний бекенд.
+  - INDI XML client — опційний backend для реального RPi mount/focuser path; використовує standard INDI properties і thread-safe per-call client sockets.
 - Фокусери:
   - симулятор;
   - **GeminiAstro EAF / Automatic Astro Focuser Pro** — окремий compatibility profile через vendor-supported ASCOM/Alpaca або INDI transport;
   - ASCOM Alpaca;
   - OAL;
   - INDI — опційно.
-- Виділення зірок, CSV-каталог і прототип triangle plate solver.
+- Виділення зірок, CSV-каталог, прототип triangle plate solver та ASTAP CLI adapter (автоматично preferred, якщо ASTAP встановлений).
 - Motion estimator між наборами зірок.
 - Autofocus:
   - `stars` — зоряна sharpness/HFR-подібна метрика;
@@ -35,7 +35,8 @@
 - Guiding engine з розрахунком похибки та pulse-guide через бекенд монтування.
 - Polar alignment за реальною оцінкою осі RA з кількох solved orientations.
 - Scheduler/session model.
-- OAL REST API + WebSocket events, включно з node bootstrap/config endpoints для thin GUI client.
+- P0 operation manager: `queued/running/succeeded/failed/cancelled`, progress, cancellation, resource locks; у v0.2.4 мігровані autofocus, mount slew та camera exposure/capture. Exposure повертає 202 operation, тримає lock `camera`, а preview забирається окремим ресурсом після завершення.
+- OAL REST API + WebSocket events, включно з node bootstrap/config endpoints, operation resources, cancellation та resource-lock telemetry для thin GUI client.
 - Стабільний C ABI для майбутніх OAL plug-in драйверів і приклад драйвера.
 
 ## Швидкий старт
@@ -43,7 +44,7 @@
 Потрібні:
 
 - CMake 3.24+;
-- Qt 6.4+ з модулями Core, Gui, Widgets, Network, SerialPort, WebSockets, HttpServer;
+- Qt 6.4+ з модулями Core, Gui, Widgets, Network, SerialPort, WebSockets, HttpServer, Concurrent;
 - OpenCV 4.
 
 ```bash
@@ -69,9 +70,9 @@ cmake -S . -B build \
   -DOAS_ENABLE_INDI=ON
 ```
 
-- `OAS_ENABLE_QHY`: потрібні `qhyccd.h` та бібліотека QHYCCD SDK.
+- `OAS_ENABLE_QHY`: потрібні `qhyccd.h` та бібліотека QHYCCD SDK; для нестандартного шляху задайте `QHYCCD_ROOT`.
 - `OAS_ENABLE_GPHOTO2`: потрібен `libgphoto2` через pkg-config.
-- `OAS_ENABLE_INDI`: використовує вбудований мінімальний XML/TCP клієнт, без libindi.
+- `OAS_ENABLE_INDI`: використовує вбудований XML/TCP client для standard mount/focuser properties; runtime працює через `indiserver`, без libindi client ABI dependency.
 
 ## Формати endpoint у GUI
 
@@ -84,11 +85,12 @@ cmake -S . -B build \
 - OAL mount: `http://host:8080/api/v1/mounts/default`.
 - OAL focuser: `http://host:8080/api/v1/focusers/default`.
 - OAL camera: `http://host:8080/api/v1/cameras/main`.
-- INDI: `host:7624/Exact Device Name`.
+- INDI mount/focuser: `host:7624/Exact Device Name`. Не вгадуйте назву: використайте `oal-hardware-probe`.
+- QHY: scan index (`0`) або, краще для постійної інсталяції, exact QHY camera ID.
 
 ## Важлива чесна межа
 
-Вбудований triangle solver є прототипом для невеликого каталогу або підказаного поля. Він не замінює astrometry.net, ASTAP чи індекси повного неба. Для виробничої blind-astrometry потрібен індексований quad solver або адаптер до зовнішнього солвера.
+Вбудований triangle solver лишається прототипом. У v0.2.5 доданий ASTAP adapter; якщо `astap_cli`/`astap` доступний на node, він стає preferred solver. Для ASTAP треба встановити сам program і одну star database.
 
 `config/stars_example.csv` — демонстраційний яскравий каталог, а не повний науковий каталог.
 
@@ -100,6 +102,7 @@ cmake -S . -B build \
 - `docs/BUILD_PLATFORMS.md`
 - `docs/GEMINI_EAF.md`
 - `docs/RPI_NODE.md`
+- `docs/RPI_FIRST_HARDWARE.md`
 - `docs/ROADMAP_P0_P1_IMPLEMENTATION.md`
 
 ## Перевірка цього пакета

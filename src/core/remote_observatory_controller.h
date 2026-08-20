@@ -33,15 +33,24 @@ public:
     bool connectCamera(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectMount(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectFocuser(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
-    void disconnectAll() override;
+    bool disconnectCamera(QString *error=nullptr) override;
+    bool disconnectMount(QString *error=nullptr) override;
+    bool disconnectFocuser(QString *error=nullptr) override;
+    bool disconnectAll(QString *error=nullptr) override;
 
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
+    QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
+    QString startAutofocus(const AutofocusRequest &request,QString *error=nullptr) override;
+    bool cancelOperation(const QString &operationId,QString *error=nullptr) override;
+    QJsonObject operation(const QString &operationId,QString *error=nullptr) const override;
+    QJsonArray operations(bool activeOnly=false) const override;
     FrameMotion estimateLastMotion() override;
     void requestSystemLocation() override;
 
     bool slewMount(const EquatorialCoord &target,QString *error=nullptr) override;
+    bool abortMountMotion(QString *error=nullptr) override;
     bool syncMount(const EquatorialCoord &target,QString *error=nullptr) override;
     bool mountStatus(MountStatus &status,QString *error=nullptr) const override;
     bool focuserStatus(FocuserStatus &status,QString *error=nullptr) const override;
@@ -89,6 +98,7 @@ private:
     static SessionStatus parseSession(const QJsonObject &o);
     static PolarAlignmentResult parsePolar(const QJsonObject &o);
     static QImage toQImage(const cv::Mat &image);
+    bool fetchFramePreview(const QString &frameId,CameraFrame *out=nullptr,QString *error=nullptr);
 
     QUrl base_;
     mutable HttpJsonClient http_;
