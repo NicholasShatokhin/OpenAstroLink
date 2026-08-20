@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.5 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.6 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,11 +7,14 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-option(OAS_ENABLE_QHY "Enable QHYCCD SDK backend" OFF)
-option(OAS_ENABLE_GPHOTO2 "Enable Canon/libgphoto2 backend" OFF)
-option(OAS_ENABLE_INDI "Enable built-in INDI XML client backends" OFF)
+# Native OpenAstroLink is the reference hardware path. Compatibility backends
+# remain available for existing devices/ecosystems.
+option(OAS_ENABLE_QHY "Build native OAL QHYCCD driver (requires QHYCCD SDK)" OFF)
+option(OAS_ENABLE_GPHOTO2 "Enable Canon/libgphoto2 compatibility backend" OFF)
+option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" OFF)
 option(OAS_BUILD_TESTS "Build lightweight tests" OFF)
-option(OAS_BUILD_EXAMPLE_DRIVER "Build the example native OAL plug-in" ON)
+option(OAS_BUILD_NATIVE_REFERENCE_DRIVERS "Build ABI-v2 native OAL reference simulator" ON)
+option(OAS_BUILD_EXAMPLE_DRIVER "Build legacy ABI-v1 example plug-in" ON)
 option(OAS_BUILD_GUI "Build the OpenAstroSuite Qt GUI client" ON)
 option(OAS_BUILD_NODE "Build the headless openastrolink-node service" ON)
 option(OAS_BUILD_HARDWARE_PROBE "Build oal-hardware-probe diagnostics utility" ON)
@@ -31,6 +34,7 @@ set(OAS_CORE_SOURCES
     src/oal/oal_server.h
     src/oal/oal_ws_server.h
     src/oal/driver_plugin_loader.h
+    src/backends/oal_native_devices.h
     src/core/settings.cpp
     src/core/application_controller.cpp
     src/core/operation_manager.cpp
@@ -42,6 +46,7 @@ set(OAS_CORE_SOURCES
     src/backends/gemini_eaf_focuser.cpp
     src/backends/gemini_eaf_focuser.h
     src/backends/oal_client_devices.cpp
+    src/backends/oal_native_devices.cpp
     src/algorithms/star_detector.cpp
     src/algorithms/star_catalog.cpp
     src/algorithms/pattern_plate_solver.cpp
@@ -57,19 +62,6 @@ set(OAS_CORE_SOURCES
     src/oal/oal_ws_server.cpp
     src/oal/driver_plugin_loader.cpp
 )
-
-if(OAS_ENABLE_QHY)
-    set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root (contains include/qhyccd.h and lib/libqhyccd.so)")
-    find_path(QHYCCD_INCLUDE_DIR qhyccd.h
-        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
-        PATH_SUFFIXES include usr/local/include
-        REQUIRED)
-    find_library(QHYCCD_LIBRARY NAMES qhyccd
-        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
-        PATH_SUFFIXES lib lib64 usr/local/lib
-        REQUIRED)
-    list(APPEND OAS_CORE_SOURCES src/backends/qhy_camera.cpp)
-endif()
 
 if(OAS_ENABLE_GPHOTO2)
     find_package(PkgConfig REQUIRED)
@@ -89,7 +81,6 @@ target_include_directories(oas_core PUBLIC
 )
 target_compile_definitions(oas_core PUBLIC
     OAS_VERSION="${PROJECT_VERSION}"
-    $<$<BOOL:${OAS_ENABLE_QHY}>:OAS_HAVE_QHY>
     $<$<BOOL:${OAS_ENABLE_GPHOTO2}>:OAS_HAVE_GPHOTO2>
     $<$<BOOL:${OAS_ENABLE_INDI}>:OAS_HAVE_INDI>
 )
@@ -98,10 +89,6 @@ target_link_libraries(oas_core PUBLIC
     ${OpenCV_LIBS}
 )
 
-if(OAS_ENABLE_QHY)
-    target_include_directories(oas_core PRIVATE ${QHYCCD_INCLUDE_DIR})
-    target_link_libraries(oas_core PUBLIC ${QHYCCD_LIBRARY})
-endif()
 if(OAS_ENABLE_GPHOTO2)
     target_include_directories(oas_core PRIVATE ${GPHOTO2_INCLUDE_DIRS})
     target_link_directories(oas_core PRIVATE ${GPHOTO2_LIBRARY_DIRS})
@@ -130,28 +117,79 @@ if(OAS_BUILD_NODE)
     install(TARGETS openastrolink-node RUNTIME DESTINATION bin)
 endif()
 
-
 if(OAS_BUILD_HARDWARE_PROBE)
     add_executable(oal-hardware-probe src/tools/hardware_probe.cpp)
     target_link_libraries(oal-hardware-probe PRIVATE oas_core)
     install(TARGETS oal-hardware-probe RUNTIME DESTINATION bin)
 endif()
 
+# ---------------------------------------------------------------------------
+# Native OpenAstroLink drivers (ABI v2)
+# ---------------------------------------------------------------------------
+set(OAL_DRIVER_BUILD_DIR "${CMAKE_BINARY_DIR}/drivers")
+file(MAKE_DIRECTORY "${OAL_DRIVER_BUILD_DIR}")
+
+function(oal_set_driver_output target)
+    set_target_properties(${target} PROPERTIES
+        PREFIX ""
+        LIBRARY_OUTPUT_DIRECTORY "${OAL_DRIVER_BUILD_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${OAL_DRIVER_BUILD_DIR}"
+        ARCHIVE_OUTPUT_DIRECTORY "${OAL_DRIVER_BUILD_DIR}")
+    foreach(cfg DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set_target_properties(${target} PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY_${cfg} "${OAL_DRIVER_BUILD_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_${cfg} "${OAL_DRIVER_BUILD_DIR}"
+            ARCHIVE_OUTPUT_DIRECTORY_${cfg} "${OAL_DRIVER_BUILD_DIR}")
+    endforeach()
+endfunction()
+
+if(OAS_BUILD_NATIVE_REFERENCE_DRIVERS)
+    add_library(oal_driver_simulated SHARED drivers/reference_simulated/oal_driver_simulated.cpp)
+    target_include_directories(oal_driver_simulated PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    oal_set_driver_output(oal_driver_simulated)
+    configure_file(drivers/reference_simulated/oal_driver_simulated.manifest.json
+                   ${OAL_DRIVER_BUILD_DIR}/oal_driver_simulated.manifest.json COPYONLY)
+    install(TARGETS oal_driver_simulated
+        RUNTIME DESTINATION lib/openastrolink/drivers
+        LIBRARY DESTINATION lib/openastrolink/drivers
+        ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/reference_simulated/oal_driver_simulated.manifest.json
+        DESTINATION lib/openastrolink/drivers)
+endif()
+
+if(OAS_ENABLE_QHY)
+    set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root (contains include/qhyccd.h and lib/libqhyccd.so/.dll)")
+    find_path(QHYCCD_INCLUDE_DIR qhyccd.h
+        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
+        PATH_SUFFIXES include usr/local/include
+        REQUIRED)
+    find_library(QHYCCD_LIBRARY NAMES qhyccd
+        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
+        PATH_SUFFIXES lib lib64 usr/local/lib
+        REQUIRED)
+    add_library(oal_driver_qhy SHARED drivers/qhy/oal_driver_qhy.cpp)
+    target_include_directories(oal_driver_qhy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${QHYCCD_INCLUDE_DIR})
+    target_link_libraries(oal_driver_qhy PRIVATE ${QHYCCD_LIBRARY})
+    oal_set_driver_output(oal_driver_qhy)
+    configure_file(drivers/qhy/oal_driver_qhy.manifest.json
+                   ${OAL_DRIVER_BUILD_DIR}/oal_driver_qhy.manifest.json COPYONLY)
+    install(TARGETS oal_driver_qhy
+        RUNTIME DESTINATION lib/openastrolink/drivers
+        LIBRARY DESTINATION lib/openastrolink/drivers
+        ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/qhy/oal_driver_qhy.manifest.json
+        DESTINATION lib/openastrolink/drivers)
+endif()
+
+# Legacy ABI-v1 example retained only as a migration/conformance fixture.
 if(OAS_BUILD_EXAMPLE_DRIVER)
     add_library(oal_sim_driver SHARED examples/oal_sim_driver.cpp)
     target_include_directories(oal_sim_driver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    set_target_properties(oal_sim_driver PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED ON
-        PREFIX ""
-        OUTPUT_NAME "oal_sim_driver")
-    install(TARGETS oal_sim_driver
-        RUNTIME DESTINATION plugins
-        LIBRARY DESTINATION plugins
-        ARCHIVE DESTINATION plugins)
+    set_target_properties(oal_sim_driver PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON PREFIX "" OUTPUT_NAME "oal_sim_driver")
+    install(TARGETS oal_sim_driver RUNTIME DESTINATION plugins LIBRARY DESTINATION plugins ARCHIVE DESTINATION plugins)
 endif()
 
-install(DIRECTORY config docs DESTINATION share/OpenAstroSuite)
+install(DIRECTORY config docs schemas DESTINATION share/OpenAstroSuite)
 install(FILES packaging/systemd/openastrolink-node.service.in packaging/systemd/openastrolink-node.env.example packaging/systemd/openastrolink-indi.service DESTINATION share/OpenAstroSuite/systemd)
 install(FILES packaging/indi/indi-drivers.conf.example DESTINATION share/OpenAstroSuite/indi)
 install(FILES packaging/linux/openastrosuite-local.desktop DESTINATION share/applications)

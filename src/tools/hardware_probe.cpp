@@ -1,9 +1,8 @@
 #include "algorithms/astap_solver.h"
+#include "oal/driver_plugin_loader.h"
+#include "backends/oal_native_devices.h"
 #ifdef OAS_HAVE_INDI
 #include "backends/indi_devices.h"
-#endif
-#ifdef OAS_HAVE_QHY
-#include "backends/qhy_camera.h"
 #endif
 
 #include <QCoreApplication>
@@ -24,12 +23,13 @@ int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("oal-hardware-probe");
     QCommandLineParser parser;
-    parser.setApplicationDescription("Probe the hardware/software path used by OpenAstroLink on a telescope node");
+    parser.setApplicationDescription("Probe native OpenAstroLink drivers plus optional compatibility paths");
     parser.addHelpOption();
     parser.addOption({"indi-host", "INDI server host", "host", "127.0.0.1"});
     parser.addOption({"indi-port", "INDI server port", "port", "7624"});
-    parser.addOption({"no-indi", "Skip INDI discovery"});
-    parser.addOption({"no-qhy", "Skip QHY SDK scan"});
+    parser.addOption({"no-indi", "Skip INDI compatibility discovery"});
+    parser.addOption({"no-native", "Skip native OpenAstroLink driver discovery"});
+    parser.addOption({"no-qhy", "Do not require a native QHY camera"});
     parser.addOption({"no-astap", "Skip ASTAP probe"});
     parser.process(app);
 
@@ -39,56 +39,54 @@ int main(int argc, char **argv) {
     if (!parser.isSet("no-astap")) {
         AstapSolver astap;
         QString why;
-        if (astap.available(&why))
-            out << "ASTAP: OK  " << astap.executable() << "\n";
-        else {
-            out << "ASTAP: NOT READY  " << why << "\n";
-            allOk = false;
+        if (astap.available(&why)) out << "ASTAP: OK  " << astap.executable() << "\n";
+        else { out << "ASTAP: NOT READY  " << why << "\n"; allOk = false; }
+    }
+
+    if (!parser.isSet("no-native")) {
+        OalDriverPluginLoader loader;
+        QStringList errors;
+        loader.scanDefaultPaths(&errors);
+        const auto drivers = loader.drivers();
+        const auto devices = loader.devices();
+        out << "Native OAL: " << drivers.size() << " driver(s), " << devices.size() << " device(s)\n";
+        for (const auto &v : drivers) {
+            const auto d = v.toObject();
+            out << "  driver " << d.value("driverId").toString() << "  ABI " << d.value("abiVersion").toInt()
+                << "  " << d.value("version").toString() << "  isolation=" << d.value("isolation").toString("unspecified") << "\n";
         }
+        bool qhyFound = false;
+        for (const auto &v : devices) {
+            const auto d = v.toObject();
+            const QString key = nativeBackendKey(d.value("driverId").toString(), d.value("id").toString());
+            out << "  - " << d.value("name").toString() << " [" << d.value("type").toString() << "]\n"
+                << "    backend: " << key << "\n";
+            if (d.value("driverId").toString() == "oal.qhy") qhyFound = true;
+        }
+        for (const auto &e : errors) out << "  warning: " << e << "\n";
+        if (!parser.isSet("no-qhy") && !qhyFound) {
+            out << "Native QHY: NOT READY  oal.qhy driver loaded no camera (or driver not built)\n";
+            allOk = false;
+        } else if (!parser.isSet("no-qhy")) out << "Native QHY: OK\n";
     }
 
     if (!parser.isSet("no-indi")) {
 #ifdef OAS_HAVE_INDI
         bool portOk = false;
         const uint p = parser.value("indi-port").toUInt(&portOk);
-        if (!portOk || p == 0 || p > 65535) {
-            err << "Invalid --indi-port\n";
-            return 2;
-        }
+        if (!portOk || p == 0 || p > 65535) { err << "Invalid --indi-port\n"; return 2; }
         QString e;
         const auto devices = discoverIndiDevices(parser.value("indi-host"), quint16(p), 3000, &e);
-        if (devices.isEmpty()) {
-            out << "INDI: NOT READY  " << e << "\n";
-            allOk = false;
-        } else {
-            out << "INDI: OK  " << devices.size() << " device(s)\n";
+        if (devices.isEmpty()) out << "INDI compatibility: no devices  " << e << "\n";
+        else {
+            out << "INDI compatibility: " << devices.size() << " device(s)\n";
             for (const auto &d : devices) {
                 out << "  - " << d.name << "  [" << classifyIndi(d.properties) << "]\n";
                 out << "    endpoint: " << parser.value("indi-host") << ':' << p << '/' << d.name << "\n";
-                out << "    properties: " << d.properties.join(", ") << "\n";
             }
         }
 #else
-        out << "INDI: DISABLED IN THIS BUILD (configure OAS_ENABLE_INDI=ON)\n";
-        allOk = false;
-#endif
-    }
-
-    if (!parser.isSet("no-qhy")) {
-#ifdef OAS_HAVE_QHY
-        QString e;
-        const auto ids = QhyCamera::scanCameraIds(&e);
-        if (ids.isEmpty()) {
-            out << "QHY: NOT READY  " << (e.isEmpty() ? "no cameras found" : e) << "\n";
-            allOk = false;
-        } else {
-            out << "QHY: OK  " << ids.size() << " camera(s)\n";
-            for (int i = 0; i < ids.size(); ++i)
-                out << "  - index " << i << ": " << ids[i] << " (endpoint may be '" << i << "' or exact ID)\n";
-        }
-#else
-        out << "QHY: DISABLED IN THIS BUILD (configure OAS_ENABLE_QHY=ON)\n";
-        allOk = false;
+        out << "INDI compatibility: disabled in this build\n";
 #endif
     }
 

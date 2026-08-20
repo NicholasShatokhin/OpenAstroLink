@@ -9,8 +9,9 @@ checks={
  'remote startCapture':'RemoteObservatoryController::startCapture' in (root/'src/core/remote_observatory_controller.cpp').read_text(),
  'frameReady event':'frameReady' in (root/'src/core/remote_observatory_controller.cpp').read_text(),
  'gui tracks exposure':'kind=="camera.exposure"' in (root/'src/gui/main_window.cpp').read_text(),
- 'sim abort':'SimulatedCamera::abortExposure' in (root/'src/backends/simulated_devices.cpp').read_text(),
- 'qhy abort':'QhyCamera::abortExposure' in (root/'src/backends/qhy_camera.cpp').read_text(),
+ 'embedded sim abort':'SimulatedCamera::abortExposure' in (root/'src/backends/simulated_devices.cpp').read_text(),
+ 'native QHY abort':'camera.abortExposure' in (root/'drivers/qhy/oal_driver_qhy.cpp').read_text(),
+ 'native frame plane':'publishFrame' in (root/'drivers/qhy/oal_driver_qhy.cpp').read_text(),
 }
 failed=[k for k,v in checks.items() if not v]
 if failed:

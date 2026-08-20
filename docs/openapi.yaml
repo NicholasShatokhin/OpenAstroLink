@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.5
-  description: Reference API exposed by OpenAstroSuite.
+  version: 0.2.6
+  description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
 paths:
@@ -14,6 +14,29 @@ paths:
     get:
       summary: Backends available on this node
       responses: { '200': { $ref: '#/components/responses/Success' } }
+  /drivers:
+    get:
+      summary: Native OpenAstroLink driver registry
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /drivers/devices:
+    get:
+      summary: Devices discovered directly by native OAL drivers
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /drivers/{driverId}/devices/{deviceId}/capabilities:
+    get:
+      summary: Typed capabilities reported by one native OAL device
+      parameters:
+        - in: path
+          name: driverId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: deviceId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '404': { $ref: '#/components/responses/Success' }
   /profile:
     get:
       responses: { '200': { $ref: '#/components/responses/Success' } }

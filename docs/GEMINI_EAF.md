@@ -1,112 +1,66 @@
-# GeminiAstro EAF / Automatic Astro Focuser Pro
+# GeminiAstro EAF — OAL support policy
 
-## Статус підтримки
+## Current status in v0.2.6
 
-OpenAstroSuite має окремий backend-профіль `gemini-eaf` для фокусера GeminiAstro.
-На цьому етапі він **не реалізує неперевірений vendor-specific USB/serial protocol**. Замість цього
-профіль використовує два transport-и, які виробник заявляє як підтримувані:
-
-1. **ASCOM → ASCOM Remote / Alpaca** — рекомендований шлях для Windows.
-2. **INDI** — для Linux/Raspberry Pi та інших deployment-ів, де доступний відповідний INDI driver.
-
-Це дає окрему identity на рівні OpenAstroSuite (`backendName = gemini-eaf`), але не прив'язує OAL
-до неофіційно реконструйованого протоколу конкретної версії firmware.
-
-Офіційні сторінки виробника:
-
-- https://geminiastro.cc/
-- https://geminiastro.cc/products/eaf/
-- https://geminiastro.cc/downloads/
-
-## Налаштування
-
-У вкладці **Devices → Focuser** вибрати `gemini-eaf`.
-
-### Варіант A — ASCOM/Alpaca
-
-Endpoint:
+Gemini EAF is currently supported through **compatibility transports**, not yet through a native OAL hardware driver:
 
 ```text
-alpaca:http://127.0.0.1:11111/api/v1/focuser/0
+Gemini EAF
+  ├─ INDI  → OAL compatibility adapter   (Linux/RPi)
+  └─ Alpaca → OAL compatibility adapter  (Windows/remote)
 ```
 
-Префікс `alpaca:` рекомендований, але звичайний `http://` / `https://` URL також приймається.
-На Windows практична схема така:
+This path is deliberately retained so the real telescope can be used before a verified low-level Gemini protocol is available.
+
+The project architecture is nevertheless native-first. The intended final path is:
 
 ```text
-Gemini ASCOM driver → ASCOM Remote → Alpaca HTTP → OpenAstroSuite gemini-eaf
+Gemini EAF → verified USB/serial protocol → oal.gemini → ABI v2 → OAL core
 ```
 
-### Варіант B — INDI
+No undocumented safety-critical command is guessed merely to claim a direct driver.
 
-Збирати OpenAstroSuite з:
+## Why INDI/Alpaca remain useful
 
-```bash
-cmake -S . -B build -DOAS_ENABLE_INDI=ON
-cmake --build build --config Release
-```
+They provide immediate backward-compatible control for:
 
-Endpoint:
-
-```text
-indi:127.0.0.1:7624/Exact Device Name
-```
-
-Явний префікс `indi:` рекомендований. Якщо INDI backend не включений під час build, програма
-повертає зрозумілу помилку замість мовчазного fallback.
-
-## Що проходить через профіль зараз
-
-Профіль делегує стандартному focuser transport:
-
-- connect / disconnect;
-- current absolute position;
-- absolute move;
-- relative move;
+- connect/disconnect;
+- absolute/relative move where exposed;
 - halt;
-- moving state — коли transport його надає;
-- temperature — коли transport його надає.
+- position/moving telemetry;
+- temperature where exposed.
 
-Для Alpaca `moving` і `temperature` вже читаються стандартним backend-ом. Вбудований мінімальний
-INDI backend зараз гарантує тільки базовий standard-property path для position/move/halt; його
-telemetry буде розширена разом із P0 capabilities/discovery.
+Current autofocus requires a reliable absolute position capability.
 
-## Hardware validation checklist
+## Native `oal.gemini` qualification plan
 
-Перед позначенням GeminiAstro EAF як hardware-validated треба пройти окремо для Alpaca та INDI:
+1. Record exact model, firmware, USB bridge and VID/PID.
+2. Obtain vendor protocol specification if possible.
+3. If no specification is available, capture official vendor/ASCOM traffic for a complete command matrix.
+4. Cover read status, absolute/relative movement, halt, limits, temperature, errors, reconnect and power-cycle behavior.
+5. Build a golden-transcript simulator.
+6. Implement the transport behind ABI v2, not directly inside `ApplicationController`.
+7. Publish typed capabilities derived from the device/firmware.
+8. Run native driver conformance tests.
+9. Perform hardware-in-the-loop regression including mechanical-limit and disconnect scenarios.
+10. Only then mark `oal.gemini` hardware-validated and prefer it over compatibility adapters.
 
-1. Connect/disconnect 20 разів без зависань.
-2. Прочитати позицію після старту і після power-cycle.
-3. Relative move `+100`, перевірити зміну позиції.
-4. Relative move `-100`, перевірити повернення.
-5. Absolute move у безпечну середню позицію.
-6. Під час довшого move викликати `halt` і перевірити фактичну зупинку.
-7. Перевірити `moving` під час руху та після завершення.
-8. Якщо підключений temperature probe — звірити temperature telemetry з vendor application.
-9. Перевірити поведінку на lower/upper limits і відсутність wrap/overflow.
-10. Провести короткий autofocus scan, не допускаючи виходу за механічні межі.
-11. Імітувати втрату USB/network під час move; переконатися, що стан стає error/unknown, а не
-    неправдиво `succeeded`.
-12. Зафіксувати версії Gemini firmware/driver, OS, ASCOM/INDI stack і endpoint у validation log.
+## Compatibility HIL checklist now
 
-## Native USB/serial driver — наступний окремий етап
+Before using the compatibility path for unattended autofocus:
 
-Прямий native driver має з'явитися лише після отримання достовірної command specification або
-hardware capture для **поточної** firmware. План:
+1. Connect/disconnect repeatedly.
+2. Confirm position after power cycle.
+3. Small `+100` and `-100` moves.
+4. Safe absolute move.
+5. HALT during a longer move.
+6. Verify moving state if available.
+7. Verify temperature if a probe exists.
+8. Verify lower/upper limits and no wrap/overflow.
+9. Run repeated autofocus scans from both sides of focus.
+10. Disconnect USB/network during movement and verify OAL reports error/unknown rather than false success.
+11. Record exact firmware/driver/OS versions in the validation log.
 
-1. Зафіксувати точну модель, firmware і USB bridge/VID/PID на реальному пристрої.
-2. Попросити у виробника command/protocol specification; це пріоритетніше reverse engineering.
-3. Якщо документації немає — записати traffic офіційного Console/ASCOM driver для повної матриці
-   read/move/halt/limits/temperature/error cases.
-4. Побудувати simulator із записаними golden transcripts.
-5. Реалізувати `GeminiEafSerialFocuser` тільки після того, як protocol matrix не має невідомих
-   safety-critical команд.
-6. Прогнати ті самі conformance tests, що й для Alpaca/INDI профілю.
-7. Лише після hardware-in-the-loop regression додати native transport у список production-capable.
+## Architectural rule
 
-Це узгоджується з принципом OAL: capability має бути виявленою властивістю конкретного драйвера,
-а не припущенням клієнта про бренд або модель.
-
-## Raspberry Pi v0.2.5 qualification path
-
-On Linux/RPi the recommended OAL endpoint is `indi:127.0.0.1:7624/Exact Device Name`. Use `oal-hardware-probe` to obtain the exact INDI device name and verify that the driver exposes `ABS_FOCUS_POSITION` before running autofocus. The OAL Gemini profile continues to avoid an undocumented direct USB protocol; the transport is the vendor-supported INDI path.
+The Gemini compatibility profile must never become the specification for a future native focuser driver. Native OAL may expose richer precision, limits, telemetry, events, cancellation and calibration semantics even if INDI/Alpaca cannot represent all of them.

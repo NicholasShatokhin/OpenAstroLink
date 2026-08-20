@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openastrolink.org/schemas/driver-manifest-v2.schema.json",
+  "title": "OpenAstroLink Native Driver Manifest v2",
+  "type": "object",
+  "required": ["schema", "driverId", "name", "version", "abiVersion", "library", "deviceClasses", "isolation", "permissions"],
+  "properties": {
+    "schema": {"const": "org.openastrolink.driver-manifest/v2"},
+    "driverId": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "abiVersion": {"const": 2},
+    "library": {"type": "string", "minLength": 1},
+    "deviceClasses": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["camera", "mount", "focuser", "filter-wheel", "rotator", "dome", "roof", "weather", "safety", "power", "switch", "cover", "calibrator", "time-location"]}
+    },
+    "isolation": {"enum": ["in-process-reference", "in-process", "out-of-process"]},
+    "threadModel": {"enum": ["serial", "per-device-serial", "concurrent"]},
+    "permissions": {"type": "array", "items": {"type": "object"}},
+    "trust": {"enum": ["reference", "bundled", "third-party"]},
+    "config": {"type": "object"}
+  },
+  "additionalProperties": true
+}

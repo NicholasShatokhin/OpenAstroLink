@@ -32,7 +32,7 @@
     },
     {
       "name": "rpi4-observatory-release",
-      "displayName": "Raspberry Pi 4 observatory (QHY + INDI)",
+      "displayName": "Raspberry Pi 4 observatory (native QHY + INDI compatibility)",
       "inherits": "default-release",
       "binaryDir": "${sourceDir}/build/rpi4-observatory",
       "cacheVariables": {

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openastrolink.org/schemas/native-capabilities-v1.schema.json",
+  "title": "OpenAstroLink Native Device Capabilities v1",
+  "type": "object",
+  "required": ["schemaVersion"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "identity": {"type": "object"},
+    "camera": {"type": "object"},
+    "mount": {"type": "object"},
+    "focuser": {"type": "object"}
+  },
+  "additionalProperties": true
+}

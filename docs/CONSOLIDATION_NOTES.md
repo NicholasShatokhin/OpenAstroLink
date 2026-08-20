@@ -12,7 +12,7 @@
 
 - POSIX `termios/open/read/write` замінено на Qt `QSerialPort`, тому serial LX200 backend не прив’язаний до Linux.
 - Класичний Windows COM-ASCOM не є обов’язковим: ASCOM підтримується через Alpaca HTTP.
-- QHY, Canon/libgphoto2 та INDI ізольовані CMake-опціями; базова збірка не вимагає їхніх SDK.
+- QHY винесено з core у native OAL ABI-v2 plug-in; Canon/libgphoto2 та INDI залишаються опційними compatibility integrations. Базова збірка не вимагає vendor SDK.
 
 ## Виправлені протокольні помилки
 
@@ -30,5 +30,5 @@
 ## Що навмисно не маскується під готовий продукт
 
 - Blind full-sky solver, точний Bahtinov spike-offset solver, повний scheduler executor і neural runtime ще не завершені.
-- QHY/Canon/INDI потребують перевірки на конкретному обладнанні та версіях драйверів.
-- Native OAL plug-in ABI та loader є, але автоматичне перетворення довільного plug-in device на GUI device registry лишається наступною ітерацією.
+- Native QHY, Canon та compatibility INDI потребують перевірки на конкретному обладнанні/версіях.
+- ABI-v2 manifest registry і generic native camera/mount/focuser adapters уже інтегровані в device registry; sandboxed out-of-process host та повна нормативна capability/conformance model ще попереду.

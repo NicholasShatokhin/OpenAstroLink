@@ -1,44 +1,74 @@
-# Платформи
+# Build platforms — v0.2.6
 
-## Raspberry Pi 4 — primary deployment target for v0.2.3
+## Raspberry Pi 4 — primary observatory deployment
 
-Use 64-bit Raspberry Pi OS, Release build and preferably Ninja. Build both the headless node and the GUI if a local monitor/keyboard may be attached:
+64-bit Raspberry Pi OS / Debian-family is the target. Native QHY is built as an ABI-v2 plugin; INDI is optional compatibility support for mount/Gemini until native drivers exist.
 
 ```bash
 cmake -S . -B build-rpi -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DOAS_BUILD_NODE=ON \
   -DOAS_BUILD_GUI=ON \
+  -DOAS_BUILD_NODE=ON \
+  -DOAS_BUILD_NATIVE_REFERENCE_DRIVERS=ON \
   -DOAS_ENABLE_QHY=ON \
-  -DOAS_ENABLE_INDI=ON
+  -DOAS_ENABLE_INDI=ON \
+  -DOAS_ENABLE_GPHOTO2=OFF
 cmake --build build-rpi -j$(nproc)
 ```
 
-Install `openastrolink-node` as a systemd service using `scripts/install_rpi_node.sh`. The local GUI should normally connect to `http://127.0.0.1:8080`; a remote GUI connects to the Pi LAN/VPN address. This ensures the hardware/core survives GUI closure and does not depend on an X/Wayland login session.
+`OAS_ENABLE_QHY=ON` now builds `oal_driver_qhy`; QHYCCD SDK is not linked into `oas_core`.
 
-QHY requires an ARM-compatible QHYCCD SDK installation visible to CMake. INDI mode in this repository is a minimal built-in XML/TCP client, so an `indiserver` plus the appropriate vendor/mount/focuser drivers still runs separately.
+QHY requires an ARM64-compatible QHYCCD SDK/udev installation visible to CMake. INDI compatibility requires a separately running `indiserver` and the exact hardware driver executables.
 
-Do not expose current unauthenticated OAL ports to the public Internet.
+For an architecture-only test without vendor SDKs:
 
-## Windows
-
-Qt 6.4+ MSVC kit and OpenCV of the same ABI are recommended. The GUI can run either with an embedded development core or as a remote client to the Raspberry Pi:
-
-```text
-OpenAstroSuite --node http://<rpi-address>:8080
+```bash
+cmake -S . -B build-sim -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DOAS_ENABLE_QHY=OFF -DOAS_ENABLE_INDI=OFF
+cmake --build build-sim -j$(nproc)
 ```
 
-ASCOM equipment can still be reached through Alpaca/ASCOM Remote where appropriate.
+This still builds the native `oal.simulated` ABI-v2 reference plugin.
+
+## Windows / MSVC 2022
+
+Use a Qt 6 MSVC kit and OpenCV built for a compatible MSVC ABI. Example:
+
+```powershell
+cmake -S . -B build/vs2022 `
+  -G "Visual Studio 17 2022" -A x64 `
+  -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64" `
+  -DOpenCV_DIR="C:/opencv/opencv/build/x64/vc16/lib"
+cmake --build build/vs2022 --config Release
+```
+
+The native reference plugin builds without Qt/OpenCV dependencies. Native QHY additionally requires a Windows QHYCCD SDK library compatible with the chosen toolchain.
 
 ## Linux desktop
 
-Same model as Raspberry Pi. `openastrolink-node` can run separately from the GUI, or the GUI can use embedded developer mode. Serial devices require permissions for `/dev/ttyUSB*`/`/dev/ttyACM*`.
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
 
-## macOS
+Enable optional compatibility/hardware integrations only when their dependencies exist:
 
-The GUI can be used primarily as a remote OAL node client. Local embedded backends depend on the availability of Qt/OpenCV/vendor SDKs for the platform.
+```bash
+-DOAS_ENABLE_QHY=ON
+-DOAS_ENABLE_INDI=ON
+-DOAS_ENABLE_GPHOTO2=ON
+```
 
+## Runtime driver locations
 
-## v0.2.3 dependency note
+The node scans native ABI-v2 plugins/manifests from:
 
-The P0 operation manager uses `Qt6::Concurrent`; install the Qt Concurrent development component together with the existing Core/Network/HTTP Server/WebSockets modules.
+- `OAL_DRIVER_PATH`;
+- `drivers/` beside the executable;
+- standard OpenAstroLink library install directories.
+
+On RPi/Linux installation the recommended location is:
+
+```text
+/usr/local/lib/openastrolink/drivers
+```

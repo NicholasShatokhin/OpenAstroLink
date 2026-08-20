@@ -1,10 +1,28 @@
-# OpenAstroLink HTTP API — v0.2.5 reference implementation
+# OpenAstroLink HTTP API — v0.2.6 reference implementation
 
-Envelope remains:
+The transitional envelope remains:
 
 ```json
 {"ok":true,"error":null,"data":{}}
 ```
+
+RFC 9457 conversion is still a P0 task.
+
+## Native OAL driver registry
+
+New native-first discovery endpoints:
+
+- `GET /api/v1/drivers` — loaded native driver identities/manifests.
+- `GET /api/v1/drivers/devices` — native devices exported by all loaded drivers.
+- `GET /api/v1/drivers/{driverId}/devices/{deviceId}/capabilities` — device self-description.
+
+Native device backend keys use:
+
+```text
+native:<driverId>/<encoded-deviceId>
+```
+
+These endpoints describe ABI-v2 native drivers. INDI/Alpaca/LX200 remain compatibility choices returned by the normal backend listing where built.
 
 ## Node / devices
 
@@ -18,63 +36,28 @@ Envelope remains:
 - `POST /api/v1/devices/{camera|mount|focuser}/disconnect`
 - `POST /api/v1/devices/disconnect-all`
 
-Each device can now be disconnected independently. Disconnect/reconnect is rejected with HTTP `409` while that device resource is locked by an active operation.
+`/node/info` includes the number of loaded native drivers. `/devices` marks native devices with `nativeOal:true`.
 
-## P0 operation resources — v0.2.4 vertical slice
+## Operations
 
-Long-running work starts returning an operation resource rather than keeping the initiating HTTP request open. Current operation states are:
+Current states:
 
 ```text
 queued → running → succeeded | failed | cancelled
 ```
 
-Operation endpoints:
+Endpoints:
 
 - `GET /api/v1/operations`
 - `GET /api/v1/operations/active`
 - `GET /api/v1/operations/{id}`
 - `POST /api/v1/operations/{id}/cancel`
 
-Example operation:
+Active operations own resource locks. Current async vertical slices:
 
-```json
-{
-  "id":"op-...",
-  "kind":"autofocus.run",
-  "state":"running",
-  "progress":0.42,
-  "phase":"focus.scan",
-  "cancelSupported":true,
-  "cancelRequested":false,
-  "resourceLocks":["camera","focuser"],
-  "result":null,
-  "problem":null
-}
-```
-
-The node queues an operation when any requested resource is already locked. Operations with disjoint resource sets can run independently. `/api/v1/state` includes both active `operations` and current `resourceLocks`.
-
-WebSocket event type `operation` carries operation snapshots/progress so reconnecting GUIs do not have to poll continuously. The full sequence/replay/resume protocol is still a later P0 increment.
-
-### Autofocus
-
-`POST /api/v1/autofocus/{id}/run` returns **202 Accepted** and locks:
-
-```text
-camera + focuser
-```
-
-The GUI remains responsive. `HALT focuser` or operation cancellation requests cancellation. While autofocus owns the camera, a new exposure operation remains queued until the `camera` lock becomes free. It can be cancelled while queued.
-
-### Mount slew
-
-`POST /api/v1/mounts/{id}/slew` returns **202 Accepted** and locks:
-
-```text
-mount
-```
-
-`POST /api/v1/mounts/{id}/abort` is a safety path: it requests cancellation of the owning mount operation and sends the backend-specific abort command (`:Q#` for LX200, Alpaca AbortSlew, INDI TELESCOPE_ABORT_MOTION, or the OAL abort endpoint).
+- `autofocus.run` → `camera + focuser`;
+- `mount.slew` → `mount`;
+- `camera.exposure` → `camera`.
 
 ## Mount
 
@@ -86,7 +69,7 @@ mount
 - `POST /api/v1/mounts/{id}/park`
 - `POST /api/v1/mounts/{id}/pulse-guide`
 
-Direct mount commands are rejected while a mount operation owns the `mount` lock, except the explicit abort safety path.
+Native mount drivers receive canonical OAL method calls; compatibility adapters translate these into INDI/Alpaca/LX200 semantics where available.
 
 ## Focuser
 
@@ -95,35 +78,27 @@ Direct mount commands are rejected while a mount operation owns the `mount` lock
 - `POST /api/v1/focusers/{id}/move-relative`
 - `POST /api/v1/focusers/{id}/halt`
 
-Move is rejected while autofocus owns `focuser`; HALT remains available as a cancellation/safety command.
-
-## Camera / analysis
+## Camera / frames / analysis
 
 - `GET /api/v1/cameras/{id}/status`
-- `POST /api/v1/cameras/{id}/capture` — async 202 `camera.exposure` operation
-- `GET /api/v1/frames/{id}/preview` — current PNG/Base64 preview compatibility resource
+- `POST /api/v1/cameras/{id}/capture` — async 202 `camera.exposure`
+- `GET /api/v1/frames/{id}/preview`
 - `POST /api/v1/solve`
-- `POST /api/v1/autofocus/{id}/run` — async 202 operation
+- `POST /api/v1/autofocus/{id}/run`
 - `POST /api/v1/motion/estimate`
 
-`capture` now returns an operation immediately. The operation owns `camera`, records exposure metadata and returns a `frameId` on success. The node emits `frameReady`; remote GUIs fetch the preview separately. QHY and simulated cameras expose an abort path; non-abortable backends use best-effort cancellation and discard a frame if cancellation was requested before readout completed. The PNG/Base64 preview is transitional: FITS/RAW data plane remains P0 pending.
+For ABI-v2 native cameras, raw pixel bytes cross the driver boundary via `publishFrame(OalFrameDescriptorV2)` and a host frame token, not Base64 JSON. The HTTP PNG/Base64 preview remains only a compatibility/preview path; the durable FITS/RAW/SER data plane is still pending.
 
-## Guiding / polar alignment / sessions
+## Guiding / polar / sessions
 
-Existing guiding, polar-alignment and session endpoints remain. Polar math and state remain node-local. The scheduler is still a state model, not a durable operation workflow.
+Existing guiding, polar-alignment and session endpoints remain node-local. Polar math is already implemented; automated orchestration is still pending. Scheduler remains a non-durable state model.
 
-## Scope deliberately not claimed by v0.2.4
+## Pending P0 API work
 
-This increment does **not** yet finish the complete P0 operation specification. Still pending:
-
-- async migration of solve, park and session execution;
-- idempotency keys and retry-safe create semantics;
-- durable operation persistence across node restart;
-- RFC 9457 Problem Details conversion;
-- sequenced/replayable WebSocket streams;
-- FITS/RAW data plane and production security.
-
-
-## v0.2.5 hardware note
-
-The HTTP surface is intentionally unchanged for the first RPi hardware increment. The node backend registry can now expose `qhy`, `indi` and `astap` when those build/runtime dependencies are available. See `RPI_FIRST_HARDWARE.md`.
+- async solve/park/session;
+- idempotency keys;
+- durable operation persistence;
+- RFC 9457 Problem Details;
+- WebSocket sequence/replay/resume;
+- production FITS/RAW/SER data plane;
+- TLS/auth/scopes/audit/safety policy.

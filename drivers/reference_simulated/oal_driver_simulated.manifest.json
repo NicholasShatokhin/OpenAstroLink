@@ -1,0 +1,14 @@
+{
+  "schema": "org.openastrolink.driver-manifest/v2",
+  "driverId": "oal.simulated",
+  "name": "OpenAstroLink native reference simulator",
+  "version": "0.2.6",
+  "abiVersion": 2,
+  "library": "oal_driver_simulated",
+  "deviceClasses": ["camera", "mount", "focuser"],
+  "isolation": "in-process-reference",
+  "permissions": [],
+  "threadModel": "per-device-serial",
+  "trust": "reference",
+  "config": {}
+}

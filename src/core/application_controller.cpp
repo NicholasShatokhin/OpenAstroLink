@@ -6,14 +6,13 @@
 #include "backends/alpaca_devices.h"
 #include "backends/gemini_eaf_focuser.h"
 #include "backends/oal_client_devices.h"
+#include "backends/oal_native_devices.h"
 #include "backends/opencv_camera.h"
 #include "backends/serial_lx200_mount.h"
 #include "backends/simulated_devices.h"
 #include "oal/oal_server.h"
+#include "oal/driver_plugin_loader.h"
 #include "oal/oal_ws_server.h"
-#ifdef OAS_HAVE_QHY
-#include "backends/qhy_camera.h"
-#endif
 #ifdef OAS_HAVE_GPHOTO2
 #include "backends/canon_camera.h"
 #endif
@@ -39,6 +38,20 @@
 
 namespace oas {
 namespace {
+QJsonObject nativeDescriptor(const std::shared_ptr<OalDriverPluginLoader> &loader,const QString &backend,const QString &type,QString *error){
+    QString driverId,deviceId;if(!parseNativeBackendKey(backend,driverId,deviceId)){if(error)*error="Invalid native OAL backend key";return{};}
+    if(!loader){if(error)*error="Native OAL driver registry unavailable";return{};}
+    for(const auto &v:loader->devices()){const auto o=v.toObject();if(o.value("driverId").toString()==driverId&&o.value("id").toString()==deviceId&&o.value("type").toString()==type)return o;}
+    if(error)*error=QString("Native OAL %1 device not found: %2/%3").arg(type,driverId,deviceId);return{};
+}
+QStringList nativeBackendsFor(const std::shared_ptr<OalDriverPluginLoader> &loader,const QString &type){
+    QStringList out;if(!loader)return out;for(const auto &v:loader->devices()){const auto o=v.toObject();if(o.value("type").toString()!=type||!o.value("native").toBool())continue;out<<nativeBackendKey(o.value("driverId").toString(),o.value("id").toString());}out.removeDuplicates();return out;
+}
+QJsonObject migrateQhyDescriptor(const std::shared_ptr<OalDriverPluginLoader> &loader,const QString &selector){
+    if(!loader)return{};QJsonArray matches;for(const auto&v:loader->devices()){auto o=v.toObject();if(o.value("driverId").toString()=="oal.qhy"&&o.value("type").toString()=="camera")matches.append(o);}
+    bool numeric=false;int index=selector.trimmed().toInt(&numeric);if(selector.trimmed().isEmpty()){numeric=true;index=0;}
+    if(numeric&&index>=0&&index<matches.size())return matches.at(index).toObject();for(const auto&v:matches){auto o=v.toObject();const QString id=o.value("id").toString();if(id==selector||id=="qhy:"+selector||o.value("name").toString()==selector)return o;}return{};
+}
 template <typename F>
 auto invokeOnControllerThread(QObject *owner,F &&fn)->decltype(fn()){
     using R=decltype(fn());
@@ -50,50 +63,56 @@ auto invokeOnControllerThread(QObject *owner,F &&fn)->decltype(fn()){
 
 class ThreadMarshalledCamera final : public ICamera {
 public:
-    ThreadMarshalledCamera(QObject *owner,std::shared_ptr<ICamera> inner):owner_(owner),inner_(std::move(inner)){}
+    ThreadMarshalledCamera(QObject *owner,std::shared_ptr<ICamera> inner):owner_(owner),inner_(std::move(inner)),direct_(inner_->backendName().startsWith("native:")){}
     QString id()const override{return inner_->id();} QString displayName()const override{return inner_->displayName();} QString backendName()const override{return inner_->backendName();}
-    ConnectionState connectionState()const override{return invokeOnControllerThread(owner_,[this](){return inner_->connectionState();});}
-    bool connectDevice(QString *e=nullptr)override{return invokeOnControllerThread(owner_,[this,e](){return inner_->connectDevice(e);});}
-    void disconnectDevice()override{if(QThread::currentThread()==owner_->thread())inner_->disconnectDevice();else QMetaObject::invokeMethod(owner_,[this](){inner_->disconnectDevice();},Qt::BlockingQueuedConnection);}
-    bool capture(const ExposureRequest&r,CameraFrame&f,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,&r,&f,e](){return inner_->capture(r,f,e);});}
-    QSize sensorSize()const override{return invokeOnControllerThread(owner_,[this](){return inner_->sensorSize();});}
-private:QObject *owner_;std::shared_ptr<ICamera> inner_;
+    ConnectionState connectionState()const override{return direct_?inner_->connectionState():invokeOnControllerThread(owner_,[this](){return inner_->connectionState();});}
+    bool connectDevice(QString *e=nullptr)override{return direct_?inner_->connectDevice(e):invokeOnControllerThread(owner_,[this,e](){return inner_->connectDevice(e);});}
+    void disconnectDevice()override{if(direct_||QThread::currentThread()==owner_->thread())inner_->disconnectDevice();else QMetaObject::invokeMethod(owner_,[this](){inner_->disconnectDevice();},Qt::BlockingQueuedConnection);}
+    bool capture(const ExposureRequest&r,CameraFrame&f,QString*e=nullptr)override{return direct_?inner_->capture(r,f,e):invokeOnControllerThread(owner_,[this,&r,&f,e](){return inner_->capture(r,f,e);});}
+    bool canAbortExposure()const override{return inner_->canAbortExposure();}
+    bool abortExposure(QString*e=nullptr)override{return direct_?inner_->abortExposure(e):invokeOnControllerThread(owner_,[this,e](){return inner_->abortExposure(e);});}
+    QSize sensorSize()const override{return direct_?inner_->sensorSize():invokeOnControllerThread(owner_,[this](){return inner_->sensorSize();});}
+private:QObject *owner_;std::shared_ptr<ICamera> inner_;bool direct_{false};
 };
 
 class ThreadMarshalledFocuser final : public IFocuser {
 public:
-    ThreadMarshalledFocuser(QObject *owner,std::shared_ptr<IFocuser> inner):owner_(owner),inner_(std::move(inner)){}
+    ThreadMarshalledFocuser(QObject *owner,std::shared_ptr<IFocuser> inner):owner_(owner),inner_(std::move(inner)),direct_(inner_->backendName().startsWith("native:")){}
     QString id()const override{return inner_->id();} QString displayName()const override{return inner_->displayName();} QString backendName()const override{return inner_->backendName();}
-    ConnectionState connectionState()const override{return invokeOnControllerThread(owner_,[this](){return inner_->connectionState();});}
-    bool connectDevice(QString *e=nullptr)override{return invokeOnControllerThread(owner_,[this,e](){return inner_->connectDevice(e);});}
-    void disconnectDevice()override{if(QThread::currentThread()==owner_->thread())inner_->disconnectDevice();else QMetaObject::invokeMethod(owner_,[this](){inner_->disconnectDevice();},Qt::BlockingQueuedConnection);}
-    bool status(FocuserStatus&s,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,&s,e](){return inner_->status(s,e);});}
-    bool moveAbsolute(int p,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,p,e](){return inner_->moveAbsolute(p,e);});}
-    bool moveRelative(int d,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,d,e](){return inner_->moveRelative(d,e);});}
-    bool halt(QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,e](){return inner_->halt(e);});}
-private:QObject *owner_;std::shared_ptr<IFocuser> inner_;
+    ConnectionState connectionState()const override{return direct_?inner_->connectionState():invokeOnControllerThread(owner_,[this](){return inner_->connectionState();});}
+    bool connectDevice(QString *e=nullptr)override{return direct_?inner_->connectDevice(e):invokeOnControllerThread(owner_,[this,e](){return inner_->connectDevice(e);});}
+    void disconnectDevice()override{if(direct_||QThread::currentThread()==owner_->thread())inner_->disconnectDevice();else QMetaObject::invokeMethod(owner_,[this](){inner_->disconnectDevice();},Qt::BlockingQueuedConnection);}
+    bool status(FocuserStatus&s,QString*e=nullptr)override{return direct_?inner_->status(s,e):invokeOnControllerThread(owner_,[this,&s,e](){return inner_->status(s,e);});}
+    bool moveAbsolute(int p,QString*e=nullptr)override{return direct_?inner_->moveAbsolute(p,e):invokeOnControllerThread(owner_,[this,p,e](){return inner_->moveAbsolute(p,e);});}
+    bool moveRelative(int d,QString*e=nullptr)override{return direct_?inner_->moveRelative(d,e):invokeOnControllerThread(owner_,[this,d,e](){return inner_->moveRelative(d,e);});}
+    bool halt(QString*e=nullptr)override{return direct_?inner_->halt(e):invokeOnControllerThread(owner_,[this,e](){return inner_->halt(e);});}
+private:QObject *owner_;std::shared_ptr<IFocuser> inner_;bool direct_{false};
 };
 
 class ThreadMarshalledMount final : public IMount {
 public:
-    ThreadMarshalledMount(QObject *owner,std::shared_ptr<IMount> inner):owner_(owner),inner_(std::move(inner)){}
+    ThreadMarshalledMount(QObject *owner,std::shared_ptr<IMount> inner):owner_(owner),inner_(std::move(inner)),direct_(inner_->backendName().startsWith("native:")){}
     QString id()const override{return inner_->id();} QString displayName()const override{return inner_->displayName();} QString backendName()const override{return inner_->backendName();}
-    ConnectionState connectionState()const override{return invokeOnControllerThread(owner_,[this](){return inner_->connectionState();});}
-    bool connectDevice(QString *e=nullptr)override{return invokeOnControllerThread(owner_,[this,e](){return inner_->connectDevice(e);});}
-    void disconnectDevice()override{if(QThread::currentThread()==owner_->thread())inner_->disconnectDevice();else QMetaObject::invokeMethod(owner_,[this](){inner_->disconnectDevice();},Qt::BlockingQueuedConnection);}
-    bool status(MountStatus&s,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,&s,e](){return inner_->status(s,e);});}
-    bool slewTo(const EquatorialCoord&t,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,&t,e](){return inner_->slewTo(t,e);});}
-    bool abortMotion(QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,e](){return inner_->abortMotion(e);});}
-    bool syncTo(const EquatorialCoord&t,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,&t,e](){return inner_->syncTo(t,e);});}
-    bool setTracking(bool v,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,v,e](){return inner_->setTracking(v,e);});}
-    bool park(bool v,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,v,e](){return inner_->park(v,e);});}
-    bool pulseGuide(GuideDirection d,int ms,QString*e=nullptr)override{return invokeOnControllerThread(owner_,[this,d,ms,e](){return inner_->pulseGuide(d,ms,e);});}
-private:QObject *owner_;std::shared_ptr<IMount> inner_;
+    ConnectionState connectionState()const override{return direct_?inner_->connectionState():invokeOnControllerThread(owner_,[this](){return inner_->connectionState();});}
+    bool connectDevice(QString *e=nullptr)override{return direct_?inner_->connectDevice(e):invokeOnControllerThread(owner_,[this,e](){return inner_->connectDevice(e);});}
+    void disconnectDevice()override{if(direct_||QThread::currentThread()==owner_->thread())inner_->disconnectDevice();else QMetaObject::invokeMethod(owner_,[this](){inner_->disconnectDevice();},Qt::BlockingQueuedConnection);}
+    bool status(MountStatus&s,QString*e=nullptr)override{return direct_?inner_->status(s,e):invokeOnControllerThread(owner_,[this,&s,e](){return inner_->status(s,e);});}
+    bool slewTo(const EquatorialCoord&t,QString*e=nullptr)override{return direct_?inner_->slewTo(t,e):invokeOnControllerThread(owner_,[this,&t,e](){return inner_->slewTo(t,e);});}
+    bool abortMotion(QString*e=nullptr)override{return direct_?inner_->abortMotion(e):invokeOnControllerThread(owner_,[this,e](){return inner_->abortMotion(e);});}
+    bool syncTo(const EquatorialCoord&t,QString*e=nullptr)override{return direct_?inner_->syncTo(t,e):invokeOnControllerThread(owner_,[this,&t,e](){return inner_->syncTo(t,e);});}
+    bool setTracking(bool v,QString*e=nullptr)override{return direct_?inner_->setTracking(v,e):invokeOnControllerThread(owner_,[this,v,e](){return inner_->setTracking(v,e);});}
+    bool park(bool v,QString*e=nullptr)override{return direct_?inner_->park(v,e):invokeOnControllerThread(owner_,[this,v,e](){return inner_->park(v,e);});}
+    bool pulseGuide(GuideDirection d,int ms,QString*e=nullptr)override{return direct_?inner_->pulseGuide(d,ms,e):invokeOnControllerThread(owner_,[this,d,ms,e](){return inner_->pulseGuide(d,ms,e);});}
+private:QObject *owner_;std::shared_ptr<IMount> inner_;bool direct_{false};
 };
 }
 static QJsonObject sessionJson(const SessionStatus&s){return{{"id",s.id},{"name",s.name},{"active",s.active},{"targetIndex",s.targetIndex},{"targetCount",s.targetCount},{"completedFrames",s.completedFrames},{"state",s.state}};}
 ApplicationController::ApplicationController(QObject *parent):ObservatoryController(parent),scheduler_(this),operations_(this){
     profile_=settings_.loadProfile();catalog_=std::make_shared<StarCatalog>();QString err;QString catalogPath=QDir(QCoreApplication::applicationDirPath()).filePath("config/stars_example.csv");if(!catalog_->loadCsv(catalogPath,&err)){catalogPath=QDir::current().filePath("config/stars_example.csv");catalog_->loadCsv(catalogPath,&err);}catalogSolver_=std::make_shared<PatternPlateSolver>(catalog_);astapSolver_=std::make_shared<AstapSolver>();neuralSolver_=std::make_shared<NeuralSolver>();solver_=astapSolver_->available(nullptr)?astapSolver_:catalogSolver_;
+    driverLoader_=std::make_shared<OalDriverPluginLoader>();QStringList driverErrors;const int nativeCount=driverLoader_->scanDefaultPaths(&driverErrors);
+    connect(driverLoader_.get(),&OalDriverPluginLoader::driverLog,this,[this](const QString&driver,int,const QString&message){emit logMessage(QString("[%1] %2").arg(driver,message));});
+    connect(driverLoader_.get(),&OalDriverPluginLoader::driverEvent,this,[this](const QString&driver,const QString&device,const QJsonObject&event){QJsonObject p=event;p["driverId"]=driver;p["deviceId"]=device;if(oalWsServer_)oalWsServer_->broadcast("driverEvent",p);});
+    QTimer::singleShot(0,this,[this,nativeCount,driverErrors](){emit logMessage(QString("Native OAL driver registry: %1 driver(s)").arg(nativeCount));for(const auto&e:driverErrors)emit logMessage("Native driver load warning: "+e);});
     #ifdef OAS_HAVE_POSITIONING
     if(profile_.observer.latitudeDeg==0.0&&profile_.observer.longitudeDeg==0.0)QTimer::singleShot(0,this,&ApplicationController::requestSystemLocation);
 #endif
@@ -114,20 +133,17 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
 }
 ApplicationController::~ApplicationController(){operations_.shutdown();stopOalServer();disconnectDevices(false);}
 void ApplicationController::setProfile(const TelescopeProfile&p){profile_=p;settings_.saveProfile(p);emit profileChanged();emitState();}
-QStringList ApplicationController::cameraBackends()const{QStringList x{"simulated","opencv","oal"};
-#ifdef OAS_HAVE_QHY
-x<<"qhy";
-#endif
+QStringList ApplicationController::cameraBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"camera");x<<"simulated"<<"opencv"<<"oal";
 #ifdef OAS_HAVE_GPHOTO2
 x<<"canon-gphoto2";
 #endif
 return x;}
-QStringList ApplicationController::mountBackends()const{QStringList x{"simulated","serial-lx200","ascom-alpaca","oal"};
+QStringList ApplicationController::mountBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"mount");x<<"simulated"<<"serial-lx200"<<"ascom-alpaca"<<"oal";
 #ifdef OAS_HAVE_INDI
 x<<"indi";
 #endif
 return x;}
-QStringList ApplicationController::focuserBackends()const{QStringList x{"simulated","gemini-eaf","ascom-alpaca","oal"};
+QStringList ApplicationController::focuserBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"focuser");x<<"simulated"<<"gemini-eaf"<<"ascom-alpaca"<<"oal";
 #ifdef OAS_HAVE_INDI
 x<<"indi";
 #endif
@@ -151,24 +167,25 @@ bool ApplicationController::selectSolver(const QString&name,QString*e){
 }
 bool ApplicationController::loadCatalog(const QString&p,QString*e){bool ok=catalog_->loadCsv(p,e);if(ok)emit logMessage(QString("Loaded %1 catalog stars").arg(catalog_->stars().size()));return ok;}
 bool ApplicationController::loadNeuralModel(const QString&p,QString*e){bool ok=neuralSolver_->loadModel(p,e);if(ok)emit logMessage("Neural model loaded: "+p);return ok;}
-bool ApplicationController::connectCamera(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"camera"},err))return false;std::shared_ptr<ICamera>d;if(b=="simulated")d=std::make_shared<SimulatedCamera>();else if(b=="opencv")d=std::make_shared<OpenCvCamera>(e.toInt());else if(b=="oal")d=std::make_shared<OalCameraClient>(QUrl(e));
-#ifdef OAS_HAVE_QHY
-else if(b=="qhy")d=std::make_shared<QhyCamera>(e.trimmed().isEmpty()?QString("0"):e.trimmed());
-#endif
+bool ApplicationController::connectCamera(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"camera"},err))return false;std::shared_ptr<ICamera>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"camera",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalCamera>(driverLoader_,desc);}
+else if(b=="qhy"){auto desc=migrateQhyDescriptor(driverLoader_,e);if(desc.isEmpty()){if(err)*err="Legacy qhy binding could not be migrated: native oal.qhy driver/camera not found";return false;}d=std::make_shared<NativeOalCamera>(driverLoader_,desc);emit logMessage("Migrated legacy direct QHY binding to native OpenAstroLink driver");}
+else if(b=="simulated")d=std::make_shared<SimulatedCamera>();else if(b=="opencv")d=std::make_shared<OpenCvCamera>(e.toInt());else if(b=="oal")d=std::make_shared<OalCameraClient>(QUrl(e));
 #ifdef OAS_HAVE_GPHOTO2
 else if(b=="canon-gphoto2")d=std::make_shared<CanonGPhotoCamera>();
 #endif
-else{if(err)*err="Unknown camera backend";return false;}if(!d->connectDevice(err))return false;camera_=std::move(d);settings_.saveCameraBinding({b,e,true});emit logMessage("Camera connected: "+camera_->displayName());emitState();return true;}
-bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"mount"},err))return false;std::shared_ptr<IMount>d;if(b=="simulated")d=std::make_shared<SimulatedMount>();else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);else if(b=="ascom-alpaca")d=std::make_shared<AlpacaMount>(QUrl(e));else if(b=="oal")d=std::make_shared<OalMountClient>(QUrl(e));
+else{if(err)*err="Unknown camera backend";return false;}if(!d->connectDevice(err))return false;camera_=std::move(d);settings_.saveCameraBinding({camera_->backendName(),e,true});emit logMessage("Camera connected: "+camera_->displayName());emitState();return true;}
+bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"mount"},err))return false;std::shared_ptr<IMount>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"mount",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalMount>(driverLoader_,desc);}
+else if(b=="simulated")d=std::make_shared<SimulatedMount>();else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);else if(b=="ascom-alpaca")d=std::make_shared<AlpacaMount>(QUrl(e));else if(b=="oal")d=std::make_shared<OalMountClient>(QUrl(e));
 #ifdef OAS_HAVE_INDI
 else if(b=="indi")d=std::make_shared<IndiMount>(e);
 #endif
-else{if(err)*err="Unknown mount backend";return false;}if(!d->connectDevice(err))return false;mount_=std::move(d);settings_.saveMountBinding({b,e,true});emit logMessage("Mount connected: "+mount_->displayName());emitState();return true;}
-bool ApplicationController::connectFocuser(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"focuser"},err))return false;std::shared_ptr<IFocuser>d;if(b=="simulated")d=std::make_shared<SimulatedFocuser>();else if(b=="gemini-eaf")d=std::make_shared<GeminiEafFocuser>(e);else if(b=="ascom-alpaca")d=std::make_shared<AlpacaFocuser>(QUrl(e));else if(b=="oal")d=std::make_shared<OalFocuserClient>(QUrl(e));
+else{if(err)*err="Unknown mount backend";return false;}if(!d->connectDevice(err))return false;mount_=std::move(d);settings_.saveMountBinding({mount_->backendName(),e,true});emit logMessage("Mount connected: "+mount_->displayName());emitState();return true;}
+bool ApplicationController::connectFocuser(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"focuser"},err))return false;std::shared_ptr<IFocuser>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"focuser",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalFocuser>(driverLoader_,desc);}
+else if(b=="simulated")d=std::make_shared<SimulatedFocuser>();else if(b=="gemini-eaf")d=std::make_shared<GeminiEafFocuser>(e);else if(b=="ascom-alpaca")d=std::make_shared<AlpacaFocuser>(QUrl(e));else if(b=="oal")d=std::make_shared<OalFocuserClient>(QUrl(e));
 #ifdef OAS_HAVE_INDI
 else if(b=="indi")d=std::make_shared<IndiFocuser>(e);
 #endif
-else{if(err)*err="Unknown focuser backend";return false;}if(!d->connectDevice(err))return false;focuser_=std::move(d);settings_.saveFocuserBinding({b,e,true});emit logMessage("Focuser connected: "+focuser_->displayName());emitState();return true;}
+else{if(err)*err="Unknown focuser backend";return false;}if(!d->connectDevice(err))return false;focuser_=std::move(d);settings_.saveFocuserBinding({focuser_->backendName(),e,true});emit logMessage("Focuser connected: "+focuser_->displayName());emitState();return true;}
 bool ApplicationController::ensureResourcesAvailable(const QStringList&resources,QString*error)const{
     for(const auto &resource:resources){QString owner;if(operations_.isResourceLocked(resource,&owner)){if(error)*error=QString("Resource %1 is locked by operation %2").arg(resource,owner);return false;}}
     return true;
@@ -294,7 +311,7 @@ bool ApplicationController::startOalServer(quint16 hp,bool we,quint16 wp,QString
 void ApplicationController::stopOalServer(){if(oalWsServer_)oalWsServer_->stop();if(oalServer_)oalServer_->stop();settings_.saveServer(false,settings_.oalPort(),false,settings_.wsPort());}
 bool ApplicationController::oalRunning()const{return oalServer_&&oalServer_->isRunning();}
 void ApplicationController::refreshState(){emitState();}
-QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const DeviceBinding&binding){if(d)a.append(QJsonObject{{"id",d->id()},{"type",type},{"name",d->displayName()},{"backend",d->backendName()},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected}});};add(camera_,"camera",settings_.cameraBinding());add(mount_,"mount",settings_.mountBinding());add(focuser_,"focuser",settings_.focuserBinding());return a;}
+QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const DeviceBinding&binding){if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")}});}};add(camera_,"camera",settings_.cameraBinding());add(mount_,"mount",settings_.mountBinding());add(focuser_,"focuser",settings_.focuserBinding());return a;}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();j["canAbortExposure"]=camera_->canAbortExposure();}return j;}
 bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
 QJsonObject ApplicationController::stateJson()const{QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide}};FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
@@ -305,8 +322,12 @@ QJsonObject ApplicationController::nodeInfoJson()const{
             {"httpPort",oalServer_?int(oalServer_->port()):0},
             {"wsRunning",bool(oalWsServer_&&oalWsServer_->isRunning())},
             {"wsPort",settings_.wsPort()},
+            {"nativeDriverCount",driverLoader_?int(driverLoader_->drivers().size()):0},
             {"controlExecution","node-local"}};
 }
+QJsonArray ApplicationController::nativeDriversJson()const{return driverLoader_?driverLoader_->drivers():QJsonArray{};}
+QJsonArray ApplicationController::nativeDevicesJson()const{return driverLoader_?driverLoader_->devices():QJsonArray{};}
+QJsonObject ApplicationController::nativeCapabilitiesJson(const QString&driverId,const QString&deviceId,QString*error)const{return driverLoader_?driverLoader_->capabilities(driverId,deviceId,error):QJsonObject{};}
 void ApplicationController::emitState(){auto j=stateJson();emit stateChanged(j);if(oalWsServer_)oalWsServer_->broadcast("state",j);}
 QImage ApplicationController::toQImage(const cv::Mat&i){if(i.empty())return{};cv::Mat rgb;if(i.channels()==1){cv::Mat u8;if(i.depth()==CV_16U){double mn,mx;cv::minMaxLoc(i,&mn,&mx);i.convertTo(u8,CV_8U,255.0/std::max(1.0,mx-mn),-mn*255.0/std::max(1.0,mx-mn));}else i.convertTo(u8,CV_8U);cv::cvtColor(u8,rgb,cv::COLOR_GRAY2RGB);}else cv::cvtColor(i,rgb,cv::COLOR_BGR2RGB);return QImage(rgb.data,rgb.cols,rgb.rows,int(rgb.step),QImage::Format_RGB888).copy();}
 } // namespace oas

@@ -1,6 +1,6 @@
 # Raspberry Pi 4 observatory node
 
-Version 0.2.5 keeps the v0.2.2 process boundary and adds the first RPi hardware path for QHY + INDI mount/Gemini + ASTAP.
+Version 0.2.6 keeps the v0.2.2 process boundary and makes the Raspberry Pi hardware stack **native-OAL-first**: QHY is provided by the ABI-v2 `oal.qhy` plugin; INDI remains a compatibility path for the mount/Gemini until verified native drivers exist.
 
 ## Runtime model
 
@@ -56,7 +56,7 @@ The service template starts:
 openastrolink-node --http-port 8080 --ws-port 8090
 ```
 
-The node listens on the LAN. The current v0.2.5 API has **no production authentication/TLS yet**, so do not expose ports 8080/8090 directly to the public Internet. Use a trusted isolated LAN or VPN until P0 security is implemented.
+The node listens on the LAN. The current v0.2.6 API has **no production authentication/TLS yet**, so do not expose ports 8080/8090 directly to the public Internet. Use a trusted isolated LAN or VPN until P0 security is implemented.
 
 ## Local GUI with monitor and keyboard
 
@@ -98,26 +98,26 @@ After a successful camera, mount or focuser connection the node persists:
 
 At the next boot `openastrolink-node` restores those bindings. If an INDI server or USB device is not ready yet, the node remains reachable and retries missing persisted devices every 10 seconds. Use `--no-autoconnect` for maintenance/troubleshooting.
 
-Typical Raspberry configuration for the planned hardware is:
+Typical Raspberry configuration for the planned hardware is now conceptually:
 
 ```text
-Camera:  qhy        endpoint: 0
-Focuser: gemini-eaf endpoint: indi:127.0.0.1:7624/<exact Gemini INDI device name>
-Mount:   indi       endpoint: 127.0.0.1:7624/<exact mount INDI device name>
+Camera:  native:oal.qhy/qhy:<exact-hardware-id>
+Focuser: gemini-eaf / INDI compatibility until native oal.gemini is validated
+Mount:   INDI/LX200 compatibility until a native driver for the exact mount is validated
 ```
 
-Exact INDI device names must match what the installed INDI drivers publish.
+Native devices own their hardware transport and therefore do not require an endpoint text field in the GUI. Exact INDI device names must still match what compatibility drivers publish.
 
-## v0.2.5 first-hardware update
+## v0.2.6 native-driver update
 
-The process/node architecture above is now paired with:
+The process/node architecture is now paired with:
 
-- `AstapSolver` CLI adapter with executable/database environment overrides;
-- exact-name INDI discovery and standard mount/focuser mappings;
-- per-call INDI TCP sessions safe for operation worker threads;
-- direct QHY SDK camera selection by index or exact camera ID;
-- process-lifetime QHY SDK initialization and cancellable single-frame acquisition;
-- `oal-hardware-probe`;
-- bootstrap and persistent INDI systemd helpers.
+- ABI-v2 native driver registry and manifests;
+- native `oal.simulated` reference camera/mount/focuser;
+- native `oal.qhy` using the QHYCCD SDK directly below OAL;
+- `AstapSolver` CLI adapter;
+- INDI compatibility discovery and standard mount/focuser mappings;
+- `oal-hardware-probe` reporting native drivers/devices separately from compatibility devices;
+- node installer deployment of native plugin libraries/manifests.
 
-See `docs/RPI_FIRST_HARDWARE.md` for the target installation and HIL qualification sequence. Planetary live/SER, async solve, the automated polar wizard, durable DSO execution, FITS/RAW data plane and security/safety hardening remain pending.
+See `docs/NATIVE_DRIVER_SDK.md` and `docs/RPI_FIRST_HARDWARE.md`. Planetary live/SER, native Gemini/mount, async solve, automated polar wizard, durable DSO execution, final FITS/RAW data plane and security/safety hardening remain pending.

@@ -20,6 +20,7 @@ class OalServer;
 class OalWsServer;
 class StarCatalog;
 class AstapSolver;
+class OalDriverPluginLoader;
 
 class ApplicationController final : public ObservatoryController {
     Q_OBJECT
@@ -104,6 +105,9 @@ public:
     bool frameById(const QString &frameId,CameraFrame &frame,QString *error=nullptr) const;
     QJsonObject stateJson() const;
     QJsonObject nodeInfoJson() const;
+    QJsonArray nativeDriversJson() const;
+    QJsonArray nativeDevicesJson() const;
+    QJsonObject nativeCapabilitiesJson(const QString &driverId,const QString &deviceId,QString *error=nullptr) const;
 
 private:
     void disconnectDevices(bool clearAutoConnect);
@@ -111,6 +115,7 @@ private:
     void commitCapturedFrame(const CameraFrame &frame);
     static QImage toQImage(const cv::Mat &image);
     void emitState();
+    std::shared_ptr<OalDriverPluginLoader> driverLoader_;
     std::shared_ptr<ICamera> camera_;
     std::shared_ptr<IMount> mount_;
     std::shared_ptr<IFocuser> focuser_;

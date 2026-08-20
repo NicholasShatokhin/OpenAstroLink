@@ -1,110 +1,135 @@
 # OpenAstroSuite / OpenAstroLink
 
-Версія 0.2.5 додає перший практичний Raspberry Pi hardware path поверх асинхронного node: production-adapter до ASTAP, hardened INDI mount/focuser transport, direct QHY SDK single-frame path і `oal-hardware-probe`. `openastrolink-node` володіє обладнанням і алгоритмами; той самий Qt GUI керує ним локально (`127.0.0.1`) або віддалено через OAL HTTP/WebSocket. Autofocus тепер є cancellable operation з lock-ами `camera+focuser`, mount slew — cancellable operation з lock-ом `mount`, а окремі camera/mount/focuser можна disconnect незалежно.
+**v0.2.6 — Native OAL Driver Foundation**
 
-## Що входить
+Цей реліз змінює hardware architecture: **native OpenAstroLink drivers є основним шляхом**, а INDI, ASCOM Alpaca, LX200 та інші старі екосистеми лишаються compatibility layer. Node і GUI не повинні знати vendor-specific API, якщо пристрій має native OAL driver.
 
-- `oas_core` — окрема бібліотека ядра без Qt Widgets.
-- `openastrolink-node` — headless `QCoreApplication` для RPi/systemd.
-- Qt 6 GUI: локальний node client, remote node client або embedded developer core; кадр, астрометричний overlay, карта зірок, профіль.
-- Камери:
-  - симулятор;
-  - UVC/OpenCV;
-  - віддалена OAL-камера;
-  - QHY SDK — опційно; у v0.2.5 підтримує exact camera ID, 16-bit where available, ROI/binning/gain/offset та exposure abort;
-  - Canon DSLR через libgphoto2 — опційно.
-- Монтування:
-  - симулятор;
-  - LX200/SynScan-подібний serial через `QSerialPort`;
-  - ASCOM Alpaca;
-  - OAL;
-  - INDI XML client — опційний backend для реального RPi mount/focuser path; використовує standard INDI properties і thread-safe per-call client sockets.
-- Фокусери:
-  - симулятор;
-  - **GeminiAstro EAF / Automatic Astro Focuser Pro** — окремий compatibility profile через vendor-supported ASCOM/Alpaca або INDI transport;
-  - ASCOM Alpaca;
-  - OAL;
-  - INDI — опційно.
-- Виділення зірок, CSV-каталог, прототип triangle plate solver та ASTAP CLI adapter (автоматично preferred, якщо ASTAP встановлений).
-- Motion estimator між наборами зірок.
-- Autofocus:
-  - `stars` — зоряна sharpness/HFR-подібна метрика;
-  - `planet` — auto-ROI планети + Tenengrad;
-  - `bahtinov` — дифракційна high-frequency метрика (не точний spike-offset solver).
-  - coarse + fine scan, медіана кількох кадрів.
-- Guiding engine з розрахунком похибки та pulse-guide через бекенд монтування.
-- Polar alignment за реальною оцінкою осі RA з кількох solved orientations.
-- Scheduler/session model.
-- P0 operation manager: `queued/running/succeeded/failed/cancelled`, progress, cancellation, resource locks; у v0.2.4 мігровані autofocus, mount slew та camera exposure/capture. Exposure повертає 202 operation, тримає lock `camera`, а preview забирається окремим ресурсом після завершення.
-- OAL REST API + WebSocket events, включно з node bootstrap/config endpoints, operation resources, cancellation та resource-lock telemetry для thin GUI client.
-- Стабільний C ABI для майбутніх OAL plug-in драйверів і приклад драйвера.
+```text
+GUI (локальний на RPi або віддалений ПК)
+                    │
+             OAL HTTP / WebSocket
+                    │
+          openastrolink-node / oas_core
+                    │
+          Native OAL driver registry
+           ABI v2 + capabilities/events
+              │                 │
+      oal_driver_qhy      oal_driver_simulated
+              │
+          QHYCCD SDK
+              │
+             QHY
 
-## Швидкий старт
+Compatibility path (коли native driver ще немає):
+INDI / Alpaca / LX200 / vendor compatibility adapter
+```
 
-Потрібні:
+## Головне у v0.2.6
 
-- CMake 3.24+;
-- Qt 6.4+ з модулями Core, Gui, Widgets, Network, SerialPort, WebSockets, HttpServer, Concurrent;
-- OpenCV 4.
+- **Native driver ABI v2** у `include/oal/driver_api.h`:
+  - manifest/identity;
+  - typed capability document;
+  - health;
+  - cancellation hook;
+  - push events;
+  - deadlines/operation correlation fields;
+  - окремий frame publish callback — RAW/science pixels не передаються Base64 через driver JSON.
+- **Manifest-based registry/discovery**: `*.manifest.json` + shared library; `OAL_DRIVER_PATH` і стандартні install paths.
+- **Native device adapters** `NativeOalCamera`, `NativeOalMount`, `NativeOalFocuser`: `ApplicationController` працює через `ICamera/IMount/IFocuser`, але hardware implementation живе в plug-in.
+- **Reference native simulated driver**: camera + mount + focuser через ABI v2. Це conformance/reference path, а не спеціальний код у GUI.
+- **Native QHY driver `oal.qhy`**: QHYCCD SDK винесений з `oas_core` у окремий OAL plug-in. Single-frame acquisition, ROI/binning/gain/offset, abort і host-frame transfer працюють без INDI.
+- Старий in-core `QhyCamera` видалений; збережене старе `backend=qhy` binding автоматично мігрується на `oal.qhy`, якщо native driver і камера знайдені.
+- API discovery:
+  - `GET /api/v1/drivers`;
+  - `GET /api/v1/drivers/devices`;
+  - `GET /api/v1/drivers/{driverId}/devices/{deviceId}/capabilities`.
+- GUI розділяє **Native OpenAstroLink** і **Compatibility / embedded** backends та має `Refresh native device discovery`.
+- На RPi native drivers встановлюються в `/usr/local/lib/openastrolink/drivers`; `openastrolink-node` знаходить їх автоматично.
+
+## Що входить у core
+
+- `oas_core` — ядро без Qt Widgets.
+- `openastrolink-node` — headless hardware owner для RPi/systemd.
+- `OpenAstroSuite` — той самий GUI для localhost node, remote node або embedded developer mode.
+- Async `OperationManager`: autofocus (`camera+focuser`), mount slew (`mount`), exposure (`camera`).
+- ASTAP adapter, prototype catalog solver, autofocus, guiding baseline, polar-alignment RA-axis estimator, scheduler state model.
+- Compatibility backends: INDI, ASCOM Alpaca, serial LX200, Gemini EAF via INDI/Alpaca, UVC/OpenCV, remote OAL client.
+
+## Build
+
+Потрібні CMake 3.24+, Qt 6.4+ і OpenCV 4.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-Для Raspberry Pi рекомендований запуск — окремий node service плюс GUI-клієнт. Першу перевірку все одно роби з трьома `simulated` backends.
+При default build native reference simulator з'явиться в:
 
-```bash
-./build/openastrolink-node --http-port 8080 --ws-port 8090
-./build/OpenAstroSuite --node http://127.0.0.1:8080
+```text
+build/drivers/oal_driver_simulated[.dll|.so]
+build/drivers/oal_driver_simulated.manifest.json
 ```
 
-На іншому комп'ютері запускається той самий GUI з адресою RPi. Якщо до RPi підключено монітор і клавіатуру, GUI підключається до локального node через `127.0.0.1`, тому закриття GUI не зупиняє ядро або обладнання.
+Node сканує `drivers/` поруч із executable, стандартні install paths і `OAL_DRIVER_PATH`.
 
-## Опційні бекенди
+### Native QHY
 
 ```bash
 cmake -S . -B build \
   -DOAS_ENABLE_QHY=ON \
-  -DOAS_ENABLE_GPHOTO2=ON \
-  -DOAS_ENABLE_INDI=ON
+  -DQHYCCD_ROOT=/path/to/qhyccd-sdk
+cmake --build build
 ```
 
-- `OAS_ENABLE_QHY`: потрібні `qhyccd.h` та бібліотека QHYCCD SDK; для нестандартного шляху задайте `QHYCCD_ROOT`.
-- `OAS_ENABLE_GPHOTO2`: потрібен `libgphoto2` через pkg-config.
-- `OAS_ENABLE_INDI`: використовує вбудований XML/TCP client для standard mount/focuser properties; runtime працює через `indiserver`, без libindi client ABI dependency.
+`OAS_ENABLE_QHY` тепер **будує native `oal_driver_qhy`**, а не додає QHY implementation у core.
 
-## Формати endpoint у GUI
+### Compatibility backends
 
-- OpenCV camera: `0`.
-- Serial LX200: `COM3`, `/dev/ttyUSB0`, `/dev/ttyACM0`.
-- Alpaca mount: `http://host:port/api/v1/telescope/0`.
-- Alpaca focuser: `http://host:port/api/v1/focuser/0`.
-- GeminiAstro EAF через ASCOM Remote/Alpaca: backend `gemini-eaf`, endpoint `alpaca:http://host:port/api/v1/focuser/0`.
-- GeminiAstro EAF через INDI: backend `gemini-eaf`, endpoint `indi:host:7624/Exact Device Name` (потрібен `OAS_ENABLE_INDI=ON`).
-- OAL mount: `http://host:8080/api/v1/mounts/default`.
-- OAL focuser: `http://host:8080/api/v1/focusers/default`.
-- OAL camera: `http://host:8080/api/v1/cameras/main`.
-- INDI mount/focuser: `host:7624/Exact Device Name`. Не вгадуйте назву: використайте `oal-hardware-probe`.
-- QHY: scan index (`0`) або, краще для постійної інсталяції, exact QHY camera ID.
+```bash
+cmake -S . -B build \
+  -DOAS_ENABLE_INDI=ON \
+  -DOAS_ENABLE_GPHOTO2=ON
+```
 
-## Важлива чесна межа
+INDI потрібен для mount/Gemini лише доки для конкретного hardware немає native OAL driver. Він не є обов'язковою частиною OAL architecture.
 
-Вбудований triangle solver лишається прототипом. У v0.2.5 доданий ASTAP adapter; якщо `astap_cli`/`astap` доступний на node, він стає preferred solver. Для ASTAP треба встановити сам program і одну star database.
+## Raspberry Pi 4
 
-`config/stars_example.csv` — демонстраційний яскравий каталог, а не повний науковий каталог.
+```bash
+sudo ./scripts/bootstrap_rpi_observatory.sh
+cmake --preset rpi4-observatory-release -DQHYCCD_ROOT=/opt/qhyccd
+cmake --build --preset rpi4-observatory-release -j$(nproc)
+./build/rpi4-observatory/oal-hardware-probe
+sudo ./scripts/install_rpi_node.sh build/rpi4-observatory
+```
 
-Дивись:
+Після install:
 
+```text
+/usr/local/bin/openastrolink-node
+/usr/local/lib/openastrolink/drivers/oal_driver_simulated.so
+/usr/local/lib/openastrolink/drivers/oal_driver_qhy.so       # якщо QHY enabled
+/usr/local/lib/openastrolink/drivers/*.manifest.json
+```
+
+GUI на RPi підключається до `http://127.0.0.1:8080`; GUI на іншому ПК — до LAN/VPN адреси Pi. Закриття GUI не зупиняє node або hardware operations.
+
+## Поточна межа
+
+v0.2.6 робить native OAL driver path реальним, але ще не завершує всю нову driver platform:
+
+- QHY planetary live/ring-buffer/SER — наступний data-plane increment;
+- native Gemini driver потребує підтвердженого low-level protocol; до цього використовується INDI/Alpaca compatibility path;
+- native mount driver треба реалізувати під конкретний фізичний протокол монтування;
+- third-party `out-of-process` manifests у v0.2.6 **не запускаються in-process**; sandbox driver host ще треба реалізувати;
+- permissions у manifest зараз описуються і перевіряються структурно, але OS sandbox enforcement ще попереду;
+- TLS/auth/safety, idempotency, RFC 9457, reliable event replay і science FITS/RAW persistence залишаються P0.
+
+Деталі:
+
+- `docs/NATIVE_DRIVER_SDK.md`
 - `docs/ARCHITECTURE.md`
-- `docs/STATUS.md`
-- `docs/OAL_API.md`
-- `docs/BUILD_PLATFORMS.md`
-- `docs/GEMINI_EAF.md`
-- `docs/RPI_NODE.md`
 - `docs/RPI_FIRST_HARDWARE.md`
+- `docs/STATUS.md`
 - `docs/ROADMAP_P0_P1_IMPLEMENTATION.md`
-
-## Перевірка цього пакета
-
-Структурні перевірки, парсинг OpenAPI та окрема компіляція прикладу native OAL plug-in пройшли. Повну збірку GUI в середовищі консолідації виконати не вдалося через відсутність Qt 6/OpenCV development packages. Деталі: `docs/VALIDATION.md`.

@@ -1,117 +1,161 @@
 # OpenAstroLink — план реалізації P0/P1 після v0.2
 
-Статус документа: implementation plan, 17 August 2026.
+Статус документа: implementation plan, **19 August 2026**.
 
-## 0. Загальний принцип
+## 0. Архітектурний принцип
 
-P0 — це не набір незалежних endpoint-ів. Це фундамент, від якого залежать усі device profiles і
-high-level workflows. Тому реалізація йде **вертикальними інкрементами**: schema → core → REST/WS →
-adapter → simulator → conformance test → GUI/client migration.
+OpenAstroLink розвивається як **новий native device stack**, а не як оболонка над INDI/ASCOM.
 
-Conformance suite починається одразу, а не в кінці: кожен P0 інкремент додає тести до тієї самої
-матриці. GeminiAstro EAF використовується як перший реальний focuser profile для перевірки того,
-що OAL не робить припущень про capabilities конкретного hardware.
+```text
+Native OAL drivers        ← reference architecture
+INDI / Alpaca / LX200     ← compatibility / migration
+vendor SDK                ← allowed low-level hardware access under a native OAL driver
+```
 
----
+Нові можливості проектуються у найкращій OAL-моделі. Compatibility adapters відображають у неї стільки старого API, скільки можливо; вони не обмежують native OAL семантику.
 
-## P0.0 — GeminiAstro EAF compatibility profile
+P0 реалізується вертикальними інкрементами: schema → core → driver boundary → REST/WS → simulator/reference driver → conformance → GUI/client migration.
 
-### Реалізовано в цьому інкременті
-
-- backend `gemini-eaf`;
-- ASCOM/Alpaca transport;
-- INDI transport при `OAS_ENABLE_INDI=ON`;
-- явні transport prefixes `alpaca:` і `indi:`;
-- окрема device identity у OpenAstroSuite;
-- hardware validation checklist;
-- direct USB/serial **не заявляється**, доки протокол поточної firmware не підтверджений.
-
-### Чому це корисний pilot
-
-Фокусер має достатньо простий API, але вже демонструє всі майбутні проблеми OAL: optional
-absolute/relative movement, halt, limits, moving state, temperature, transport differences,
-resource locking під час autofocus і cancellation довгого move.
+Conformance suite росте з кожним інкрементом. Жоден backend/driver не називається production-ready лише тому, що він компілюється.
 
 ---
 
-## P0.1 — Capabilities, identity, discovery і нормативні schemas
+# P0.D — Native OAL driver foundation
 
-### Core
+Цей foundation був піднятий у пріоритеті після практичних RPi/INDI тестів, щоб не закріпити legacy backend як основну архітектуру.
 
-Додати окремі типи:
+## v0.2.6 — реалізовано
 
-- `DeviceIdentity`;
-- `DriverIdentity`;
-- `TransportInfo`;
-- `DeviceCapabilities` + typed per-device profiles;
-- `Limit/Range/Precision` structures;
-- `Quantity`, time і coordinate schemas.
+### ABI v2
 
-`IDevice` не повинен обростати десятками `supportsX()` методів. Краще один typed capability
-document із common header та device-specific payload.
+`include/oal/driver_api.h` тепер визначає compiler-neutral C ABI v2:
 
-### API
+- manifest/ABI negotiation;
+- lifecycle `start/stop`;
+- device enumeration;
+- self-described capabilities;
+- health;
+- invoke context з request/operation/deadline;
+- cancellation;
+- push events;
+- host frame publication без Base64 pixels.
 
+### Manifest-based registry
+
+Node автоматично сканує native drivers, перевіряє `*.manifest.json`, завантажує ABI-v2 library та реєструє devices. `OAL_DRIVER_PATH` дозволяє додаткові каталоги.
+
+Native device key:
+
+```text
+native:<driverId>/<deviceId>
+```
+
+GUI показує native devices окремо від compatibility/embedded backends.
+
+### Reference simulator
+
+`oal.simulated` реалізує camera + mount + focuser через справжній ABI v2 і використовується як reference/conformance driver.
+
+### Native QHY
+
+`oal.qhy` — перший hardware native driver:
+
+```text
+QHY camera → QHYCCD SDK → oal.qhy → ABI v2 → OAL core
+```
+
+INDI для QHY більше не є необхідним у reference path.
+
+Поточний native QHY scope:
+
+- exact hardware ID discovery;
+- connect/disconnect;
+- single exposure;
+- abort;
+- ROI/binning;
+- gain/offset;
+- 16-bit request where supported;
+- health/capabilities/events;
+- host-frame-v2 publication.
+
+Planetary streaming/SER ще не заявляється (`supported:false`).
+
+### Isolation rule
+
+Manifest може вимагати `out-of-process`, але v0.2.6 **відмовляється** завантажувати такий driver in-process. Ми не будемо непомітно послаблювати requested isolation. Sandboxed driver host тепер є раннім P0/P1 завданням.
+
+## Наступні native drivers
+
+### Gemini EAF
+
+Поточний INDI/Alpaca шлях — compatibility only. Native `oal.gemini` реалізується після підтвердження low-level protocol для фактичної firmware/USB bridge. Неперевірені serial commands не допускаються.
+
+### Mount
+
+Native mount driver додається для конкретного hardware/protocol після визначення фактичної моделі/transport. INDI/LX200/Alpaca залишаються compatibility fallback.
+
+---
+
+# P0.0 — Compatibility pilots
+
+Gemini EAF compatibility profile уже існує через INDI/Alpaca. Його роль тепер чітко визначена: interoperability і hardware pilot, а не reference driver architecture.
+
+---
+
+# P0.1 — Capabilities, identity, discovery і нормативні schemas
+
+ABI-v2 foundation вже має manifest/device/capability discovery. Наступний крок — зробити capability model нормативною для HTTP API та всіх device classes.
+
+## Core/API
+
+- `DeviceIdentity`, `DriverIdentity`, `TransportInfo`;
+- typed `DeviceCapabilities`;
+- `Limit/Range/Precision`;
+- Quantity/time/coordinate schemas;
 - `GET /.well-known/openastrolink`;
-- `GET /api/v1/devices`;
-- `GET /api/v1/devices/{id}`;
-- `GET /api/v1/devices/{id}/capabilities`;
+- canonical `GET /devices/{id}/capabilities`;
 - version/profile negotiation.
 
-### Focuser capability minimum
-
-- `absoluteMove.supported`;
-- `relativeMove.supported`;
-- `halt.supported`;
-- `position.min/max/step/precision`;
-- `movingTelemetry.supported`;
-- `temperature.supported` + precision;
-- optional backlash / reverse / temperature compensation / calibration;
-- transport type and backend identity.
-
-### Definition of Done
+## Definition of Done
 
 - OpenAPI + JSON Schema;
-- simulated mount/camera/focuser capabilities;
-- Gemini EAF capabilities derived from actual transport, а не hard-coded як універсальні;
-- клієнт/GUI не викликає park, pulse guide, pier side, temperature тощо без capability gate;
-- schema validation tests у CI.
+- native simulator/QHY conform to same schemas;
+- compatibility adapters translate capabilities without inventing unsupported features;
+- GUI never assumes park/pulse-guide/pier-side/temperature/etc.;
+- CI schema validation.
 
 ---
 
-## P0.2 — Єдина RFC 9457-compatible error model
+# P0.2 — RFC 9457 Problem Details
 
-Error model варто реалізувати **до масової міграції endpoint-ів на operations**, щоб усі нові
-API одразу мали однакову семантику помилок.
+Єдина machine-readable error model:
 
-### `ProblemDetails`
+- `type`, `title`, `status`, `detail`, `instance`;
+- `oalCode`, `retryable`;
+- `deviceId`/`operationId`;
+- optional structured causes.
 
-Мінімум:
-
-- `type`;
-- `title`;
-- `status`;
-- `detail`;
-- `instance`;
-- `oalCode`;
-- `retryable`;
-- `deviceId` / `operationId` за наявності;
-- optional structured `causes`.
-
-Визначити registry кодів: capability-not-supported, device-busy, safety-interlock,
-invalid-state, timeout, transport-lost, cancelled, checksum-mismatch, stale-sequence тощо.
-
-### Definition of Done
-
-Усі нові P0 endpoints повертають тільки цю модель; старі довільні strings позначаються deprecated.
+Registry: capability-not-supported, device-busy, safety-interlock, invalid-state, timeout, transport-lost, cancelled, checksum-mismatch, stale-sequence, driver-crashed тощо.
 
 ---
 
-## P0.3 — Async operation resources
+# P0.3 — Async operations
 
-### Core
+Уже є vertical slices:
 
-`OperationManager` + persistent-enough in-memory baseline:
+- `autofocus.run`;
+- `mount.slew`;
+- `camera.exposure`.
+
+Залишилося перевести:
+
+- focuser long move where needed;
+- solve;
+- park;
+- session execution;
+- meridian flip orchestration.
+
+State machine:
 
 ```text
 queued → running → succeeded
@@ -119,193 +163,149 @@ queued → running → succeeded
                ↘ cancelled
 ```
 
-Поля: id, kind, owner/client, target resources, created/started/updated timestamps, progress,
-phase, timeout/deadline, cancelSupported, result, problem, lock set.
-
-### Перший vertical slice
-
-1. `focuser.move`;
-2. `autofocus.run`;
-3. `mount.slew`;
-4. `camera.exposure`;
-5. solve;
-6. park;
-7. session execution.
-
-Починаємо з focuser/autofocus, бо Gemini EAF дає реальний hardware pilot і одразу перевіряє
-camera+focuser locking.
-
-### API
-
-- command endpoint повертає `202 Accepted` + `Location`;
-- `GET /operations/{id}`;
-- `POST /operations/{id}/cancel`;
-- optional list/filter endpoints;
-- result доступний після success, Problem Details після failure.
-
-### Definition of Done
-
-HTTP thread не блокується на slew/exposure/AF/solve/park/session; cancel і timeout мають тести.
+HTTP thread не повинен чекати тривалу physical operation.
 
 ---
 
-## P0.4 — Idempotency і ResourceLockManager
+# P0.4 — Idempotency + locks
 
-### Idempotency
+## Idempotency
 
-Для mutating commands підтримати `Idempotency-Key`:
+`Idempotency-Key` для mutating create commands:
 
-- key scope = authenticated client + method + canonical resource;
-- зберігати request fingerprint;
-- same key + same request → повернути ту саму operation;
-- same key + different payload → conflict Problem Details;
-- TTL/retention policy задокументувати.
+- same key + same request → same operation;
+- same key + different request → conflict;
+- retention/TTL documented.
 
-### Locks
-
-Canonical resource ids і deterministic lock ordering, щоб уникнути deadlock.
-
-Обов'язкові lock sets:
+## Canonical locks
 
 - autofocus → camera + focuser;
 - exposure → camera;
 - focuser move → focuser;
 - slew/park → mount;
-- guiding calibration → mount + guider/camera залежно від profile;
+- guiding calibration → mount + guider/camera as required;
 - meridian flip → mount + guider + camera;
-- roof motion → roof + safety policy; за політикою також mount.
-
-### Definition of Done
-
-Retry після network failure не створює другий move/exposure/slew; конкурентний AF не може
-одночасно використовувати ту саму camera/focuser pair.
+- roof motion → roof + safety dependencies.
 
 ---
 
-## P0.5 — Security та safety baseline
+# P0.5 — Security + safety
 
-### Security
+## Security
 
-- TLS поза loopback;
+- TLS outside loopback;
 - authentication abstraction;
 - roles/scopes;
-- OAuth/OIDC deployment profile з актуальними OAuth security practices;
-- short-lived tokens для remote deployments;
-- audit log для небезпечних команд;
-- secrets redaction.
+- OAuth/OIDC or mTLS deployment profiles;
+- short-lived remote credentials;
+- audit log;
+- secret redaction.
 
-### Safety
+## Safety
 
-Окремий `SafetyPolicyEngine`, а не `if(weather)` у scheduler:
+Separate `SafetyPolicyEngine`:
 
-- emergency stop;
+- emergency stop independent of cloud;
 - weather safe/unsafe/unknown;
 - roof/dome state;
 - power dependencies;
-- hardware/driver limits;
-- policy priority вище session workflow;
-- machine-readable deny reason.
-
-### Definition of Done
-
-Неможливо обійти safety через інший REST endpoint або high-level workflow. Emergency stop
-працює локально без cloud dependency.
+- horizon/mechanical limits;
+- driver/hardware interlocks;
+- policy precedence over workflows.
 
 ---
 
-## P0.6 — FITS/RAW data plane
+# P0.6 — Science data plane
 
-### Control plane
+ABI-v2 already removes Base64 from the **native plugin boundary**. The network/storage science data plane remains to implement.
 
-Exposure result повертає metadata/frame resource, не science pixels у Base64 JSON.
+First production profile:
 
-### Перший production profile
+```text
+immutable frame resource
+→ FITS/RAW file
+→ byte length + digest
+→ HTTP Range/resume
+→ provenance
+```
 
-`https-download`:
+Next:
 
-- immutable frame resource;
-- media type;
-- byte length;
-- SHA-256 / Content-Digest;
-- HTTP Range;
-- resumable download;
-- capture provenance;
-- retention/lifecycle.
-
-### Наступні profiles
-
-- local shared-memory/zero-copy;
+- local shared memory/ring buffers;
 - object storage;
-- preview JPEG/PNG;
-- planetary/live stream.
-
-Preview може лишатися WS/JSON-friendly, science frame — ні.
-
-### Definition of Done
-
-50+ MB FITS переживає interrupted download без повторної exposure і без повторного завантаження
-всього файла.
+- planetary live stream;
+- SER writer;
+- preview independent from science bytes.
 
 ---
 
-## P0.7 — Надійний event stream
-
-Кожен stream:
+# P0.7 — Reliable event stream
 
 - `streamId`;
-- monotonically increasing `sequence`;
-- event timestamp;
-- subject/type/payload;
-- bounded replay buffer або durable tail;
-- reconnect із `lastSequence`;
-- snapshot endpoint;
-- explicit `replayUnavailable` path;
-- duplicate-tolerant clients.
+- monotonic `sequence`;
+- reconnect `lastSequence`;
+- replay buffer;
+- snapshot fallback;
+- duplicate-tolerant clients;
+- priority delivery for safety events.
 
-Safety events мають окрему гарантію пріоритету та не можуть тихо губитися через telemetry flood.
-
-### Definition of Done
-
-Тест: розірвати WebSocket під час autofocus/exposure, згенерувати події, reconnect із
-`lastSequence`, відновити state без пропусків або отримати контрольований snapshot-required flow.
+Driver ABI push events feed into this stream; drivers themselves do not implement WebSocket transport.
 
 ---
 
-## P0.8 — Conformance suite, simulators і fault injection
+# P0.8 — Conformance/fault injection
 
-Цей milestone **завершує** P0, але test harness росте з P0.1.
+Test matrix:
 
-Матриця:
-
-- schema/examples;
-- identity/capabilities;
-- mount/camera/focuser;
-- Gemini EAF profile contract;
-- async lifecycle;
-- cancellation/timeouts;
-- idempotency;
-- lock conflicts;
+- manifests/ABI negotiation;
+- discovery/capabilities;
+- native simulator;
+- native QHY contract;
+- compatibility adapters;
+- operation lifecycle/cancel/timeouts;
+- idempotency/locks;
 - Problem Details;
-- WS reconnect/replay/snapshot;
-- frame checksum/range/resume;
-- auth/scopes;
-- safety deny/emergency stop;
-- fault injection: driver crash, network loss, stale state, partial frame, clock jump.
+- event replay;
+- frame integrity/resume;
+- auth/scopes/safety;
+- driver crash/network loss/stale state/partial frame/clock jump.
 
-Рівні результату:
+Levels:
 
 1. simulator-conformant;
-2. adapter-conformant;
+2. protocol/driver-conformant;
 3. hardware-validated;
 4. safety-reviewed.
 
-Жоден backend не називається production-ready лише тому, що він компілюється.
+---
+
+# P0/P1.D — Sandboxed out-of-process driver host
+
+Це завдання перенесене вперед із пізнього P2, тому що native OAL driver ecosystem має бути безпечним для third-party/vendor code.
+
+Target:
+
+```text
+openastrolink-node
+   ├─ oal-driver-host oal.qhy
+   ├─ oal-driver-host oal.gemini
+   └─ oal-driver-host oal.mount...
+```
+
+Requirements:
+
+- process crash isolation/restart;
+- permissions manifest enforcement;
+- IPC ABI/protocol negotiation;
+- cancellation/events/frame handles;
+- no direct access outside declared USB/serial/network/filesystem permissions;
+- health=`driver-crashed` and recovery telemetry.
+
+Trusted/reference in-process remains useful for development and very low-latency paths, but third-party default should become out-of-process.
 
 ---
 
-# P1 — після стабілізації P0 foundation
-
-## P1.1 — Повні device profiles
+# P1.1 — Complete device profiles
 
 - mount;
 - camera;
@@ -318,99 +318,70 @@ Safety events мають окрему гарантію пріоритету та
 - cover/calibrator;
 - GPS/time.
 
-Gemini EAF переходить від compatibility profile до повного typed focuser capability mapping;
-native serial transport додається лише за наявності підтвердженого протоколу й hardware tests.
+Native drivers implement richer profiles directly; compatibility adapters expose partial profiles based on actual legacy capabilities.
 
-## P1.2 — Production solver adapters
+---
 
-Спочатку adapters до ASTAP і astrometry.net з уніфікованим WCS/result/provenance contract.
-Власний indexed blind solver розвивати окремо, не блокуючи production solve path.
+# P1.2 — Production solver services
 
-## P1.3 — Durable scheduler/session engine
+ASTAP adapter already exists. Next:
 
-- persistent checkpoints;
-- resume після restart;
+- astrometry.net adapter;
+- async/cancellable solve operation;
+- WCS/result/provenance contract;
+- closed-loop GOTO/recenter;
+- target resolver/planet ephemerides.
+
+The experimental own indexed blind solver remains separate.
+
+---
+
+# P1.3 — Durable scheduler/session engine
+
+- persistent checkpoints/resume;
 - meridian flip;
 - dither;
-- refocus triggers (time/temperature/HFR/filter);
+- refocus triggers;
 - weather interruption;
 - safe shutdown;
-- recovery/recenter/reguide;
+- recenter/reguide recovery;
 - idempotent child operations.
 
-## P1.4 — Guiding completion
+---
+
+# P1.4 — Guiding completion
 
 - calibration state machine;
 - RA/DEC response model;
 - dither settle;
 - RMS telemetry;
 - backlash handling;
-- star-loss detection/reacquisition;
-- recovery після flip/reconnect.
-
-## P1.5 — Geometric Bahtinov solver
-
-Замість лише high-frequency metric:
-
-- detect three diffraction spike families;
-- estimate center-spike offset;
-- convert to signed focus error;
-- confidence/uncertainty;
-- robust multi-frame estimate;
-- synthetic + real mask dataset.
-
-## P1.6 — Sandboxed driver host і SDK
-
-- out-of-process driver host;
-- crash isolation/restart;
-- permissions manifest;
-- ABI/protocol negotiation;
-- C++ SDK;
-- Python SDK;
-- Rust SDK;
-- generated examples/conformance harness.
+- lost-star recovery;
+- flip/reconnect recovery.
 
 ---
 
-# Рекомендована послідовність pull requests / releases
+# P1.5 — Geometric Bahtinov solver
 
-1. `v0.2.1` — Gemini EAF compatibility profile + docs.
-2. `v0.2.2` — Raspberry Pi headless `openastrolink-node`, split core/GUI, local-or-remote thin GUI control, persisted device bindings.
-3. `v0.2.3 First Light` — mount abort/limits, QHY HIL, Gemini HIL, ASTAP adapter and first-light workflow gates.
-4. `v0.3-alpha1` — identity/capabilities/discovery + Problem Details + test harness.
-5. `v0.3-alpha2` — operations + cancel + idempotency + locks; focuser/AF first.
-6. `v0.3-alpha3` — security/safety baseline.
-7. `v0.3-alpha4` — FITS/RAW data plane.
-8. `v0.3-alpha5` — sequenced/replayable events.
-9. `v0.3-beta1` — full P0 conformance/fault-injection matrix, migration cleanup.
-10. `v0.4` line — P1 device/services/automation work.
+- detect three diffraction-spike families;
+- signed center-spike offset;
+- confidence/uncertainty;
+- robust multi-frame estimate;
+- synthetic + real validation dataset.
 
-Release numbers are working labels; protocol compatibility, not calendar timing, determines promotion.
+---
 
+# Поточна послідовність релізів
 
-## Implemented increment: v0.2.3 — first P0 operation vertical slice
+1. `v0.2.1` — Gemini compatibility profile.
+2. `v0.2.2` — headless node + local/remote GUI.
+3. `v0.2.3` — operation manager/resource locks/slew/AF.
+4. `v0.2.4` — async exposure.
+5. `v0.2.5` — RPi/ASTAP/QHY/INDI first hardware path.
+6. **`v0.2.6` — Native OAL ABI v2 + registry + reference simulator + native QHY.**
+7. `v0.2.7` — native driver host groundwork + native Gemini/mount only where protocol is verified; async ASTAP/closed-loop GOTO can proceed in parallel.
+8. `v0.2.8` — QHY native planetary streaming/SER + science-frame persistence/data-plane vertical slice.
+9. `v0.3-alpha` line — normative capabilities/errors/idempotency/events/security/conformance hardening.
+10. `v0.4` line — durable sessions, guiding completion, full device profiles/services.
 
-Implemented now:
-
-- generic node-local operation manager and resource lock table;
-- states `queued/running/succeeded/failed/cancelled`, progress/result/problem snapshots and cancellation;
-- async `autofocus.run` locking `camera+focuser`;
-- async `mount.slew` locking `mount`, plus hardware abort path;
-- REST operation list/get/cancel and WebSocket operation snapshots;
-- lock-aware direct camera/focuser/mount commands;
-- independent camera/mount/focuser disconnect;
-- GUI Operations tab and reconnect rehydration.
-
-The next P0.2 migrations are async exposure, solve, park/session execution and then idempotency. This version deliberately does not claim the whole P0 operation model complete.
-
-## v0.2.5 checkpoint — RPi first hardware path
-
-Implemented before the next observing HIL gate:
-
-- ASTAP CLI production adapter and RPi autodetection/environment configuration;
-- direct QHY SDK single-frame backend hardened for exact camera IDs and process-level SDK initialization;
-- INDI mount/focuser standard-property mapping with exact device discovery and worker-thread-safe TCP usage;
-- Gemini EAF RPi path through INDI;
-- `oal-hardware-probe`, RPi bootstrap and INDI/node systemd helpers.
-
-Next after HIL: make solve a cancellable operation, add closed-loop target resolver/recenter, automate the polar-alignment capture/slew/solve wizard, add QHY continuous planetary capture/SER, and persist DSO science frames through the OAL data plane.
+Release labels are working labels; protocol compatibility and validation gates determine promotion.

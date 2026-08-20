@@ -32,8 +32,10 @@ Base Raspberry Pi observatory dependencies are installed.
 
 Still hardware/vendor specific and intentionally not auto-downloaded:
   1. QHYCCD ARM64/Raspberry-Pi SDK + its udev rules.
+     This builds the native ABI-v2 oal.qhy driver; INDI is not required for QHY.
      Verify qhyccd.h and libqhyccd.so are installed, or set QHYCCD_ROOT at CMake configure time.
-  2. The exact INDI drivers for your mount and Gemini focuser.
+  2. The exact INDI drivers for your mount and Gemini focuser IF native OAL drivers are not yet available.
+     INDI is a compatibility path, not the reference architecture.
   3. ASTAP/astap_cli ARM package and ONE compatible ASTAP star database.
 
 After installing those pieces run:
