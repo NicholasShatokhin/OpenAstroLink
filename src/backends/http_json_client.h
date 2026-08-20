@@ -1,5 +1,8 @@
 #pragma once
+#include <QByteArray>
 #include <QJsonObject>
+#include <QNetworkReply>
+#include <QString>
 #include <QUrl>
 #include <QUrlQuery>
 #include <optional>
@@ -12,7 +15,7 @@ public:
     Reply postJson(const QUrl &url, const QJsonObject &body, int timeoutMs = 10000);
     Reply putForm(const QUrl &url, const QUrlQuery &form, int timeoutMs = 10000);
 private:
-    Reply wait(class QNetworkReply *reply, int timeoutMs);
+    Reply wait(::QNetworkReply *reply, int timeoutMs);
 };
 QUrl appendPath(const QUrl &base, const QString &part);
 }
