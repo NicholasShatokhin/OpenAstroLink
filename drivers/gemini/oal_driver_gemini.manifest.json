@@ -1,0 +1,14 @@
+{
+  "schema": "org.openastrolink.driver-manifest/v2",
+  "driverId": "oal.gemini",
+  "name": "OpenAstroLink native Gemini EAF driver",
+  "version": "0.2.7",
+  "abiVersion": 2,
+  "library": "oal_driver_gemini",
+  "deviceClasses": ["focuser"],
+  "isolation": "in-process",
+  "permissions": [{"kind":"serial","purpose":"Gemini EAF / MyFocuserPro2 protocol"}],
+  "threadModel": "per-device-serial",
+  "trust": "bundled",
+  "config": {"ports":[],"probeTimeoutMs":900,"commandTimeoutMs":2500,"moveTimeoutMs":120000,"openSettleMs":150}
+}

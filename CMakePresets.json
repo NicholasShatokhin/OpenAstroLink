@@ -8,52 +8,71 @@
   "configurePresets": [
     {
       "name": "default-release",
-      "displayName": "Default Release (GUI + node)",
+      "displayName": "Default Release (native-first + INDI compatibility available)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "OAS_BUILD_GUI": "ON",
         "OAS_BUILD_NODE": "ON",
-        "OAS_BUILD_EXAMPLE_DRIVER": "ON"
+        "OAS_BUILD_EXAMPLE_DRIVER": "ON",
+        "OAS_ENABLE_NATIVE_GEMINI": "ON",
+        "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
+        "OAS_ENABLE_INDI": "ON"
       }
     },
     {
       "name": "windows-vs2022",
-      "displayName": "Windows Visual Studio 2022",
+      "displayName": "Windows VS2022 (native telescope pack + INDI compatibility)",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/vs2022",
       "cacheVariables": {
         "OAS_BUILD_GUI": "ON",
         "OAS_BUILD_NODE": "ON",
-        "OAS_BUILD_EXAMPLE_DRIVER": "ON"
+        "OAS_BUILD_EXAMPLE_DRIVER": "ON",
+        "OAS_ENABLE_NATIVE_GEMINI": "ON",
+        "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
+        "OAS_ENABLE_INDI": "ON"
       }
     },
     {
-      "name": "rpi4-observatory-release",
-      "displayName": "Raspberry Pi 4 observatory (native QHY + INDI compatibility)",
+      "name": "rpi4-native-release",
+      "displayName": "Raspberry Pi 4 native-only telescope (QHY + Gemini + Sky-Watcher)",
       "inherits": "default-release",
-      "binaryDir": "${sourceDir}/build/rpi4-observatory",
+      "binaryDir": "${sourceDir}/build/rpi4-native",
       "cacheVariables": {
         "OAS_BUILD_GUI": "ON",
         "OAS_BUILD_NODE": "ON",
         "OAS_ENABLE_QHY": "ON",
-        "OAS_ENABLE_INDI": "ON",
+        "OAS_ENABLE_NATIVE_GEMINI": "ON",
+        "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
+        "OAS_ENABLE_INDI": "OFF",
         "OAS_ENABLE_GPHOTO2": "OFF",
         "OAS_BUILD_HARDWARE_PROBE": "ON",
         "CMAKE_INSTALL_PREFIX": "/usr/local"
       }
     },
     {
+      "name": "rpi4-observatory-release",
+      "displayName": "Raspberry Pi 4 observatory (native-first + INDI compatibility)",
+      "inherits": "rpi4-native-release",
+      "binaryDir": "${sourceDir}/build/rpi4-observatory",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
+      }
+    },
+    {
       "name": "node-sim-release",
-      "displayName": "Headless node only (simulated/basic backends)",
+      "displayName": "Headless node only (native simulator)",
       "inherits": "default-release",
       "binaryDir": "${sourceDir}/build/node-sim",
       "cacheVariables": {
         "OAS_BUILD_GUI": "OFF",
         "OAS_BUILD_NODE": "ON",
         "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_NATIVE_GEMINI": "OFF",
+        "OAS_ENABLE_NATIVE_SKYWATCHER": "OFF",
         "OAS_ENABLE_INDI": "OFF",
         "OAS_ENABLE_GPHOTO2": "OFF",
         "OAS_BUILD_HARDWARE_PROBE": "ON"
@@ -69,6 +88,10 @@
       "name": "windows-vs2022",
       "configurePreset": "windows-vs2022",
       "configuration": "Release"
+    },
+    {
+      "name": "rpi4-native-release",
+      "configurePreset": "rpi4-native-release"
     },
     {
       "name": "rpi4-observatory-release",

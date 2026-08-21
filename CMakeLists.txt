@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.6 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.7 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,9 @@ set(CMAKE_AUTORCC ON)
 # remain available for existing devices/ecosystems.
 option(OAS_ENABLE_QHY "Build native OAL QHYCCD driver (requires QHYCCD SDK)" OFF)
 option(OAS_ENABLE_GPHOTO2 "Enable Canon/libgphoto2 compatibility backend" OFF)
-option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" OFF)
+option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" ON)
+option(OAS_ENABLE_NATIVE_GEMINI "Build native OAL Gemini EAF driver" ON)
+option(OAS_ENABLE_NATIVE_SKYWATCHER "Build native OAL Sky-Watcher/SynScan mount driver" ON)
 option(OAS_BUILD_TESTS "Build lightweight tests" OFF)
 option(OAS_BUILD_NATIVE_REFERENCE_DRIVERS "Build ABI-v2 native OAL reference simulator" ON)
 option(OAS_BUILD_EXAMPLE_DRIVER "Build legacy ABI-v1 example plug-in" ON)
@@ -158,15 +160,21 @@ if(OAS_BUILD_NATIVE_REFERENCE_DRIVERS)
 endif()
 
 if(OAS_ENABLE_QHY)
-    set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root (contains include/qhyccd.h and lib/libqhyccd.so/.dll)")
-    find_path(QHYCCD_INCLUDE_DIR qhyccd.h
-        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
-        PATH_SUFFIXES include usr/local/include
-        REQUIRED)
-    find_library(QHYCCD_LIBRARY NAMES qhyccd
-        HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
-        PATH_SUFFIXES lib lib64 usr/local/lib
-        REQUIRED)
+    set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root")
+    set(QHYCCD_INCLUDE_DIR "" CACHE PATH "Directory containing qhyccd.h")
+    set(QHYCCD_LIBRARY "" CACHE FILEPATH "Exact QHYCCD SDK library path (for example /opt/qhyccd/lib/libqhy.so)")
+    if(NOT QHYCCD_INCLUDE_DIR)
+        find_path(QHYCCD_INCLUDE_DIR qhyccd.h
+            HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT ENV QHYCCD_INCLUDE_DIR
+            PATH_SUFFIXES include usr/local/include
+            REQUIRED)
+    endif()
+    if(NOT QHYCCD_LIBRARY)
+        find_library(QHYCCD_LIBRARY NAMES qhyccd qhy
+            HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
+            PATH_SUFFIXES lib lib64 usr/local/lib
+            REQUIRED)
+    endif()
     add_library(oal_driver_qhy SHARED drivers/qhy/oal_driver_qhy.cpp)
     target_include_directories(oal_driver_qhy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${QHYCCD_INCLUDE_DIR})
     target_link_libraries(oal_driver_qhy PRIVATE ${QHYCCD_LIBRARY})
@@ -181,6 +189,34 @@ if(OAS_ENABLE_QHY)
         DESTINATION lib/openastrolink/drivers)
 endif()
 
+
+if(OAS_ENABLE_NATIVE_GEMINI)
+    add_library(oal_driver_gemini SHARED
+        drivers/gemini/oal_driver_gemini.cpp
+        drivers/gemini/myfocuserpro2_protocol.h)
+    target_include_directories(oal_driver_gemini PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/drivers/gemini)
+    target_link_libraries(oal_driver_gemini PRIVATE Qt6::Core Qt6::SerialPort)
+    oal_set_driver_output(oal_driver_gemini)
+    configure_file(drivers/gemini/oal_driver_gemini.manifest.json
+                   ${OAL_DRIVER_BUILD_DIR}/oal_driver_gemini.manifest.json COPYONLY)
+    install(TARGETS oal_driver_gemini RUNTIME DESTINATION lib/openastrolink/drivers LIBRARY DESTINATION lib/openastrolink/drivers ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/gemini/oal_driver_gemini.manifest.json DESTINATION lib/openastrolink/drivers)
+endif()
+
+if(OAS_ENABLE_NATIVE_SKYWATCHER)
+    add_library(oal_driver_skywatcher SHARED
+        drivers/skywatcher/oal_driver_skywatcher.cpp
+        drivers/skywatcher/synscan_protocol.h
+        drivers/skywatcher/motor_controller_protocol.h)
+    target_include_directories(oal_driver_skywatcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/drivers/skywatcher)
+    target_link_libraries(oal_driver_skywatcher PRIVATE Qt6::Core Qt6::SerialPort)
+    oal_set_driver_output(oal_driver_skywatcher)
+    configure_file(drivers/skywatcher/oal_driver_skywatcher.manifest.json
+                   ${OAL_DRIVER_BUILD_DIR}/oal_driver_skywatcher.manifest.json COPYONLY)
+    install(TARGETS oal_driver_skywatcher RUNTIME DESTINATION lib/openastrolink/drivers LIBRARY DESTINATION lib/openastrolink/drivers ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/skywatcher/oal_driver_skywatcher.manifest.json DESTINATION lib/openastrolink/drivers)
+endif()
+
 # Legacy ABI-v1 example retained only as a migration/conformance fixture.
 if(OAS_BUILD_EXAMPLE_DRIVER)
     add_library(oal_sim_driver SHARED examples/oal_sim_driver.cpp)
@@ -193,3 +229,12 @@ install(DIRECTORY config docs schemas DESTINATION share/OpenAstroSuite)
 install(FILES packaging/systemd/openastrolink-node.service.in packaging/systemd/openastrolink-node.env.example packaging/systemd/openastrolink-indi.service DESTINATION share/OpenAstroSuite/systemd)
 install(FILES packaging/indi/indi-drivers.conf.example DESTINATION share/OpenAstroSuite/indi)
 install(FILES packaging/linux/openastrosuite-local.desktop DESTINATION share/applications)
+
+if(OAS_BUILD_TESTS)
+    enable_testing()
+    add_executable(oal-native-protocol-smoke tests/native_protocol_smoke.cpp)
+    target_include_directories(oal-native-protocol-smoke PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/drivers/gemini
+        ${CMAKE_CURRENT_SOURCE_DIR}/drivers/skywatcher)
+    add_test(NAME oal-native-protocol-smoke COMMAND oal-native-protocol-smoke)
+endif()

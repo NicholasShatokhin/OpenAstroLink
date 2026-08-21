@@ -2,13 +2,18 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.qhy",
   "name": "OpenAstroLink native QHYCCD driver",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "abiVersion": 2,
   "library": "oal_driver_qhy",
-  "deviceClasses": ["camera"],
+  "deviceClasses": [
+    "camera"
+  ],
   "isolation": "in-process",
   "permissions": [
-    {"kind": "usb", "vendor": "QHYCCD"}
+    {
+      "kind": "usb",
+      "vendor": "QHYCCD"
+    }
   ],
   "threadModel": "per-device-serial",
   "trust": "bundled",

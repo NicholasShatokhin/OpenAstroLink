@@ -1,59 +1,70 @@
 # OpenAstroSuite / OpenAstroLink
 
-**v0.2.6 — Native OAL Driver Foundation**
+**v0.2.7 — Native Telescope Hardware Pack**
 
-Цей реліз змінює hardware architecture: **native OpenAstroLink drivers є основним шляхом**, а INDI, ASCOM Alpaca, LX200 та інші старі екосистеми лишаються compatibility layer. Node і GUI не повинні знати vendor-specific API, якщо пристрій має native OAL driver.
+Цей реліз робить native OpenAstroLink reference path для цілого телескопа, а не лише для камери:
 
 ```text
-GUI (локальний на RPi або віддалений ПК)
-                    │
-             OAL HTTP / WebSocket
-                    │
-          openastrolink-node / oas_core
-                    │
-          Native OAL driver registry
-           ABI v2 + capabilities/events
-              │                 │
-      oal_driver_qhy      oal_driver_simulated
-              │
-          QHYCCD SDK
-              │
-             QHY
+OpenAstroSuite GUI (локально на RPi або віддалено)
+                         │
+                  OAL HTTP / WebSocket
+                         │
+               openastrolink-node
+                         │
+              Native OAL ABI v2 registry
+                  ┌──────┼──────────┐
+                  │      │          │
+               oal.qhy oal.gemini oal.skywatcher
+                  │      │          │
+               QHY SDK  USB serial  SynScan serial
+                  │      │          │
+                 QHY  Gemini EAF  Sky-Watcher mount
 
-Compatibility path (коли native driver ще немає):
-INDI / Alpaca / LX200 / vendor compatibility adapter
+Compatibility / migration layer (optional):
+INDI · ASCOM Alpaca · LX200 · other existing device ecosystems
 ```
 
-## Головне у v0.2.6
+Native OAL є основною архітектурою. Compatibility backends залишаються першокласним способом підключити обладнання, для якого native driver ще не написаний, але вони не визначають capabilities або семантику OAL.
 
-- **Native driver ABI v2** у `include/oal/driver_api.h`:
-  - manifest/identity;
-  - typed capability document;
-  - health;
-  - cancellation hook;
-  - push events;
-  - deadlines/operation correlation fields;
-  - окремий frame publish callback — RAW/science pixels не передаються Base64 через driver JSON.
-- **Manifest-based registry/discovery**: `*.manifest.json` + shared library; `OAL_DRIVER_PATH` і стандартні install paths.
-- **Native device adapters** `NativeOalCamera`, `NativeOalMount`, `NativeOalFocuser`: `ApplicationController` працює через `ICamera/IMount/IFocuser`, але hardware implementation живе в plug-in.
-- **Reference native simulated driver**: camera + mount + focuser через ABI v2. Це conformance/reference path, а не спеціальний код у GUI.
-- **Native QHY driver `oal.qhy`**: QHYCCD SDK винесений з `oas_core` у окремий OAL plug-in. Single-frame acquisition, ROI/binning/gain/offset, abort і host-frame transfer працюють без INDI.
-- Старий in-core `QhyCamera` видалений; збережене старе `backend=qhy` binding автоматично мігрується на `oal.qhy`, якщо native driver і камера знайдені.
-- API discovery:
-  - `GET /api/v1/drivers`;
-  - `GET /api/v1/drivers/devices`;
-  - `GET /api/v1/drivers/{driverId}/devices/{deviceId}/capabilities`.
-- GUI розділяє **Native OpenAstroLink** і **Compatibility / embedded** backends та має `Refresh native device discovery`.
-- На RPi native drivers встановлюються в `/usr/local/lib/openastrolink/drivers`; `openastrolink-node` знаходить їх автоматично.
+## Головне у v0.2.7
 
-## Що входить у core
+- **Native QHY `oal.qhy`** — direct QHYCCD SDK, без INDI у reference path.
+- **Native Gemini EAF `oal.gemini`** — direct 9600-baud serial implementation сімейства MyFocuserPro2, з protocol probe, position/moving/temperature/max-position, absolute/relative move та capability discovery.
+- **Native Sky-Watcher `oal.skywatcher`** — direct SynScan hand-controller serial protocol v3.3: precise J2000 RA/DEC, GOTO, abort, sync, tracking, alignment state, pier-side where available and fixed-rate pulse guiding on equatorial models.
+- Native serial drivers тримають **persistent serial session in a dedicated I/O thread**. Це уникає повторного open/DTR reset для MCU-based focusers і не порушує Qt QObject thread affinity, коли OAL operations виконуються на різних worker threads.
+- Sky-Watcher `mount.slew` тепер лише приймає GOTO і повертає керування. Довгий lifecycle належить OAL `mount.slew` operation, тому `ABORT MOUNT MOTION` лишається responsive.
+- Для Sky-Watcher нижчий Motor Controller Command Set уже має окремий codec foundation, але direct-axis RA/DEC driver **не оголошується готовим**, доки не буде OAL alignment/coordinate model. Ніяких вигаданих axis→sky перетворень.
+- Gemini `halt` **не рекламується як supported**, доки точна stop-команда не буде підтверджена на цільовій firmware. Це свідомий safety choice.
+- Доданий `oal-native-protocol-smoke` без Qt/hardware для перевірки wire-format кодеків.
+- `oal-hardware-probe --require-native-telescope` перевіряє, що знайдені QHY + Gemini + Sky-Watcher native devices.
 
-- `oas_core` — ядро без Qt Widgets.
-- `openastrolink-node` — headless hardware owner для RPi/systemd.
-- `OpenAstroSuite` — той самий GUI для localhost node, remote node або embedded developer mode.
-- Async `OperationManager`: autofocus (`camera+focuser`), mount slew (`mount`), exposure (`camera`).
-- ASTAP adapter, prototype catalog solver, autofocus, guiding baseline, polar-alignment RA-axis estimator, scheduler state model.
-- Compatibility backends: INDI, ASCOM Alpaca, serial LX200, Gemini EAF via INDI/Alpaca, UVC/OpenCV, remote OAL client.
+## INDI: легко увімкнути, але не обов'язково використовувати
+
+Звичайні desktop/observatory builds мають INDI compatibility compiled in за замовчуванням. Сам `indiserver` не потрібно запускати, доки не з'явиться INDI-only обладнання.
+
+На Raspberry Pi є два явні presets:
+
+```bash
+# Доказ/мінімальна система: лише native telescope path
+cmake --preset rpi4-native-release
+
+# Рекомендована обсерваторна збірка: native-first + INDI available
+cmake --preset rpi4-observatory-release
+```
+
+Встановити INDI runtime пізніше:
+
+```bash
+sudo ./scripts/enable_indi_compat.sh
+```
+
+Або відразу при bootstrap:
+
+```bash
+sudo ./scripts/bootstrap_rpi_observatory.sh --with-indi
+```
+
+Таким чином INDI може бути повністю відсутнім у native-only build, але для іншого обладнання його підключення — одна опція CMake + один installer script.
 
 ## Build
 
@@ -64,72 +75,77 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-При default build native reference simulator з'явиться в:
+### Native QHY із точними SDK paths
 
-```text
-build/drivers/oal_driver_simulated[.dll|.so]
-build/drivers/oal_driver_simulated.manifest.json
-```
-
-Node сканує `drivers/` поруч із executable, стандартні install paths і `OAL_DRIVER_PATH`.
-
-### Native QHY
+Для RPi/Linux:
 
 ```bash
-cmake -S . -B build \
-  -DOAS_ENABLE_QHY=ON \
-  -DQHYCCD_ROOT=/path/to/qhyccd-sdk
-cmake --build build
-```
-
-`OAS_ENABLE_QHY` тепер **будує native `oal_driver_qhy`**, а не додає QHY implementation у core.
-
-### Compatibility backends
-
-```bash
-cmake -S . -B build \
-  -DOAS_ENABLE_INDI=ON \
-  -DOAS_ENABLE_GPHOTO2=ON
-```
-
-INDI потрібен для mount/Gemini лише доки для конкретного hardware немає native OAL driver. Він не є обов'язковою частиною OAL architecture.
-
-## Raspberry Pi 4
-
-```bash
-sudo ./scripts/bootstrap_rpi_observatory.sh
-cmake --preset rpi4-observatory-release -DQHYCCD_ROOT=/opt/qhyccd
+cmake --preset rpi4-observatory-release \
+  -DQHYCCD_INCLUDE_DIR=/opt/qhyccd/include \
+  -DQHYCCD_LIBRARY=/opt/qhyccd/lib/libqhy.so
 cmake --build --preset rpi4-observatory-release -j$(nproc)
-./build/rpi4-observatory/oal-hardware-probe
+```
+
+Підтримується й `QHYCCD_ROOT` як fallback.
+
+Для наявного Windows-каталогу SDK є helper:
+
+```powershell
+.\scripts\copy_qhy_sdk_to_rpi.ps1 -RemoteHost <RPI-IP>
+```
+
+За замовчуванням він бере headers з `C:\workspace\astro\QHYCCD_Linux` і Linux library з `C:\workspace\astro\qhysdk\lib\libqhy.so.0.1.8`; `stage_qhy_sdk.sh` на Pi перевіряє архітектуру бібліотеки перед install.
+
+## RPi first native telescope build
+
+```bash
+sudo ./scripts/bootstrap_rpi_observatory.sh --with-indi   # --with-indi optional
+
+# stage/install QHY ARM64 SDK + udev rules, install ASTAP/database
+
+cmake --preset rpi4-observatory-release \
+  -DQHYCCD_INCLUDE_DIR=/opt/qhyccd/include \
+  -DQHYCCD_LIBRARY=/opt/qhyccd/lib/libqhy.so
+cmake --build --preset rpi4-observatory-release -j$(nproc)
+
+./build/rpi4-observatory/oal-hardware-probe --require-native-telescope
 sudo ./scripts/install_rpi_node.sh build/rpi4-observatory
 ```
 
-Після install:
+Для стабільного serial binding рекомендується `/etc/openastrolink/node.env`:
 
-```text
-/usr/local/bin/openastrolink-node
-/usr/local/lib/openastrolink/drivers/oal_driver_simulated.so
-/usr/local/lib/openastrolink/drivers/oal_driver_qhy.so       # якщо QHY enabled
-/usr/local/lib/openastrolink/drivers/*.manifest.json
+```bash
+OAL_GEMINI_PORT=/dev/serial/by-id/<gemini>
+OAL_SKYWATCHER_PORT=/dev/serial/by-id/<mount>
 ```
 
-GUI на RPi підключається до `http://127.0.0.1:8080`; GUI на іншому ПК — до LAN/VPN адреси Pi. Закриття GUI не зупиняє node або hardware operations.
+Без цих змінних native drivers роблять protocol probing доступних serial ports.
 
-## Поточна межа
+## Native hardware feature boundary
 
-v0.2.6 робить native OAL driver path реальним, але ще не завершує всю нову driver platform:
+### Gemini EAF
 
-- QHY planetary live/ring-buffer/SER — наступний data-plane increment;
-- native Gemini driver потребує підтвердженого low-level protocol; до цього використовується INDI/Alpaca compatibility path;
-- native mount driver треба реалізувати під конкретний фізичний протокол монтування;
-- third-party `out-of-process` manifests у v0.2.6 **не запускаються in-process**; sandbox driver host ще треба реалізувати;
-- permissions у manifest зараз описуються і перевіряються структурно, але OS sandbox enforcement ще попереду;
-- TLS/auth/safety, idempotency, RFC 9457, reliable event replay і science FITS/RAW persistence залишаються P0.
+Реалізовано: discovery/handshake, firmware, controller position, moving state, max position, temperature when present, absolute/relative move, limits, persistent serial session.
 
-Деталі:
+Не оголошено готовим: hardware halt. До підтвердження точної команди capability повертає `supported:false`. Перший HIL тест має починатися з малих переміщень і механічно безпечного діапазону.
 
-- `docs/NATIVE_DRIVER_SDK.md`
-- `docs/ARCHITECTURE.md`
-- `docs/RPI_FIRST_HARDWARE.md`
-- `docs/STATUS.md`
-- `docs/ROADMAP_P0_P1_IMPLEMENTATION.md`
+### Sky-Watcher/SynScan
+
+Реалізовано: serial v3.3 handshake, mount model/firmware/alignment, precise J2000 RA/DEC, GOTO, abort, sync, tracking, GOTO progress, pointing/pier state where supported, fixed-rate pulse guide для EQ mounts.
+
+`park` повертає `NOT_SUPPORTED`, тому що SynScan serial protocol v3.3 не має нормативної park-команди. Park workflow буде доданий на OAL service layer або через direct motor-controller profile після окремої hardware qualification.
+
+Direct Sky-Watcher Motor Controller protocol має codec groundwork (і офіційно може працювати serial/USB або через SynScan Wi-Fi UDP 11880), але RA/DEC direct-axis control потребує alignment/model math; він не маскується під готовий driver.
+
+## Поточні наступні P0/P1 кроки
+
+- HIL qualification native Gemini + native Sky-Watcher на конкретному телескопі;
+- async ASTAP + closed-loop GOTO/recenter;
+- automatic polar-alignment workflow поверх native mount/camera;
+- QHY live/ring-buffer/SER;
+- FITS/RAW durable data plane;
+- capability-driven GUI (не показувати Park/Halt як доступні, якщо driver їх не підтримує);
+- out-of-process sandbox driver host;
+- idempotency, RFC 9457 errors, replayable WebSocket events, TLS/auth/safety.
+
+Деталі: `docs/RPI_FIRST_HARDWARE.md`, `docs/NATIVE_DRIVER_SDK.md`, `docs/STATUS.md`, `docs/VALIDATION.md`.

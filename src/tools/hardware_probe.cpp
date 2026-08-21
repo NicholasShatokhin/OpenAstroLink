@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
     parser.addOption({"no-indi", "Skip INDI compatibility discovery"});
     parser.addOption({"no-native", "Skip native OpenAstroLink driver discovery"});
     parser.addOption({"no-qhy", "Do not require a native QHY camera"});
+    parser.addOption({"require-native-telescope", "Require native QHY + Gemini EAF + Sky-Watcher device discovery"});
     parser.addOption({"no-astap", "Skip ASTAP probe"});
     parser.process(app);
 
@@ -55,19 +56,28 @@ int main(int argc, char **argv) {
             out << "  driver " << d.value("driverId").toString() << "  ABI " << d.value("abiVersion").toInt()
                 << "  " << d.value("version").toString() << "  isolation=" << d.value("isolation").toString("unspecified") << "\n";
         }
-        bool qhyFound = false;
+        bool qhyFound = false, geminiFound = false, skywatcherFound = false;
         for (const auto &v : devices) {
             const auto d = v.toObject();
             const QString key = nativeBackendKey(d.value("driverId").toString(), d.value("id").toString());
             out << "  - " << d.value("name").toString() << " [" << d.value("type").toString() << "]\n"
                 << "    backend: " << key << "\n";
-            if (d.value("driverId").toString() == "oal.qhy") qhyFound = true;
+            const QString driver = d.value("driverId").toString();
+            qhyFound |= driver == "oal.qhy";
+            geminiFound |= driver == "oal.gemini";
+            skywatcherFound |= driver == "oal.skywatcher";
         }
         for (const auto &e : errors) out << "  warning: " << e << "\n";
         if (!parser.isSet("no-qhy") && !qhyFound) {
             out << "Native QHY: NOT READY  oal.qhy driver loaded no camera (or driver not built)\n";
             allOk = false;
         } else if (!parser.isSet("no-qhy")) out << "Native QHY: OK\n";
+        out << "Native Gemini EAF: " << (geminiFound ? "OK" : "not discovered") << "\n";
+        out << "Native Sky-Watcher: " << (skywatcherFound ? "OK" : "not discovered") << "\n";
+        if (parser.isSet("require-native-telescope") && (!qhyFound || !geminiFound || !skywatcherFound)) {
+            out << "Native telescope pack: NOT READY (QHY=" << qhyFound << ", Gemini=" << geminiFound << ", SkyWatcher=" << skywatcherFound << ")\n";
+            allOk = false;
+        } else if (parser.isSet("require-native-telescope")) out << "Native telescope pack: OK\n";
     }
 
     if (!parser.isSet("no-indi")) {

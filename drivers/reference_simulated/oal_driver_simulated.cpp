@@ -58,7 +58,7 @@ void event(const char *device,const std::string &type,const std::string &payload
 bool start(void*,const char*){return true;}
 void stop(void*){cameraConnected=false;mountConnected=false;focuserConnected=false;}
 const char *manifest(void*){
-    return copyString(R"({"driverId":"oal.simulated","name":"OpenAstroLink native reference simulator","version":"0.2.6","abiVersion":2,"threadModel":"per-device-serial","capabilityModel":"typed-json-v1"})");
+    return copyString(R"({"driverId":"oal.simulated","name":"OpenAstroLink native reference simulator","version":"0.2.7","abiVersion":2,"threadModel":"per-device-serial","capabilityModel":"typed-json-v1"})");
 }
 const char *devices(void*){
     return copyString(R"([
@@ -132,7 +132,7 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
 bool cancel(void*,const char *device,const char*){const std::string d=device?device:"";if(d=="sim-camera")exposureAbort=true;else if(d=="sim-mount")mountAbort=true;else if(d=="sim-focuser")focusAbort=true;else return false;return true;}
 void releaseString(void*,const char *p){if(p)host.deallocate(host.hostContext,const_cast<char*>(p));}
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.simulated","OpenAstroLink native reference simulator","0.2.6",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+                "oal.simulated","OpenAstroLink native reference simulator","0.2.7",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 } // namespace
 
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h){if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||h->structSize<sizeof(OalDriverHostV2))return nullptr;host=*h;return &api;}
