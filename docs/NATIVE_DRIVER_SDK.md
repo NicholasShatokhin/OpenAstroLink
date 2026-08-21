@@ -1,4 +1,4 @@
-# OpenAstroLink Native Driver SDK — ABI v2 (v0.2.6)
+# OpenAstroLink Native Driver SDK — ABI v2 (v0.2.9)
 
 ## 1. Architectural rule
 
@@ -74,7 +74,7 @@ Minimum example:
 native:<driverId>/<encoded-deviceId>
 ```
 
-Third-party manifests may declare future `out-of-process` isolation. **v0.2.6 deliberately refuses to load such a driver in-process** because the sandboxed driver host is not implemented yet; the node will not silently weaken the requested isolation policy.
+Third-party manifests may declare future `out-of-process` isolation. **v0.2.9 deliberately refuses to load such a driver in-process** because the sandboxed driver host is not implemented yet; the node will not silently weaken the requested isolation policy.
 
 ## 4. Discovery and capabilities
 
@@ -93,7 +93,7 @@ A missing capability is not equivalent to `true`.
 
 ## 5. Method invocation
 
-The v0.2.6 native adapters map the following canonical method names:
+The v0.2.9 native adapters map the following canonical method names:
 
 ### Common
 
@@ -142,7 +142,7 @@ The request and response payloads are UTF-8 JSON at the ABI boundary for control
 
 The driver can implement `cancel(deviceId, operationId)`. Host-level operation/resource locking remains authoritative. Full propagation of every operation ID into every legacy path is still being completed, but ABI v2 reserves the correct boundary now.
 
-Drivers declare a concurrency model such as `serial`, `per-device-serial` or `concurrent`. The v0.2.6 loader enforces normal `serial`/`per-device-serial` invocation locking. A driver MUST NOT assume that calls arrive from the Qt GUI thread; OAL operations execute in worker threads.
+Drivers declare a concurrency model such as `serial`, `per-device-serial` or `concurrent`. The v0.2.9 loader enforces normal `serial`/`per-device-serial` invocation locking. A driver MUST NOT assume that calls arrive from the Qt GUI thread; OAL operations execute in worker threads.
 
 Explicit safety/cancellation methods (`camera.abortExposure`, `mount.abort`, `focuser.halt`) and the ABI `cancel()` callback bypass the normal per-device serialization lock so they can interrupt an active long call. Drivers MUST make those abort paths thread-safe against the operation they interrupt.
 
@@ -237,3 +237,8 @@ The loader also searches `OAL_DRIVER_PATH`, `appDir/drivers`, and standard OpenA
 ## 12. Compatibility adapters
 
 INDI, ASCOM Alpaca and LX200 remain supported because they provide broad hardware coverage. They map legacy behavior into the richer OAL model. The reverse is explicitly not a design requirement: native OAL features may exist that cannot be represented by a legacy backend.
+
+
+### `oal.canon`
+
+`drivers/canon/` is a native ABI-v2 Canon EOS driver. On Linux/RPi it links `libgphoto2` as a low-level USB/PTP transport library; it does **not** use `indiserver`, INDI XML, ASCOM or an OAL compatibility adapter. Original DSLR files may be spooled locally while a decoded JPEG/embedded RAW preview is published through `publishFrame()` for autofocus/plate solving.

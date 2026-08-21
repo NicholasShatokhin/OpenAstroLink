@@ -1,8 +1,8 @@
-# Build platforms — v0.2.6
+# Build platforms — v0.2.9
 
 ## Raspberry Pi 4 — primary observatory deployment
 
-64-bit Raspberry Pi OS / Debian-family is the target. Native QHY is built as an ABI-v2 plugin; INDI is optional compatibility support for mount/Gemini until native drivers exist.
+64-bit Raspberry Pi OS / Debian-family is the target. Native QHY, Canon EOS, Gemini and Sky-Watcher are built as ABI-v2 native plugins in the RPi native preset; INDI remains optional compatibility support for other equipment.
 
 ```bash
 cmake -S . -B build-rpi -G Ninja \
@@ -72,3 +72,12 @@ On RPi/Linux installation the recommended location is:
 ```text
 /usr/local/lib/openastrolink/drivers
 ```
+
+
+## Native Canon EOS
+
+On Raspberry Pi/Linux enable `OAS_ENABLE_NATIVE_CANON=ON` (already enabled by `rpi4-native-release` and `rpi4-observatory-release`). The build requires `libgphoto2-dev` and `libjpeg` development files. This builds the ABI-v2 `oal_driver_canon` plugin; the legacy in-core `canon-gphoto2` compatibility backend remains independently controlled by `OAS_ENABLE_GPHOTO2`.
+
+## ZWO SDK options (v0.2.9)
+
+Native ZWO support is optional per build. `rpi4-native-release` and `rpi4-observatory-release` enable ASI/EAF native drivers; provide `ZWO_ASI_ROOT` / exact ASI include+library paths and `ZWO_EAF_ROOT` / exact EAF include+library paths. General observatory builds may keep INDI enabled in parallel for non-native equipment.

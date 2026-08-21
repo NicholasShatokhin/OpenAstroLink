@@ -17,8 +17,10 @@ int main(int argc,char **argv){
     QCommandLineOption httpOpt({"p","http-port"},"HTTP control port.","port");
     QCommandLineOption wsOpt({"w","ws-port"},"WebSocket event port.","port");
     QCommandLineOption noWs("no-websocket","Disable the WebSocket event stream.");
-    QCommandLineOption noAuto("no-autoconnect","Do not restore persisted camera/mount/focuser bindings.");
-    parser.addOption(httpOpt);parser.addOption(wsOpt);parser.addOption(noWs);parser.addOption(noAuto);parser.process(app);
+    QCommandLineOption noAuto("no-autoconnect","Do not restore persisted main-camera/guide-camera/mount/focuser bindings.");
+    QCommandLineOption stellariumOpt("stellarium-port","Enable Stellarium Telescope Control bridge on TCP port.","port");
+    QCommandLineOption noStellarium("no-stellarium","Do not start the persisted Stellarium bridge.");
+    parser.addOption(httpOpt);parser.addOption(wsOpt);parser.addOption(noWs);parser.addOption(noAuto);parser.addOption(stellariumOpt);parser.addOption(noStellarium);parser.process(app);
 
     oas::AppSettings settings;
     quint16 httpPort=parser.isSet(httpOpt)?parser.value(httpOpt).toUShort():settings.oalPort();
@@ -53,6 +55,13 @@ int main(int argc,char **argv){
         return 2;
     }
     qInfo().noquote()<<QString("OpenAstroLink node ready: HTTP 0.0.0.0:%1, WebSocket %2").arg(httpPort).arg(wsEnabled?QString("0.0.0.0:%1").arg(wsPort):"disabled");
+    if(!parser.isSet(noStellarium)){
+        const bool enableStellarium=parser.isSet(stellariumOpt)||settings.stellariumEnabled();
+        if(enableStellarium){
+            const quint16 port=parser.isSet(stellariumOpt)?parser.value(stellariumOpt).toUShort():settings.stellariumPort();
+            QString stellariumError;if(!controller.startStellariumServer(port,&stellariumError))qWarning().noquote()<<"Stellarium bridge not started:"<<stellariumError;
+        }
+    }
     qInfo().noquote()<<"All autofocus, polar-alignment, solve, guiding and session operations execute in this process.";
     return app.exec();
 }

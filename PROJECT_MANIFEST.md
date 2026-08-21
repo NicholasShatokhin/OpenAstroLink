@@ -1,50 +1,49 @@
-# Project manifest
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.9
+
+English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
 - Application: `OpenAstroSuite`
 - Headless service: `openastrolink-node`
-- Hardware diagnostic: `oal-hardware-probe`
+- Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
-- Protocol/driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.7-native-telescope-hardware-pack`
+- Protocol / native driver framework: `OpenAstroLink (OAL)`
+- Version: `0.2.9-zwo-stellarium-dual-optics`
 - Language: C++20
-- UI/framework: Qt 6.4+
+- UI: Qt 6.4+
 - Image processing: OpenCV 4
 - REST: Qt HTTP Server
 - Events: Qt WebSockets
-- Async execution: Qt Concurrent + node-local `OperationManager`
-- Serial: Qt SerialPort through per-device persistent native serial sessions
-- Native driver ABI: C ABI v2 reference; ABI v1 compatibility fixture retained
-- Native frame boundary: host callback (`OalFrameDescriptorV2`), no Base64 driver payload
+- Async execution: Qt Concurrent + `OperationManager`
+- Native driver ABI: C ABI v2
 
-## Reference architecture
+## Native OAL drivers
 
-Native OAL drivers are preferred. INDI/Alpaca/LX200 are compatibility adapters and must not constrain OAL capabilities or semantics. INDI support is compiled in by default for general observatory builds but can be completely disabled with `OAS_ENABLE_INDI=OFF` / `rpi4-native-release`.
+- `oal.qhy` — QHY cameras through QHYCCD SDK.
+- `oal.canon` — Canon EOS through USB/PTP/libgphoto2 transport.
+- `oal.zwo.asi` — ZWO ASI cameras through ZWO ASI SDK.
+- `oal.zwo.eaf` — ZWO EAF focusers through ZWO EAF SDK.
+- `oal.gemini` — Gemini EAF native serial path.
+- `oal.skywatcher` — Sky-Watcher SynScan native mount path.
+- `oal.simulated` — reference ABI-v2 simulated devices.
 
-## Bundled native drivers
+## Compatibility adapters
 
-- `drivers/reference_simulated/*` — reference simulated camera/mount/focuser.
-- `drivers/qhy/*` — native QHYCCD camera via QHYCCD SDK.
-- `drivers/gemini/*` — native Gemini EAF / MyFocuserPro2-compatible serial focuser.
-- `drivers/skywatcher/*` — native Sky-Watcher SynScan hand-controller serial mount plus experimental Motor Controller codec foundation.
-- `drivers/common_blocking_serial_session.h` — persistent, dedicated-thread Qt serial transport helper for native drivers.
+INDI, ASCOM Alpaca, LX200, OpenCV/UVC and OAL remote-device adapters remain available. Native OAL is preferred but INDI is intentionally easy to compile and enable for broad third-party equipment coverage.
 
-## Entry points
+## Multi-camera roles
 
-- GUI executable: `src/app/main.cpp`
-- Headless node: `src/node/main.cpp`
-- Hardware probe: `src/tools/hardware_probe.cpp`
-- GUI control contract: `src/core/observatory_controller.h`
-- Local core: `src/core/application_controller.*`
-- Remote GUI proxy: `src/core/remote_observatory_controller.*`
-- Async operation manager: `src/core/operation_manager.*`
-- Native ABI: `include/oal/driver_api.h`
-- Native registry/loader: `src/oal/driver_plugin_loader.*`
-- Native IDevice adapters: `src/backends/oal_native_devices.*`
-- Compatibility INDI: `src/backends/indi_devices.*`
-- Compatibility Gemini profile: `src/backends/gemini_eaf_focuser.*`
-- ASTAP adapter: `src/algorithms/astap_solver.*`
-- OAL REST: `src/oal/oal_server.*`
-- OAL WebSocket: `src/oal/oal_ws_server.*`
-- OpenAPI: `docs/openapi.yaml`
-- Native protocol smoke test: `tests/native_protocol_smoke.cpp`
-- RPi deployment: `docs/RPI_NODE.md`, `docs/RPI_FIRST_HARDWARE.md`, `packaging/systemd/*`
+The observatory core has independent `main` and `guide` camera roles. Their operation resources are `camera` and `camera.guide`. Both can be connected concurrently, including two devices from the same multi-device native driver.
+
+## Optical profiles
+
+`TelescopeProfile` stores the main optical train and a separate guide optical train: aperture, effective focal length, camera pixel/sensor geometry, derived f-ratio and image scale, plus main optical design and optional central obstruction.
+
+## Stellarium
+
+`StellariumTelescopeServer` implements the external Stellarium Telescope Control TCP bridge for mount position and GOTO. Default TCP port: `10000`. Full camera/focuser/workflow control remains OAL-native.
+
+## Documentation policy
+
+Canonical: `README.md`, `PROJECT_MANIFEST.md`, `docs/*.md`.
+Ukrainian mirrors: `README_UA.md`, `PROJECT_MANIFEST_UA.md`, `docs/uk/*.md`.
+Machine-readable API/ABI identifiers remain English.

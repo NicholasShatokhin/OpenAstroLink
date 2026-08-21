@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.6
+  version: 0.2.9
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -53,6 +53,7 @@ paths:
               required: [type, backend]
               properties:
                 type: { type: string, enum: [camera, mount, focuser] }
+                role: { type: string, enum: [main, guide], default: main }
                 backend: { type: string }
                 endpoint: { type: string }
       responses: { '200': { $ref: '#/components/responses/Success' } }
@@ -62,7 +63,7 @@ paths:
         - in: path
           name: type
           required: true
-          schema: { type: string, enum: [camera, mount, focuser] }
+          schema: { type: string, enum: [camera, guide-camera, mount, focuser] }
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '409': { $ref: '#/components/responses/Success' }
@@ -107,6 +108,21 @@ paths:
       summary: Current aggregate observatory state
       responses:
         '200': { $ref: '#/components/responses/Success' }
+  /integrations/stellarium:
+    get:
+      summary: Stellarium Telescope Control bridge state
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+    post:
+      summary: Enable/disable the Stellarium mount-position/GOTO TCP bridge
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                port: { type: integer, minimum: 1, maximum: 65535, default: 10000 }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
   /mounts/{id}/status:
     get:
       parameters: [ { $ref: '#/components/parameters/DeviceId' } ]

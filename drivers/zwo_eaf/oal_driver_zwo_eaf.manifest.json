@@ -1,0 +1,12 @@
+{
+  "driverId": "oal.zwo.eaf",
+  "name": "OpenAstroLink Native ZWO EAF Focuser Driver",
+  "version": "0.2.9",
+  "abiVersion": 2,
+  "library": "oal_driver_zwo_eaf",
+  "deviceClasses": ["focuser"],
+  "threadModel": "per-device-serial",
+  "isolation": "in-process",
+  "permissions": {"usb": true},
+  "transport": {"kind": "vendor-sdk", "sdk": "ZWO EAF SDK"}
+}

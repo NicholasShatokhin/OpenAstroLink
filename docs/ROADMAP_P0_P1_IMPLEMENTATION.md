@@ -1,48 +1,48 @@
-# OpenAstroLink — план реалізації P0/P1 після v0.2
+# OpenAstroLink — P0/P1 implementation roadmap after v0.2
 
-Статус документа: implementation plan, **19 August 2026**.
+Document status: implementation plan, updated **21 August 2026**.
 
-## 0. Архітектурний принцип
+## 0. Architectural principle
 
-OpenAstroLink розвивається як **новий native device stack**, а не як оболонка над INDI/ASCOM.
+OpenAstroLink is being developed as a **new native device stack**, not as a wrapper around INDI or ASCOM.
 
 ```text
 Native OAL drivers        ← reference architecture
 INDI / Alpaca / LX200     ← compatibility / migration
-vendor SDK                ← allowed low-level hardware access under a native OAL driver
+vendor SDK                ← permitted low-level hardware access beneath a native OAL driver
 ```
 
-Нові можливості проектуються у найкращій OAL-моделі. Compatibility adapters відображають у неї стільки старого API, скільки можливо; вони не обмежують native OAL семантику.
+New capabilities are designed in the best OAL model first. Compatibility adapters translate as much of a legacy API as can be represented truthfully; legacy semantics do not constrain the native OAL model.
 
-P0 реалізується вертикальними інкрементами: schema → core → driver boundary → REST/WS → simulator/reference driver → conformance → GUI/client migration.
+P0 is implemented as vertical increments: schema → core → driver boundary → REST/WS → simulator/reference driver → conformance → GUI/client migration.
 
-Conformance suite росте з кожним інкрементом. Жоден backend/driver не називається production-ready лише тому, що він компілюється.
+The conformance suite grows with each increment. No backend or driver is called production-ready merely because it compiles.
 
 ---
 
 # P0.D — Native OAL driver foundation
 
-Цей foundation був піднятий у пріоритеті після практичних RPi/INDI тестів, щоб не закріпити legacy backend як основну архітектуру.
+This foundation was moved earlier after practical RPi/INDI work showed that a legacy backend must not become the reference architecture by accident.
 
-## v0.2.6 — реалізовано
+## v0.2.6 — foundation implemented
 
 ### ABI v2
 
-`include/oal/driver_api.h` тепер визначає compiler-neutral C ABI v2:
+`include/oal/driver_api.h` defines a compiler-neutral C ABI v2 with:
 
 - manifest/ABI negotiation;
-- lifecycle `start/stop`;
+- `start/stop` lifecycle;
 - device enumeration;
 - self-described capabilities;
 - health;
-- invoke context з request/operation/deadline;
+- invoke context containing request/operation/deadline information;
 - cancellation;
 - push events;
-- host frame publication без Base64 pixels.
+- host frame publication without Base64 pixel payloads.
 
 ### Manifest-based registry
 
-Node автоматично сканує native drivers, перевіряє `*.manifest.json`, завантажує ABI-v2 library та реєструє devices. `OAL_DRIVER_PATH` дозволяє додаткові каталоги.
+The node scans native drivers, validates `*.manifest.json`, loads ABI-v2 libraries, and registers their devices. `OAL_DRIVER_PATH` allows additional search directories.
 
 Native device key:
 
@@ -50,68 +50,68 @@ Native device key:
 native:<driverId>/<deviceId>
 ```
 
-GUI показує native devices окремо від compatibility/embedded backends.
+The GUI presents native devices separately from compatibility/embedded backends.
 
 ### Reference simulator
 
-`oal.simulated` реалізує camera + mount + focuser через справжній ABI v2 і використовується як reference/conformance driver.
+`oal.simulated` implements camera + mount + focuser through the real ABI v2 boundary and acts as the reference/conformance driver.
 
-### Native QHY
+### Native hardware family implemented so far
 
-`oal.qhy` — перший hardware native driver:
+The current native path includes:
 
 ```text
-QHY camera → QHYCCD SDK → oal.qhy → ABI v2 → OAL core
+QHY camera      → QHYCCD SDK        → oal.qhy          → ABI v2
+Canon EOS       → USB/PTP/libgphoto2→ oal.canon        → ABI v2
+Gemini EAF      → USB serial        → oal.gemini       → ABI v2
+Sky-Watcher     → SynScan serial    → oal.skywatcher   → ABI v2
+ZWO ASI camera  → ASI SDK           → oal.zwo.asi      → ABI v2
+ZWO EAF         → EAF SDK           → oal.zwo.eaf      → ABI v2
 ```
 
-INDI для QHY більше не є необхідним у reference path.
+INDI is therefore not required for these supported native paths. It remains deliberately easy to enable for other equipment.
 
-Поточний native QHY scope:
+Current QHY scope includes exact hardware-ID discovery, connect/disconnect, single exposure, abort, ROI/binning, gain/offset, requested 16-bit acquisition where supported, health/capabilities/events, and host-frame-v2 publication. Planetary streaming/SER is still pending.
 
-- exact hardware ID discovery;
-- connect/disconnect;
-- single exposure;
-- abort;
-- ROI/binning;
-- gain/offset;
-- 16-bit request where supported;
-- health/capabilities/events;
-- host-frame-v2 publication.
+Current Canon scope includes USB/PTP discovery, shutter/ISO, Bulb, cooperative Bulb cancellation, original RAW/JPEG file spooling, and preview publication.
 
-Planetary streaming/SER ще не заявляється (`supported:false`).
+Current Gemini scope includes direct MyFocuserPro2-compatible serial position/movement/status/temperature. An unverified hardware stop command is not advertised as a capability.
+
+Current Sky-Watcher scope includes the documented SynScan serial path for RA/Dec status, GOTO, abort, sync, tracking, alignment/pier-side probing, and pulse guide. Direct motor-controller support currently remains a low-level experimental codec until the full calibrated coordinate/alignment layer is implemented.
+
+Current ZWO ASI scope includes multi-camera enumeration, sensor/capability discovery, single exposure, ROI/binning, gain/offset, cancellation, and native frame publication. The SDK exposes high-rate video capture, but the production OAL ring-buffer/streaming operation is still pending.
+
+Current ZWO EAF scope includes enumeration, absolute/relative motion, halt/cancellation, position/moving state, temperature when available, max step, reverse, and backlash capability reporting.
 
 ### Isolation rule
 
-Manifest може вимагати `out-of-process`, але v0.2.6 **відмовляється** завантажувати такий driver in-process. Ми не будемо непомітно послаблювати requested isolation. Sandboxed driver host тепер є раннім P0/P1 завданням.
-
-## Наступні native drivers
-
-### Gemini EAF
-
-Поточний INDI/Alpaca шлях — compatibility only. Native `oal.gemini` реалізується після підтвердження low-level protocol для фактичної firmware/USB bridge. Неперевірені serial commands не допускаються.
-
-### Mount
-
-Native mount driver додається для конкретного hardware/protocol після визначення фактичної моделі/transport. INDI/LX200/Alpaca залишаються compatibility fallback.
+A manifest may request `out-of-process`, but the current in-process loader refuses such a driver rather than silently weakening the requested isolation. A sandboxed driver host is therefore an early P0/P1 task.
 
 ---
 
 # P0.0 — Compatibility pilots
 
-Gemini EAF compatibility profile уже існує через INDI/Alpaca. Його роль тепер чітко визначена: interoperability і hardware pilot, а не reference driver architecture.
+INDI, ASCOM Alpaca, and LX200 remain first-class interoperability/migration paths. Their purpose is broad equipment coverage while native OAL drivers are added, not to define OAL semantics.
+
+The Raspberry Pi presets make this explicit:
+
+```text
+rpi4-native-release       → native hardware, INDI OFF
+rpi4-observatory-release  → native hardware + INDI compatibility ON
+```
 
 ---
 
-# P0.1 — Capabilities, identity, discovery і нормативні schemas
+# P0.1 — Capabilities, identity, discovery, and normative schemas
 
-ABI-v2 foundation вже має manifest/device/capability discovery. Наступний крок — зробити capability model нормативною для HTTP API та всіх device classes.
+The ABI-v2 foundation already exposes manifest/device/capability discovery. The next step is to make the capability model normative across HTTP, all device classes, and compatibility adapters.
 
 ## Core/API
 
 - `DeviceIdentity`, `DriverIdentity`, `TransportInfo`;
 - typed `DeviceCapabilities`;
 - `Limit/Range/Precision`;
-- Quantity/time/coordinate schemas;
+- quantity/time/coordinate schemas;
 - `GET /.well-known/openastrolink`;
 - canonical `GET /devices/{id}/capabilities`;
 - version/profile negotiation.
@@ -119,7 +119,7 @@ ABI-v2 foundation вже має manifest/device/capability discovery. Насту
 ## Definition of Done
 
 - OpenAPI + JSON Schema;
-- native simulator/QHY conform to same schemas;
+- native simulator and hardware drivers conform to the same schemas;
 - compatibility adapters translate capabilities without inventing unsupported features;
 - GUI never assumes park/pulse-guide/pier-side/temperature/etc.;
 - CI schema validation.
@@ -128,32 +128,33 @@ ABI-v2 foundation вже має manifest/device/capability discovery. Насту
 
 # P0.2 — RFC 9457 Problem Details
 
-Єдина machine-readable error model:
+Adopt one machine-readable error model:
 
 - `type`, `title`, `status`, `detail`, `instance`;
 - `oalCode`, `retryable`;
-- `deviceId`/`operationId`;
+- `deviceId` / `operationId`;
 - optional structured causes.
 
-Registry: capability-not-supported, device-busy, safety-interlock, invalid-state, timeout, transport-lost, cancelled, checksum-mismatch, stale-sequence, driver-crashed тощо.
+Registry examples: `capability-not-supported`, `device-busy`, `safety-interlock`, `invalid-state`, `timeout`, `transport-lost`, `cancelled`, `checksum-mismatch`, `stale-sequence`, `driver-crashed`.
 
 ---
 
 # P0.3 — Async operations
 
-Уже є vertical slices:
+Vertical slices already exist for:
 
 - `autofocus.run`;
 - `mount.slew`;
-- `camera.exposure`.
+- `camera.exposure`;
+- `camera.guide.exposure`.
 
-Залишилося перевести:
+Still to migrate where appropriate:
 
-- focuser long move where needed;
+- long focuser motion;
 - solve;
 - park;
 - session execution;
-- meridian flip orchestration.
+- meridian-flip orchestration.
 
 State machine:
 
@@ -163,7 +164,7 @@ queued → running → succeeded
                ↘ cancelled
 ```
 
-HTTP thread не повинен чекати тривалу physical operation.
+The HTTP request-processing thread must never wait for a long physical operation.
 
 ---
 
@@ -171,7 +172,7 @@ HTTP thread не повинен чекати тривалу physical operation.
 
 ## Idempotency
 
-`Idempotency-Key` для mutating create commands:
+`Idempotency-Key` for mutating create commands:
 
 - same key + same request → same operation;
 - same key + different request → conflict;
@@ -179,13 +180,16 @@ HTTP thread не повинен чекати тривалу physical operation.
 
 ## Canonical locks
 
-- autofocus → camera + focuser;
-- exposure → camera;
-- focuser move → focuser;
-- slew/park → mount;
-- guiding calibration → mount + guider/camera as required;
-- meridian flip → mount + guider + camera;
-- roof motion → roof + safety dependencies.
+- autofocus → `camera + focuser`;
+- main exposure → `camera`;
+- guide exposure → `camera.guide`;
+- focuser move → `focuser`;
+- slew/park → `mount`;
+- guiding calibration → `mount + camera.guide` or the declared guider resource;
+- meridian flip → `mount + guider + camera`;
+- roof motion → `roof + safety dependencies`.
+
+The dual-camera model introduced in v0.2.9 deliberately separates `camera` and `camera.guide` so a guide acquisition does not inherently block the main imager.
 
 ---
 
@@ -205,7 +209,7 @@ HTTP thread не повинен чекати тривалу physical operation.
 
 Separate `SafetyPolicyEngine`:
 
-- emergency stop independent of cloud;
+- emergency stop independent of cloud connectivity;
 - weather safe/unsafe/unknown;
 - roof/dome state;
 - power dependencies;
@@ -217,7 +221,7 @@ Separate `SafetyPolicyEngine`:
 
 # P0.6 — Science data plane
 
-ABI-v2 already removes Base64 from the **native plugin boundary**. The network/storage science data plane remains to implement.
+ABI v2 already removes Base64 from the **native plug-in boundary**. The network/storage science data plane remains to implement.
 
 First production profile:
 
@@ -237,32 +241,35 @@ Next:
 - SER writer;
 - preview independent from science bytes.
 
+For ZWO and QHY, this is also where high-rate planetary acquisition moves from SDK video APIs into a standardized OAL stream/ring-buffer contract.
+
 ---
 
 # P0.7 — Reliable event stream
 
 - `streamId`;
 - monotonic `sequence`;
-- reconnect `lastSequence`;
+- reconnect with `lastSequence`;
 - replay buffer;
 - snapshot fallback;
 - duplicate-tolerant clients;
 - priority delivery for safety events.
 
-Driver ABI push events feed into this stream; drivers themselves do not implement WebSocket transport.
+Driver ABI push events feed this stream; drivers themselves do not implement WebSocket transport.
 
 ---
 
-# P0.8 — Conformance/fault injection
+# P0.8 — Conformance and fault injection
 
 Test matrix:
 
 - manifests/ABI negotiation;
 - discovery/capabilities;
 - native simulator;
-- native QHY contract;
+- QHY/Canon/Gemini/Sky-Watcher/ZWO native contracts;
 - compatibility adapters;
 - operation lifecycle/cancel/timeouts;
+- dual-camera role isolation;
 - idempotency/locks;
 - Problem Details;
 - event replay;
@@ -281,27 +288,29 @@ Levels:
 
 # P0/P1.D — Sandboxed out-of-process driver host
 
-Це завдання перенесене вперед із пізнього P2, тому що native OAL driver ecosystem має бути безпечним для third-party/vendor code.
+This task was moved forward from late P2 because a native OAL driver ecosystem must safely host third-party/vendor code.
 
 Target:
 
 ```text
 openastrolink-node
    ├─ oal-driver-host oal.qhy
+   ├─ oal-driver-host oal.zwo.asi
+   ├─ oal-driver-host oal.zwo.eaf
    ├─ oal-driver-host oal.gemini
-   └─ oal-driver-host oal.mount...
+   └─ oal-driver-host oal.skywatcher
 ```
 
 Requirements:
 
 - process crash isolation/restart;
-- permissions manifest enforcement;
+- permission-manifest enforcement;
 - IPC ABI/protocol negotiation;
 - cancellation/events/frame handles;
 - no direct access outside declared USB/serial/network/filesystem permissions;
-- health=`driver-crashed` and recovery telemetry.
+- `health=driver-crashed` and recovery telemetry.
 
-Trusted/reference in-process remains useful for development and very low-latency paths, but third-party default should become out-of-process.
+Trusted/reference in-process mode remains useful for development and low-latency paths, but third-party default should become out-of-process.
 
 ---
 
@@ -320,19 +329,22 @@ Trusted/reference in-process remains useful for development and very low-latency
 
 Native drivers implement richer profiles directly; compatibility adapters expose partial profiles based on actual legacy capabilities.
 
+The node now also stores explicit **main and guide optical trains**. Main and guide aperture, effective focal length, camera pixel size, and sensor geometry become inputs to solver hints, image-scale validation, guiding, and future workflow validation.
+
 ---
 
-# P1.2 — Production solver services
+# P1.2 — Production solver and target services
 
 ASTAP adapter already exists. Next:
 
 - astrometry.net adapter;
 - async/cancellable solve operation;
 - WCS/result/provenance contract;
+- target resolver and planet ephemerides;
 - closed-loop GOTO/recenter;
-- target resolver/planet ephemerides.
+- integration into automatic polar alignment and sessions.
 
-The experimental own indexed blind solver remains separate.
+The experimental in-house indexed blind solver remains separate.
 
 ---
 
@@ -351,13 +363,17 @@ The experimental own indexed blind solver remains separate.
 
 # P1.4 — Guiding completion
 
+The v0.2.9 dual-camera foundation allows a dedicated guide camera to coexist with the main imager. The production guider still needs:
+
+- guide-camera subframe/stream pipeline;
+- star selection and centroid tracking;
 - calibration state machine;
-- RA/DEC response model;
+- RA/Dec response model;
 - dither settle;
 - RMS telemetry;
 - backlash handling;
 - lost-star recovery;
-- flip/reconnect recovery.
+- meridian-flip/reconnect recovery.
 
 ---
 
@@ -371,17 +387,32 @@ The experimental own indexed blind solver remains separate.
 
 ---
 
-# Поточна послідовність релізів
+# P1.6 — External planetarium integrations
+
+v0.2.9 adds a Stellarium Telescope Control TCP bridge. The standard Stellarium telescope protocol is intentionally limited to mount position and GOTO, so camera/focuser/autofocus/polar/session functions remain OAL-native.
+
+Next integration steps:
+
+- interoperability tests against current Stellarium builds;
+- optional sync support if the chosen Stellarium client profile provides a standardized path;
+- a dedicated Stellarium OAL plug-in only if we want the complete observatory control panel inside Stellarium;
+- keep the generic external telescope bridge independent of native-vs-compatibility mount transport.
+
+---
+
+# Current release sequence
 
 1. `v0.2.1` — Gemini compatibility profile.
 2. `v0.2.2` — headless node + local/remote GUI.
-3. `v0.2.3` — operation manager/resource locks/slew/AF.
+3. `v0.2.3` — operation manager/resource locks/slew/autofocus.
 4. `v0.2.4` — async exposure.
-5. `v0.2.5` — RPi/ASTAP/QHY/INDI first hardware path.
-6. **`v0.2.6` — Native OAL ABI v2 + registry + reference simulator + native QHY.**
-7. `v0.2.7` — native driver host groundwork + native Gemini/mount only where protocol is verified; async ASTAP/closed-loop GOTO can proceed in parallel.
-8. `v0.2.8` — QHY native planetary streaming/SER + science-frame persistence/data-plane vertical slice.
-9. `v0.3-alpha` line — normative capabilities/errors/idempotency/events/security/conformance hardening.
-10. `v0.4` line — durable sessions, guiding completion, full device profiles/services.
+5. `v0.2.5` — RPi/ASTAP/QHY/INDI first-hardware path.
+6. `v0.2.6` — Native OAL ABI v2 + registry + reference simulator + native QHY.
+7. `v0.2.7` — Native Telescope Hardware Pack: native Gemini + native Sky-Watcher/SynScan; INDI stays easy and optional.
+8. `v0.2.8` — Native Canon EOS, completing the initial native hardware set for the user's observatory.
+9. **`v0.2.9` — native ZWO ASI/EAF, main+guide camera roles, main+guide optical profiles, Stellarium mount bridge, English-canonical documentation.**
+10. `v0.2.10` candidate — native QHY/ZWO planetary streaming + ring buffer/SER + science-frame persistence.
+11. `v0.3-alpha` line — normative capabilities/errors/idempotency/events/security/conformance hardening.
+12. `v0.4` line — durable sessions, guiding completion, full device profiles/services.
 
 Release labels are working labels; protocol compatibility and validation gates determine promotion.

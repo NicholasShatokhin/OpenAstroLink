@@ -1,4 +1,4 @@
-# Raspberry Pi 4 first-hardware path — v0.2.7 native telescope pack
+# Raspberry Pi 4 first-hardware path — v0.2.9 native observatory pack
 
 ## Target topology
 
@@ -11,7 +11,7 @@ OpenAstroSuite GUI (local RPi monitor or remote PC)
                     │
       ┌─────────────┼───────────────┐
       │             │               │
-   oal.qhy      oal.gemini     oal.skywatcher
+   oal.qhy      oal.canon      oal.gemini     oal.skywatcher
       │             │               │
   QHYCCD SDK    USB serial       SynScan serial
       │             │               │
@@ -154,7 +154,7 @@ connect
 
 The driver enforces controller-reported `0..maxPosition`. Position is tagged `controller-reported`; after power loss the mechanical reference may require operator verification.
 
-**HALT is deliberately capability=false in v0.2.7.** Until the exact stop command is HIL-verified on the target Gemini firmware, do not start a large unattended focuser move. Autofocus can be tested once small moves and range semantics are confirmed.
+**HALT is deliberately capability=false in v0.2.9.** Until the exact stop command is HIL-verified on the target Gemini firmware, do not start a large unattended focuser move. Autofocus can be tested once small moves and range semantics are confirmed.
 
 ## 8. Sky-Watcher qualification
 
@@ -218,3 +218,12 @@ Native drivers/manifests are installed to `/usr/local/lib/openastrolink/drivers`
 - ASTAP solve is not yet an async operation;
 - automatic closed-loop GOTO/recenter and automatic polar wizard remain next increments;
 - current remote deployment is trusted LAN/VPN only until TLS/auth/safety P0 lands.
+
+
+## Canon EOS native path
+
+Install/runtime dependency: `libgphoto2-dev` (bootstrap does this) plus the distro libgphoto2 udev rules. The plugin is `oal.canon`; no INDI process is involved. Keep desktop photo-import services from auto-claiming the USB camera. The raw/original spool defaults to `/var/lib/openastrolink/captures/canon`, created by `install_rpi_node.sh`. Run `oal-hardware-probe --require-native-observatory` to require Canon together with QHY/Gemini/Sky-Watcher.
+
+## Additional v0.2.9 HIL steps
+
+After validating the main camera, connect a distinct guide camera and confirm both remain connected across GUI reconnect and node restart. Verify one main exposure and one guide exposure can coexist without sharing a resource lock. For ZWO, validate ASI exposure/abort/ROI/binning and EAF move/halt/status/temperature. Finally connect Stellarium to TCP 10000 and verify position feedback and a small safe GOTO.

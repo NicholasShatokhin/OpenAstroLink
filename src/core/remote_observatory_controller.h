@@ -31,15 +31,18 @@ public:
     bool loadNeuralModel(const QString &path, QString *error = nullptr) override;
 
     bool connectCamera(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
+    bool connectGuideCamera(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectMount(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectFocuser(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool disconnectCamera(QString *error=nullptr) override;
+    bool disconnectGuideCamera(QString *error=nullptr) override;
     bool disconnectMount(QString *error=nullptr) override;
     bool disconnectFocuser(QString *error=nullptr) override;
     bool disconnectAll(QString *error=nullptr) override;
 
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
+    QString startGuideCapture(const ExposureRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
     QString startAutofocus(const AutofocusRequest &request,QString *error=nullptr) override;
@@ -77,11 +80,16 @@ public:
     SessionStatus sessionStatus() const override;
 
     const CameraFrame &lastFrame() const override{return lastFrame_;}
+    const CameraFrame &lastGuideFrame() const override{return lastGuideFrame_;}
     const SolveResult &lastSolve() const override{return lastSolve_;}
 
     bool startOalServer(quint16,bool,quint16,QString *error=nullptr) override;
     void stopOalServer() override;
     bool oalRunning() const override{return true;}
+    bool startStellariumServer(quint16 port,QString *error=nullptr) override;
+    void stopStellariumServer() override;
+    bool stellariumRunning() const override{return stellariumRunning_;}
+    quint16 stellariumPort() const override{return stellariumPort_;}
     void refreshState() override;
 
 private slots:
@@ -113,11 +121,14 @@ private:
     QUrl wsUrl_;
     CameraFrame previousFrame_;
     CameraFrame lastFrame_;
+    CameraFrame lastGuideFrame_;
     SolveResult lastSolve_;
     GuidingStatus guiding_;
     SessionStatus session_;
     QString pendingSessionName_;
     std::vector<SessionTarget> pendingTargets_;
+    bool stellariumRunning_{false};
+    quint16 stellariumPort_{10000};
 };
 
 } // namespace oas

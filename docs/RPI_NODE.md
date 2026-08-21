@@ -1,6 +1,6 @@
 # Raspberry Pi 4 observatory node
 
-Version 0.2.6 keeps the v0.2.2 process boundary and makes the Raspberry Pi hardware stack **native-OAL-first**: QHY is provided by the ABI-v2 `oal.qhy` plugin; INDI remains a compatibility path for the mount/Gemini until verified native drivers exist.
+Version 0.2.9 keeps the v0.2.2 process boundary and makes the Raspberry Pi hardware stack **native-OAL-first**: QHY, Canon EOS, Gemini EAF and Sky-Watcher are available as ABI-v2 native OAL plugins; INDI remains an optional compatibility path for additional equipment.
 
 ## Runtime model
 
@@ -56,7 +56,7 @@ The service template starts:
 openastrolink-node --http-port 8080 --ws-port 8090
 ```
 
-The node listens on the LAN. The current v0.2.6 API has **no production authentication/TLS yet**, so do not expose ports 8080/8090 directly to the public Internet. Use a trusted isolated LAN or VPN until P0 security is implemented.
+The node listens on the LAN. The current v0.2.9 API has **no production authentication/TLS yet**, so do not expose ports 8080/8090 directly to the public Internet. Use a trusted isolated LAN or VPN until P0 security is implemented.
 
 ## Local GUI with monitor and keyboard
 
@@ -101,14 +101,14 @@ At the next boot `openastrolink-node` restores those bindings. If an INDI server
 Typical Raspberry configuration for the planned hardware is now conceptually:
 
 ```text
-Camera:  native:oal.qhy/qhy:<exact-hardware-id>
-Focuser: gemini-eaf / INDI compatibility until native oal.gemini is validated
+Camera:  native:oal.qhy/qhy:<exact-hardware-id> or native:oal.canon/canon:<serial>
+Focuser: native:oal.gemini/<device> preferred; INDI/gemini-eaf compatibility remains available
 Mount:   INDI/LX200 compatibility until a native driver for the exact mount is validated
 ```
 
 Native devices own their hardware transport and therefore do not require an endpoint text field in the GUI. Exact INDI device names must still match what compatibility drivers publish.
 
-## v0.2.6 native-driver update
+## v0.2.9 native-driver update
 
 The process/node architecture is now paired with:
 
@@ -121,3 +121,10 @@ The process/node architecture is now paired with:
 - node installer deployment of native plugin libraries/manifests.
 
 See `docs/NATIVE_DRIVER_SDK.md` and `docs/RPI_FIRST_HARDWARE.md`. Planetary live/SER, native Gemini/mount, async solve, automated polar wizard, durable DSO execution, final FITS/RAW data plane and security/safety hardening remain pending.
+
+
+Native Canon EOS is provided by `oal.canon`. On Raspberry Pi it links directly to libgphoto2 for USB/PTP transport; INDI is not part of this camera path.
+
+## v0.2.9 node integrations
+
+The node can own two cameras simultaneously (`main` and `guide`) and persists both bindings. The Stellarium bridge can be enabled with `--stellarium-port 10000` or through OAL settings/API. ZWO ASI/EAF native drivers may be loaded alongside QHY/Canon/Gemini/Sky-Watcher and optional INDI compatibility devices.

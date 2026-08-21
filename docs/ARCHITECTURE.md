@@ -1,4 +1,4 @@
-# OpenAstroSuite / OpenAstroLink architecture — v0.2.6
+# OpenAstroSuite / OpenAstroLink architecture — v0.2.9
 
 ## Native OAL is the reference hardware architecture
 
@@ -16,7 +16,7 @@
                   native device registry / ABI v2
                    ┌──────────────┼───────────────┐
                    │              │               │
-             oal.simulated     oal.qhy      future native
+             oal.simulated     oal.qhy      oal.canon      other native
                    │              │          Gemini / mount
                    │           QHY SDK             │
                    ▼              ▼                ▼
@@ -32,7 +32,7 @@
 
 The architectural rule is: **INDI/ASCOM/LX200 are migration layers; native OAL is the reference architecture.** Compatibility systems do not define the limits of native OAL capabilities, operations, events or data transfer.
 
-A native driver may use a vendor SDK underneath when a documented physical protocol is unavailable. For example, `oal.qhy` uses QHYCCD SDK for hardware access, but all device semantics above that layer are native OAL.
+A native driver may use a vendor SDK underneath when a documented physical protocol is unavailable. For example, `oal.qhy` uses QHYCCD SDK for hardware access, while `oal.canon` uses linked libgphoto2 only as the USB/PTP transport library. Neither path passes through INDI/ASCOM; all device semantics above the hardware-access layer are native OAL.
 
 ## Process topology
 
@@ -124,3 +124,7 @@ The RA-axis estimator remains node-local. Native-vs-compatibility hardware is ir
 ## Security boundary
 
 TLS/auth/scopes/safety policy are not yet complete. Until that P0 work lands, expose node ports only on a trusted LAN or through a VPN; do not forward `8080/8090` directly to the public Internet.
+
+## v0.2.9 additions
+
+The device model now includes independent `main` and `guide` camera roles. Main and guide capture use independent resource locks (`camera` and `camera.guide`). The node also hosts a Stellarium Telescope Control TCP bridge for mount position/GOTO, while full observatory services remain OAL-native. ZWO ASI/EAF are first-class native ABI-v2 drivers.

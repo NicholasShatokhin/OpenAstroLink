@@ -17,6 +17,7 @@ private:
     QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QTextEdit *log_{};
     QImage lastImage_;
     QComboBox *cameraBackend_{}; QLineEdit *cameraEndpoint_{}; QLabel *cameraDeviceStatus_{};
+    QComboBox *guideCameraBackend_{}; QLineEdit *guideCameraEndpoint_{}; QLabel *guideCameraDeviceStatus_{};
     QComboBox *mountBackend_{}; QLineEdit *mountEndpoint_{}; QLabel *mountDeviceStatus_{};
     QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{}; QLabel *focuserDeviceStatus_{};
     QDoubleSpinBox *exposure_{}; QComboBox *solverBackend_{}; QLineEdit *catalogPath_{}; QLineEdit *modelPath_{}; QSpinBox *gain_{}; QDoubleSpinBox *hintRa_{}; QDoubleSpinBox *hintDec_{}; QDoubleSpinBox *hintRadius_{};
@@ -28,6 +29,10 @@ private:
     QListWidget *operationsList_{}; QPushButton *cancelOperationButton_{};
     QLineEdit *targetName_{}; QDoubleSpinBox *targetRa_{}; QDoubleSpinBox *targetDec_{}; QDoubleSpinBox *targetExposure_{}; QSpinBox *targetRepeats_{}; QListWidget *targetList_{}; std::vector<SessionTarget> targets_;
     QCheckBox *serverEnabled_{}; QSpinBox *serverPort_{}; QCheckBox *wsEnabled_{}; QSpinBox *wsPort_{};
-    QDoubleSpinBox *focal_{}; QDoubleSpinBox *pixel_{}; QSpinBox *sensorW_{}; QSpinBox *sensorH_{}; QDoubleSpinBox *lat_{}; QDoubleSpinBox *lon_{}; QDoubleSpinBox *elevation_{};
+    QCheckBox *stellariumEnabled_{}; QSpinBox *stellariumPort_{};
+    QLineEdit *opticalDesign_{}; QDoubleSpinBox *aperture_{}; QDoubleSpinBox *obstruction_{};
+    QDoubleSpinBox *focal_{}; QDoubleSpinBox *pixel_{}; QSpinBox *sensorW_{}; QSpinBox *sensorH_{};
+    QLineEdit *guideScopeName_{}; QDoubleSpinBox *guideAperture_{}; QDoubleSpinBox *guideFocal_{}; QDoubleSpinBox *guidePixel_{}; QSpinBox *guideSensorW_{}; QSpinBox *guideSensorH_{};
+    QDoubleSpinBox *lat_{}; QDoubleSpinBox *lon_{}; QDoubleSpinBox *elevation_{};
 };
 }

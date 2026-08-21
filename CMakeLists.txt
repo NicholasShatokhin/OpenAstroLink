@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.7 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.9 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,7 +10,10 @@ set(CMAKE_AUTORCC ON)
 # Native OpenAstroLink is the reference hardware path. Compatibility backends
 # remain available for existing devices/ecosystems.
 option(OAS_ENABLE_QHY "Build native OAL QHYCCD driver (requires QHYCCD SDK)" OFF)
-option(OAS_ENABLE_GPHOTO2 "Enable Canon/libgphoto2 compatibility backend" OFF)
+option(OAS_ENABLE_GPHOTO2 "Enable legacy in-core Canon/libgphoto2 compatibility backend" OFF)
+option(OAS_ENABLE_NATIVE_CANON "Build native OAL Canon EOS driver (direct USB/PTP via linked libgphoto2)" OFF)
+option(OAS_ENABLE_NATIVE_ZWO_ASI "Build native OAL ZWO ASI camera driver (requires ZWO ASI SDK)" OFF)
+option(OAS_ENABLE_NATIVE_ZWO_EAF "Build native OAL ZWO EAF focuser driver (requires ZWO EAF SDK)" OFF)
 option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" ON)
 option(OAS_ENABLE_NATIVE_GEMINI "Build native OAL Gemini EAF driver" ON)
 option(OAS_ENABLE_NATIVE_SKYWATCHER "Build native OAL Sky-Watcher/SynScan mount driver" ON)
@@ -36,6 +39,7 @@ set(OAS_CORE_SOURCES
     src/oal/oal_server.h
     src/oal/oal_ws_server.h
     src/oal/driver_plugin_loader.h
+    src/integrations/stellarium_telescope_server.h
     src/backends/oal_native_devices.h
     src/core/settings.cpp
     src/core/application_controller.cpp
@@ -63,11 +67,15 @@ set(OAS_CORE_SOURCES
     src/oal/oal_server.cpp
     src/oal/oal_ws_server.cpp
     src/oal/driver_plugin_loader.cpp
+    src/integrations/stellarium_telescope_server.cpp
 )
 
-if(OAS_ENABLE_GPHOTO2)
+if(OAS_ENABLE_GPHOTO2 OR OAS_ENABLE_NATIVE_CANON)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GPHOTO2 REQUIRED libgphoto2)
+endif()
+
+if(OAS_ENABLE_GPHOTO2)
     list(APPEND OAS_CORE_SOURCES src/backends/canon_camera.cpp)
 endif()
 
@@ -186,6 +194,65 @@ if(OAS_ENABLE_QHY)
         LIBRARY DESTINATION lib/openastrolink/drivers
         ARCHIVE DESTINATION lib/openastrolink/drivers)
     install(FILES drivers/qhy/oal_driver_qhy.manifest.json
+        DESTINATION lib/openastrolink/drivers)
+endif()
+
+if(OAS_ENABLE_NATIVE_ZWO_ASI)
+    set(ZWO_ASI_ROOT "" CACHE PATH "ZWO ASI SDK root")
+    set(ZWO_ASI_INCLUDE_DIR "" CACHE PATH "Directory containing ASICamera2.h")
+    set(ZWO_ASI_LIBRARY "" CACHE FILEPATH "Exact ZWO ASI SDK library path")
+    if(NOT ZWO_ASI_INCLUDE_DIR)
+        find_path(ZWO_ASI_INCLUDE_DIR ASICamera2.h HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT ENV ZWO_ASI_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
+    endif()
+    if(NOT ZWO_ASI_LIBRARY)
+        find_library(ZWO_ASI_LIBRARY NAMES ASICamera2 ASICamera2.bin HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT PATH_SUFFIXES lib lib64 armv8 x64 REQUIRED)
+    endif()
+    add_library(oal_driver_zwo_asi SHARED drivers/zwo_asi/oal_driver_zwo_asi.cpp)
+    target_include_directories(oal_driver_zwo_asi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${ZWO_ASI_INCLUDE_DIR})
+    target_link_libraries(oal_driver_zwo_asi PRIVATE ${ZWO_ASI_LIBRARY})
+    oal_set_driver_output(oal_driver_zwo_asi)
+    configure_file(drivers/zwo_asi/oal_driver_zwo_asi.manifest.json ${OAL_DRIVER_BUILD_DIR}/oal_driver_zwo_asi.manifest.json COPYONLY)
+    install(TARGETS oal_driver_zwo_asi RUNTIME DESTINATION lib/openastrolink/drivers LIBRARY DESTINATION lib/openastrolink/drivers ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/zwo_asi/oal_driver_zwo_asi.manifest.json DESTINATION lib/openastrolink/drivers)
+endif()
+
+if(OAS_ENABLE_NATIVE_ZWO_EAF)
+    set(ZWO_EAF_ROOT "" CACHE PATH "ZWO EAF SDK root")
+    set(ZWO_EAF_INCLUDE_DIR "" CACHE PATH "Directory containing EAF_focuser.h")
+    set(ZWO_EAF_LIBRARY "" CACHE FILEPATH "Exact ZWO EAF SDK library path")
+    if(NOT ZWO_EAF_INCLUDE_DIR)
+        find_path(ZWO_EAF_INCLUDE_DIR EAF_focuser.h HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT ENV ZWO_EAF_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
+    endif()
+    if(NOT ZWO_EAF_LIBRARY)
+        find_library(ZWO_EAF_LIBRARY NAMES EAFFocuser EAFFocuser.bin HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT PATH_SUFFIXES lib lib64 armv8 x64 REQUIRED)
+    endif()
+    add_library(oal_driver_zwo_eaf SHARED drivers/zwo_eaf/oal_driver_zwo_eaf.cpp)
+    target_include_directories(oal_driver_zwo_eaf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${ZWO_EAF_INCLUDE_DIR})
+    target_link_libraries(oal_driver_zwo_eaf PRIVATE ${ZWO_EAF_LIBRARY})
+    oal_set_driver_output(oal_driver_zwo_eaf)
+    configure_file(drivers/zwo_eaf/oal_driver_zwo_eaf.manifest.json ${OAL_DRIVER_BUILD_DIR}/oal_driver_zwo_eaf.manifest.json COPYONLY)
+    install(TARGETS oal_driver_zwo_eaf RUNTIME DESTINATION lib/openastrolink/drivers LIBRARY DESTINATION lib/openastrolink/drivers ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/zwo_eaf/oal_driver_zwo_eaf.manifest.json DESTINATION lib/openastrolink/drivers)
+endif()
+
+
+if(OAS_ENABLE_NATIVE_CANON)
+    find_package(JPEG REQUIRED)
+    add_library(oal_driver_canon SHARED drivers/canon/oal_driver_canon.cpp)
+    target_include_directories(oal_driver_canon PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${GPHOTO2_INCLUDE_DIRS})
+    target_link_directories(oal_driver_canon PRIVATE ${GPHOTO2_LIBRARY_DIRS})
+    target_compile_options(oal_driver_canon PRIVATE ${GPHOTO2_CFLAGS_OTHER})
+    target_link_libraries(oal_driver_canon PRIVATE ${GPHOTO2_LIBRARIES} JPEG::JPEG)
+    oal_set_driver_output(oal_driver_canon)
+    configure_file(drivers/canon/oal_driver_canon.manifest.json
+                   ${OAL_DRIVER_BUILD_DIR}/oal_driver_canon.manifest.json COPYONLY)
+    install(TARGETS oal_driver_canon
+        RUNTIME DESTINATION lib/openastrolink/drivers
+        LIBRARY DESTINATION lib/openastrolink/drivers
+        ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/canon/oal_driver_canon.manifest.json
         DESTINATION lib/openastrolink/drivers)
 endif()
 

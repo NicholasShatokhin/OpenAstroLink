@@ -1,34 +1,36 @@
-# Як було зведено попередні фрагменти
+# How the previous fragments were consolidated
 
-Цей пакет не є буквальним накладанням усіх дифів. У чаті кілька класів перевизначалися суперечливими способами, частина «готових» бекендів фактично була заглушками, а консольний і Qt-код мали окремі копії логіки. Під час зведення зроблено такі зміни.
+This package is not a literal stacking of every diff produced during development. Several classes had been redefined in conflicting ways, some previously labelled “finished” backends were in fact stubs, and the console and Qt paths contained duplicated logic. Consolidation made the following deliberate changes.
 
-## Єдине ядро пристроїв
+## One device core
 
-- `CaptureDevice`, кілька версій `MountController` і `FocuserController` замінені інтерфейсами `ICamera`, `IMount`, `IFocuser`.
-- GUI, алгоритми, OAL HTTP server і OAL WebSocket використовують ті самі активні об’єкти через `ApplicationController`.
-- Немає окремої «серверної» симуляції, яка мовчки розходиться зі станом GUI.
+- `CaptureDevice`, multiple versions of `MountController`, and `FocuserController` were replaced by the shared `ICamera`, `IMount`, and `IFocuser` interfaces.
+- The GUI, algorithms, OAL HTTP server, and OAL WebSocket layer use the same active objects through `ApplicationController`.
+- There is no separate “server-side” simulation that can silently diverge from GUI state.
 
-## Кросплатформеність
+## Cross-platform implementation
 
-- POSIX `termios/open/read/write` замінено на Qt `QSerialPort`, тому serial LX200 backend не прив’язаний до Linux.
-- Класичний Windows COM-ASCOM не є обов’язковим: ASCOM підтримується через Alpaca HTTP.
-- QHY винесено з core у native OAL ABI-v2 plug-in; Canon/libgphoto2 та INDI залишаються опційними compatibility integrations. Базова збірка не вимагає vendor SDK.
+- POSIX `termios/open/read/write` code was replaced by Qt `QSerialPort`, so the serial LX200 compatibility backend is not tied to Linux.
+- Classic Windows COM ASCOM is not required; ASCOM interoperability is provided primarily through Alpaca HTTP.
+- QHY, Canon EOS, ZWO ASI, and ZWO EAF are native OAL ABI-v2 plug-ins. `oal.canon` uses libgphoto2 only as its linked USB/PTP transport. Legacy `canon-gphoto2`, INDI, Alpaca, and LX200 remain optional compatibility integrations rather than the reference architecture.
 
-## Виправлені протокольні помилки
+## Protocol corrections
 
-- Alpaca setter/action endpoints використовують HTTP `PUT` і form-urlencoded parameters, а не GET-команди з query string.
-- `sync` і `slew` розділені: slew не викликає sync.
-- OAL має однаковий envelope `{ok,error,data}` для REST-відповідей та типізовані WebSocket-події.
+- Alpaca setter/action endpoints use HTTP `PUT` and form-encoded parameters instead of treating setters as GET commands with query strings.
+- `sync` and `slew` are separate operations; a slew does not implicitly perform a sync.
+- OAL uses a common `{ok,error,data}` envelope in the current REST implementation and typed WebSocket events, pending the planned RFC 9457 migration.
 
-## Виправлена математика
+## Mathematical corrections
 
-- Старий «plate solver», який завжди повертав Полярну, вилучено. Замість нього є реальний, але обмежений triangle/catalog prototype і окремий neural interface.
-- Старий City PA, що усереднював `solved - mount`, вилучено. Нова реалізація оцінює механічну вісь RA з відносних 3D-орієнтацій solved кадрів.
-- Motion estimator зіставляє зоряні центроїди через robust partial affine transform.
-- Autofocus має coarse/fine scan, кілька кадрів на позицію і окремі метрики для зірок та планети.
+- The old “plate solver” that always returned Polaris was removed. It was replaced by a real but limited triangle/catalog prototype, an ASTAP production adapter, and a separate neural-solver interface.
+- The old polar-alignment approximation that averaged `solved - mount` was removed. The current estimator derives the mechanical RA axis from relative 3D orientations of solved frames.
+- The motion estimator matches stellar centroids using a robust partial affine transform.
+- Autofocus uses coarse/fine scans, multiple frames per position, and distinct stellar/planetary metrics.
 
-## Що навмисно не маскується під готовий продукт
+## What is deliberately not presented as finished
 
-- Blind full-sky solver, точний Bahtinov spike-offset solver, повний scheduler executor і neural runtime ще не завершені.
-- Native QHY, Canon та compatibility INDI потребують перевірки на конкретному обладнанні/версіях.
-- ABI-v2 manifest registry і generic native camera/mount/focuser adapters уже інтегровані в device registry; sandboxed out-of-process host та повна нормативна capability/conformance model ще попереду.
+- The in-house full-sky blind solver, geometric Bahtinov spike-offset solver, durable scheduler executor, and neural runtime are not complete.
+- Native QHY, Canon EOS, Gemini, Sky-Watcher, ZWO ASI, and ZWO EAF paths still require hardware-in-the-loop qualification on the exact devices/firmware before a production label.
+- ABI-v2 manifest discovery and generic native camera/mount/focuser adapters are integrated, but sandboxed out-of-process hosting and the final normative capability/conformance model remain future work.
+- Dual-camera ownership is implemented, but the production guide-camera calibration/dither/star-loss pipeline is not yet complete.
+- The Stellarium bridge intentionally implements the standard telescope-control scope—mount position and GOTO—not the full OAL observatory API.

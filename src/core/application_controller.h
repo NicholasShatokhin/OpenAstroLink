@@ -21,6 +21,7 @@ class OalWsServer;
 class StarCatalog;
 class AstapSolver;
 class OalDriverPluginLoader;
+class StellariumTelescopeServer;
 
 class ApplicationController final : public ObservatoryController {
     Q_OBJECT
@@ -43,9 +44,11 @@ public:
     bool loadNeuralModel(const QString &path,QString *error=nullptr) override;
 
     bool connectCamera(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
+    bool connectGuideCamera(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectMount(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool connectFocuser(const QString &backend,const QString &endpoint,QString *error=nullptr) override;
     bool disconnectCamera(QString *error=nullptr) override;
+    bool disconnectGuideCamera(QString *error=nullptr) override;
     bool disconnectMount(QString *error=nullptr) override;
     bool disconnectFocuser(QString *error=nullptr) override;
     bool disconnectAll(QString *error=nullptr) override;
@@ -53,6 +56,7 @@ public:
 
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
+    QString startGuideCapture(const ExposureRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
     QString startAutofocus(const AutofocusRequest &request,QString *error=nullptr) override;
@@ -93,11 +97,16 @@ public:
 
     Scheduler &scheduler(){return scheduler_;}
     const CameraFrame &lastFrame() const override{return lastFrame_;}
+    const CameraFrame &lastGuideFrame() const override{return lastGuideFrame_;}
     const SolveResult &lastSolve() const override{return lastSolve_;}
 
     bool startOalServer(quint16 httpPort,bool websocketEnabled,quint16 wsPort,QString *error=nullptr) override;
     void stopOalServer() override;
     bool oalRunning() const override;
+    bool startStellariumServer(quint16 port,QString *error=nullptr) override;
+    void stopStellariumServer() override;
+    bool stellariumRunning() const override;
+    quint16 stellariumPort() const override;
     void refreshState() override;
 
     QJsonArray devicesJson() const;
@@ -117,6 +126,7 @@ private:
     void emitState();
     std::shared_ptr<OalDriverPluginLoader> driverLoader_;
     std::shared_ptr<ICamera> camera_;
+    std::shared_ptr<ICamera> guideCamera_;
     std::shared_ptr<IMount> mount_;
     std::shared_ptr<IFocuser> focuser_;
     std::shared_ptr<StarCatalog> catalog_;
@@ -127,6 +137,7 @@ private:
     TelescopeProfile profile_;
     CameraFrame previousFrame_;
     CameraFrame lastFrame_;
+    CameraFrame lastGuideFrame_;
     SolveResult lastSolve_;
     AutofocusEngine autofocusEngine_;
     MotionEstimator motionEstimator_;
@@ -139,6 +150,7 @@ private:
     AppSettings settings_;
     std::unique_ptr<OalServer> oalServer_;
     std::unique_ptr<OalWsServer> oalWsServer_;
+    std::unique_ptr<StellariumTelescopeServer> stellariumServer_;
 #ifdef OAS_HAVE_POSITIONING
     ::QGeoPositionInfoSource *positionSource_{};
 #endif

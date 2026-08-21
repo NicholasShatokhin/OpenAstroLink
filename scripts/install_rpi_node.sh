@@ -28,6 +28,7 @@ if [[ -d "$BUILD_ROOT/drivers" ]]; then
 fi
 
 install -d -m 0755 /etc/openastrolink
+install -d -o "$OAL_USER" -g "$OAL_USER" -m 0755 /var/lib/openastrolink /var/lib/openastrolink/captures /var/lib/openastrolink/captures/canon
 if [[ ! -e /etc/openastrolink/node.env ]]; then
   install -m 0644 "$ROOT_DIR/packaging/systemd/openastrolink-node.env.example" /etc/openastrolink/node.env
 fi

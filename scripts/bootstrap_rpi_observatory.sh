@@ -18,7 +18,7 @@ apt-get update
 apt-get install -y \
   build-essential cmake ninja-build pkg-config git curl ca-certificates file \
   qt6-base-dev qt6-serialport-dev qt6-websockets-dev qt6-httpserver-dev \
-  libopencv-dev
+  libopencv-dev libgphoto2-dev libjpeg62-turbo-dev
 
 if [[ $WITH_INDI -eq 1 ]]; then
   apt-get install -y indi-bin
@@ -38,6 +38,7 @@ Base Raspberry Pi observatory dependencies are installed.
 
 Native reference path:
   QHY camera   -> oal.qhy       (QHYCCD ARM64 SDK required)
+  Canon EOS    -> oal.canon     (direct native OAL driver; linked libgphoto2 USB/PTP transport)
   Gemini EAF   -> oal.gemini    (direct 9600-baud MyFocuserPro2 serial protocol)
   Sky-Watcher  -> oal.skywatcher (direct SynScan serial protocol v3.3)
 
@@ -51,6 +52,7 @@ or:
 
 Still vendor-specific:
   - install/stage the correct QHYCCD ARM64 SDK and udev rules;
+  - Canon EOS requires USB access through the system libgphoto2/udev rules; close desktop auto-import/photo applications that claim the camera;
   - install ASTAP + one compatible star database.
 
 Recommended deterministic serial binding on a permanent telescope:

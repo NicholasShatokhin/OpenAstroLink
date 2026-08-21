@@ -30,7 +30,10 @@ int main(int argc, char **argv) {
     parser.addOption({"no-indi", "Skip INDI compatibility discovery"});
     parser.addOption({"no-native", "Skip native OpenAstroLink driver discovery"});
     parser.addOption({"no-qhy", "Do not require a native QHY camera"});
+    parser.addOption({"no-canon", "Do not require a native Canon EOS camera"});
     parser.addOption({"require-native-telescope", "Require native QHY + Gemini EAF + Sky-Watcher device discovery"});
+    parser.addOption({"require-native-observatory", "Require native QHY + Canon EOS + Gemini EAF + Sky-Watcher device discovery"});
+    parser.addOption({"require-zwo", "Require at least one native ZWO ASI camera and one native ZWO EAF focuser"});
     parser.addOption({"no-astap", "Skip ASTAP probe"});
     parser.process(app);
 
@@ -56,7 +59,7 @@ int main(int argc, char **argv) {
             out << "  driver " << d.value("driverId").toString() << "  ABI " << d.value("abiVersion").toInt()
                 << "  " << d.value("version").toString() << "  isolation=" << d.value("isolation").toString("unspecified") << "\n";
         }
-        bool qhyFound = false, geminiFound = false, skywatcherFound = false;
+        bool qhyFound = false, canonFound = false, geminiFound = false, skywatcherFound = false, zwoAsiFound = false, zwoEafFound = false;
         for (const auto &v : devices) {
             const auto d = v.toObject();
             const QString key = nativeBackendKey(d.value("driverId").toString(), d.value("id").toString());
@@ -64,20 +67,35 @@ int main(int argc, char **argv) {
                 << "    backend: " << key << "\n";
             const QString driver = d.value("driverId").toString();
             qhyFound |= driver == "oal.qhy";
+            canonFound |= driver == "oal.canon";
             geminiFound |= driver == "oal.gemini";
             skywatcherFound |= driver == "oal.skywatcher";
+            zwoAsiFound |= driver == "oal.zwo.asi";
+            zwoEafFound |= driver == "oal.zwo.eaf";
         }
         for (const auto &e : errors) out << "  warning: " << e << "\n";
         if (!parser.isSet("no-qhy") && !qhyFound) {
             out << "Native QHY: NOT READY  oal.qhy driver loaded no camera (or driver not built)\n";
             allOk = false;
         } else if (!parser.isSet("no-qhy")) out << "Native QHY: OK\n";
+        if (!parser.isSet("no-canon") && !canonFound) {
+            out << "Native Canon EOS: NOT READY  oal.canon driver loaded no camera (or driver not built)\n";
+            allOk = false;
+        } else if (!parser.isSet("no-canon")) out << "Native Canon EOS: OK\n";
         out << "Native Gemini EAF: " << (geminiFound ? "OK" : "not discovered") << "\n";
         out << "Native Sky-Watcher: " << (skywatcherFound ? "OK" : "not discovered") << "\n";
         if (parser.isSet("require-native-telescope") && (!qhyFound || !geminiFound || !skywatcherFound)) {
             out << "Native telescope pack: NOT READY (QHY=" << qhyFound << ", Gemini=" << geminiFound << ", SkyWatcher=" << skywatcherFound << ")\n";
             allOk = false;
         } else if (parser.isSet("require-native-telescope")) out << "Native telescope pack: OK\n";
+        if (parser.isSet("require-native-observatory") && (!qhyFound || !canonFound || !geminiFound || !skywatcherFound)) {
+            out << "Native observatory pack: NOT READY (QHY=" << qhyFound << ", Canon=" << canonFound << ", Gemini=" << geminiFound << ", SkyWatcher=" << skywatcherFound << ")\n";
+            allOk = false;
+        } else if (parser.isSet("require-native-observatory")) out << "Native observatory pack: OK\n";
+        if (parser.isSet("require-zwo") && (!zwoAsiFound || !zwoEafFound)) {
+            out << "Native ZWO pack: NOT READY (ASI=" << zwoAsiFound << ", EAF=" << zwoEafFound << ")\n";
+            allOk = false;
+        } else if (parser.isSet("require-zwo")) out << "Native ZWO pack: OK\n";
     }
 
     if (!parser.isSet("no-indi")) {

@@ -70,6 +70,7 @@ void NativeOalCamera::disconnectDevice() {
 bool NativeOalCamera::capture(const ExposureRequest &r, CameraFrame &frame, QString *error) {
     QJsonObject req{{"exposureSec", r.exposureSec}, {"gain", r.gain}, {"offset", r.offset},
                     {"binX", r.binX}, {"binY", r.binY}, {"saveRaw", r.saveRaw}};
+    if (!r.savePath.isEmpty()) req["savePath"] = r.savePath;
     if (r.roi.width > 0 && r.roi.height > 0)
         req["roi"] = QJsonObject{{"x", r.roi.x}, {"y", r.roi.y},
                                  {"width", r.roi.width}, {"height", r.roi.height}};

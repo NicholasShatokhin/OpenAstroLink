@@ -28,14 +28,39 @@ struct ObserverLocation {
 
 struct TelescopeProfile {
     QString name{"Default"};
+
+    // Main imaging optical train. focalLengthMm is the effective focal length
+    // after any reducer/Barlow; apertureMm is the clear entrance aperture.
+    QString opticalDesign{"reflector"};
+    double apertureMm{100.0};
+    double centralObstructionMm{0.0};
     double focalLengthMm{400.0};
     double pixelSizeUm{4.8};
     int sensorWidthPx{1920};
     int sensorHeightPx{1080};
+
+    // Independent guide optical train. A separate guide camera can be connected
+    // at the same time as the main camera.
+    QString guideScopeName{"Guide scope"};
+    double guideApertureMm{30.0};
+    double guideFocalLengthMm{120.0};
+    double guidePixelSizeUm{3.75};
+    int guideSensorWidthPx{1280};
+    int guideSensorHeightPx{960};
+
     ObserverLocation observer{};
 
+    double focalRatio() const {
+        return apertureMm > 0.0 ? focalLengthMm / apertureMm : 0.0;
+    }
     double arcsecPerPixel() const {
-        return 206.265 * pixelSizeUm / focalLengthMm;
+        return focalLengthMm > 0.0 ? 206.265 * pixelSizeUm / focalLengthMm : 0.0;
+    }
+    double guideFocalRatio() const {
+        return guideApertureMm > 0.0 ? guideFocalLengthMm / guideApertureMm : 0.0;
+    }
+    double guideArcsecPerPixel() const {
+        return guideFocalLengthMm > 0.0 ? 206.265 * guidePixelSizeUm / guideFocalLengthMm : 0.0;
     }
 };
 

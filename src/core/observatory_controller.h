@@ -35,9 +35,11 @@ public:
     virtual bool loadNeuralModel(const QString &path, QString *error = nullptr) = 0;
 
     virtual bool connectCamera(const QString &backend, const QString &endpoint, QString *error = nullptr) = 0;
+    virtual bool connectGuideCamera(const QString &backend, const QString &endpoint, QString *error = nullptr) = 0;
     virtual bool connectMount(const QString &backend, const QString &endpoint, QString *error = nullptr) = 0;
     virtual bool connectFocuser(const QString &backend, const QString &endpoint, QString *error = nullptr) = 0;
     virtual bool disconnectCamera(QString *error = nullptr) = 0;
+    virtual bool disconnectGuideCamera(QString *error = nullptr) = 0;
     virtual bool disconnectMount(QString *error = nullptr) = 0;
     virtual bool disconnectFocuser(QString *error = nullptr) = 0;
     virtual bool disconnectAll(QString *error = nullptr) = 0;
@@ -45,6 +47,7 @@ public:
     virtual bool capture(const ExposureRequest &request, CameraFrame *out = nullptr, QString *error = nullptr) = 0;
     // Preferred UI/API path: exposure is an operation and returns immediately.
     virtual QString startCapture(const ExposureRequest &request, QString *error = nullptr) = 0;
+    virtual QString startGuideCapture(const ExposureRequest &request, QString *error = nullptr) = 0;
     virtual SolveResult solveLast(const SolveHint &hint = {}) = 0;
     virtual AutofocusResult autofocus(const AutofocusRequest &request) = 0;
     virtual QString startAutofocus(const AutofocusRequest &request, QString *error = nullptr) = 0;
@@ -82,6 +85,7 @@ public:
     virtual SessionStatus sessionStatus() const = 0;
 
     virtual const CameraFrame &lastFrame() const = 0;
+    virtual const CameraFrame &lastGuideFrame() const = 0;
     virtual const SolveResult &lastSolve() const = 0;
 
     // Available only for an embedded/local core. A remote GUI cannot rebind the
@@ -90,6 +94,13 @@ public:
                                 QString *error = nullptr) = 0;
     virtual void stopOalServer() = 0;
     virtual bool oalRunning() const = 0;
+
+    // Stellarium Telescope Control TCP bridge. This bridge intentionally maps
+    // only mount position/GOTO; all other observatory functions remain OAL.
+    virtual bool startStellariumServer(quint16 port, QString *error = nullptr) = 0;
+    virtual void stopStellariumServer() = 0;
+    virtual bool stellariumRunning() const = 0;
+    virtual quint16 stellariumPort() const = 0;
 
     // Request a fresh complete state snapshot. Remote clients use this after
     // connecting/reconnecting so GUI state does not depend on having observed
