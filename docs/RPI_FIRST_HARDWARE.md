@@ -1,4 +1,4 @@
-# Raspberry Pi 4 first-hardware path — v0.2.9 native observatory pack
+# Raspberry Pi 4 first-hardware path — v0.2.10 native observatory pack
 
 ## Target topology
 
@@ -154,7 +154,7 @@ connect
 
 The driver enforces controller-reported `0..maxPosition`. Position is tagged `controller-reported`; after power loss the mechanical reference may require operator verification.
 
-**HALT is deliberately capability=false in v0.2.9.** Until the exact stop command is HIL-verified on the target Gemini firmware, do not start a large unattended focuser move. Autofocus can be tested once small moves and range semantics are confirmed.
+**HALT is deliberately capability=false in v0.2.10.** Until the exact stop command is HIL-verified on the target Gemini firmware, do not start a large unattended focuser move. Autofocus can be tested once small moves and range semantics are confirmed.
 
 ## 8. Sky-Watcher qualification
 

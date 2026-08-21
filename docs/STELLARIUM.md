@@ -1,6 +1,6 @@
 # Stellarium integration
 
-Version: 0.2.9
+Version: 0.2.10
 
 OpenAstroLink includes a direct TCP bridge compatible with Stellarium's external Telescope Control protocol. It is deliberately a mount bridge, not a replacement for the OAL observatory API.
 

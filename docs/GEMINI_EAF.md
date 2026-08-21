@@ -1,6 +1,6 @@
 # GeminiAstro EAF — OAL support policy
 
-## Current status in v0.2.9
+## Current status in v0.2.10
 
 Gemini EAF is currently supported through **compatibility transports**, not yet through a native OAL hardware driver:
 

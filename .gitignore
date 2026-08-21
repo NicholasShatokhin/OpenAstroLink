@@ -6,3 +6,8 @@
 *.fits
 *.fit
 *.ser
+
+CMakeUserPresets.json
+/dist/
+/stage/
+/package/

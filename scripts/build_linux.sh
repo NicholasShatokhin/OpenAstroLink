@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cmake --preset default-release
-cmake --build --preset default-release -j"$(nproc 2>/dev/null || echo 4)"
+preset="${1:-linux-observatory-release}"
+cmake --preset "$preset"
+cmake --build --preset "$preset" -j"$(nproc 2>/dev/null || echo 4)"

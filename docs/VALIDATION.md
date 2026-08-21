@@ -1,12 +1,12 @@
-# Validation — v0.2.9 ZWO / Stellarium / dual-camera increment
+# Validation — v0.2.10 cross-platform desktop observatory
 
-Validation updated 21 August 2026.
+English is canonical. Ukrainian mirror: `docs/uk/VALIDATION.md`.
 
-No claim is made that the real Raspberry Pi/QHY/Canon/Gemini/Sky-Watcher hardware has passed HIL in the consolidation environment. The package provides native OAL paths for the current telescope set and adds native ZWO ASI/EAF support. Hardware qualification is still required on the exact devices, SDK versions, firmware, USB topology, and Raspberry Pi deployment before production labels are assigned.
+Validation deliberately separates source/static checks, SDK API-shape checks, simulator tests, platform builds, and real hardware-in-the-loop (HIL). A driver is not called production-ready merely because it compiles.
 
-## Static/structural gates
+## Source/static regression
 
-Run from repository root:
+The v0.2.10 package must pass:
 
 ```bash
 python3 tools/project_smoke_check.py
@@ -16,94 +16,79 @@ python3 tools/operation_model_check.py
 python3 tools/async_exposure_check.py
 python3 tools/rpi_hardware_path_check.py
 python3 tools/native_driver_foundation_check.py
-bash -n scripts/bootstrap_rpi_observatory.sh
-bash -n scripts/install_indi_service.sh
-bash -n scripts/install_rpi_node.sh
+python3 tools/native_telescope_hardware_pack_check.py
+python3 tools/native_canon_driver_check.py
+python3 tools/canon_edsdk_compile_check.py
+python3 tools/zwo_native_driver_check.py
+python3 tools/dual_camera_optics_check.py
+python3 tools/stellarium_bridge_check.py
+python3 tools/cross_platform_build_check.py
 ```
 
-Also parse:
+Also validate:
 
-- `docs/openapi.yaml`;
-- `CMakePresets.json`;
-- native driver manifest/schema JSON.
+- `CMakePresets.json` and `CMakeUserPresets.example.json` parse as JSON;
+- `cmake --list-presets` succeeds;
+- shell scripts pass `bash -n`;
+- PowerShell build/package scripts are exercised on Windows;
+- `docs/openapi.yaml` parses successfully.
 
-## ABI-v2 reference driver smoke
+## v0.2.10 cross-platform build gates
 
-The dependency-free `oal.simulated` shared library was compiled as a standalone `.so`, loaded with a minimal ABI-v2 host using `dlopen`, enumerated successfully, connected a simulated camera and published one 1280×960 MONO16 frame through `publishFrame()`.
+### Windows x64 / MSVC 2022
 
-Observed copied pixel payload:
+Required gates:
 
-```text
-2,457,600 bytes
-```
+1. `windows-core-release` configures and compiles with Qt 6 MSVC + OpenCV and no vendor SDKs.
+2. `windows-native-release` compiles with Windows x64 QHY, ZWO ASI/EAF, and Canon EDSDK SDK artifacts.
+3. `windows-observatory-release` compiles with the INDI compatibility adapter enabled in parallel.
+4. `scripts/package_windows.ps1` produces a self-contained Qt/OpenCV application package when the required runtime DLL directories are supplied.
+5. The packaged node starts outside Qt Creator without manually editing `PATH`.
 
-This validates the ABI table, host callbacks and out-of-band frame contract independently of Qt/OpenCV.
+### Linux x86_64
 
-## QHY compile-shape check
+Required gates:
 
-`drivers/qhy/oal_driver_qhy.cpp` was compiled against a local stub `qhyccd.h` containing the exact API signatures used by the plugin. This is a C++ syntax/API-shape check only.
+1. `linux-native-release` configures and compiles with x86_64 QHY/ZWO SDKs and native Canon/libgphoto2.
+2. `linux-observatory-release` repeats with INDI compatibility enabled.
+3. `linux-node-release` builds without the GUI.
+4. `cmake --install` and `scripts/package_linux.sh` produce the documented installation layout.
+5. `ldd` reports no unresolved runtime dependencies for OAL executables and native driver `.so` files after vendor runtimes are installed.
 
-It does **not** substitute for:
+### Linux ARM64 / Raspberry Pi
 
-- linking against the real ARM64 QHYCCD SDK;
-- running udev/USB access on the Pi;
-- camera HIL;
-- exposure-cancel HIL;
-- bit-depth/ROI/model-specific validation.
+The same gates apply with ARM64/AArch64 vendor libraries. `file` must confirm the architecture of every vendor SDK library before linking.
 
-## Required target HIL gates
+## Canon transport checks
 
-1. RPi64 release configure/build with native QHY + Canon EOS + Gemini + Sky-Watcher; repeat once with INDI compatibility disabled and once enabled.
-2. Native driver registry discovers the installed manifests/libraries. For the current telescope this includes `oal.qhy`, `oal.canon`, `oal.gemini`, and `oal.skywatcher`; ZWO qualification additionally requires `oal.zwo.asi` and/or `oal.zwo.eaf` as applicable.
-3. Exact QHY ID connect/reconnect/reboot persistence; short/long exposures, abort, ROI/binning/gain/offset and 16-bit path where supported.
-4. Canon EOS connect/reconnect, 1–5 s capture, RAW+JPEG original-file spool + preview, 35–60 s Bulb and cooperative Bulb cancellation.
-5. Gemini native serial: absolute position → small moves → temperature/status → reconnect; document exact firmware. Do not claim HALT until target-firmware stop semantics are verified.
-6. Sky-Watcher native SynScan: status → small GOTO → abort → tracking → sync → pulse guide; validate pier-side/alignment reporting. Park remains unsupported in this profile unless a verified transport/profile supplies it.
-7. Stop `indiserver` completely and repeat native QHY/Canon/Gemini/Sky-Watcher discovery/control. This is the required proof that INDI is optional rather than part of the native path.
-8. Re-enable INDI and verify an additional compatibility-only device can coexist with the native telescope hardware.
-9. ASTAP repeated real-star solves with plausible RA/DEC/rotation/scale.
-10. Combined autofocus with a native camera + native Gemini while mount control remains responsive.
-11. Local GUI and remote GUI observe the same node/device/operation state.
+### libgphoto2 transport
 
+The existing native Canon implementation remains the default Linux path. Its source/API integration checks pass, but real EOS USB/PTP HIL is still required.
 
-## ZWO-specific HIL gates
+### Canon EDSDK transport
 
-1. Link `oal.zwo.asi` against the real target ASI SDK and enumerate every connected camera by distinct camera ID.
-2. Run at least 100 repeated ASI exposures, then validate abort, ROI, supported bin values, RAW8/RAW16 as applicable, gain/offset bounds, USB unplug/replug, and node restart persistence.
-3. Connect two ASI cameras simultaneously and verify independent device identities plus main/guide role assignment without cross-talk.
-4. Link `oal.zwo.eaf` against the real EAF SDK; validate position, safe-range absolute/relative motion, halt, max step, temperature, reverse/backlash reporting, disconnect/reconnect, and autofocus repeatability.
-5. Run `oal-hardware-probe --require-zwo` and require both ASI and EAF when testing a complete ZWO pair.
+`drivers/canon/oal_driver_canon_edsdk.cpp` has a dependency-light API-shape compile gate using `tests/stubs/edsdk/` with `-Wall -Wextra -Wpedantic -Werror`. The implementation covers SDK init/enumeration/session open, host transfer, timed Bulb/cancel, original-file storage, thumbnail preview publication, and OAL ABI-v2 frame publication.
 
-## Stellarium interoperability gate
+This is **not** a substitute for linking to the user's actual Canon EDSDK or testing a real camera. Real Windows HIL must validate EDSDK version compatibility, transfer callbacks/message-loop behavior, body mode requirements for Bulb, CR2/CR3 transfer, reconnect, and cancellation.
 
-Connect a current Stellarium Telescope Control client to the node's TCP bridge, verify continuous mount-position updates and several small safe GOTO commands, then repeat while a second OAL GUI is connected. Camera/focuser controls are intentionally outside the standard Stellarium telescope protocol and are not part of this gate.
+## Native hardware HIL
 
-## Dual-camera / optical-profile gates
+For each target OS that will directly own hardware:
 
-1. Connect distinct main and guide cameras at the same time, including two cameras exported by one multi-device native driver.
-2. Start simultaneous main and guide exposures and verify independent `camera` / `camera.guide` locks and frame IDs.
-3. Restart only the GUI and then the node; verify role bindings and optical-train profiles are restored correctly.
-4. Confirm main and guide f-ratio/image-scale calculations against independently calculated values.
+1. discover and connect the exact QHY camera by stable identity;
+2. discover and connect Canon EOS with the platform-selected native transport;
+3. discover every attached ZWO ASI camera distinctly, including simultaneous main+guide cameras;
+4. validate ZWO EAF and Gemini safe-range movement and status;
+5. validate Sky-Watcher small GOTO, abort, tracking, sync, guide pulses and reported coordinates;
+6. stop `indiserver` and repeat the native telescope test to prove the native path is independent;
+7. re-enable INDI and connect at least one compatibility-only device alongside the native devices;
+8. run ASTAP on repeated real-star frames;
+9. verify local GUI and remote GUI observe the same node state;
+10. verify Stellarium position/GOTO interoperability.
 
-## Known boundaries
+## Known boundaries after v0.2.10
 
-- Native Gemini and native Sky-Watcher protocol paths exist, but are still HIL-pending on the user's exact hardware/firmware. Gemini HALT is deliberately not advertised until its target-firmware stop command is verified; the current SynScan profile deliberately does not invent a park command.
-- Native Canon EOS is implemented through the OAL ABI-v2 plug-in boundary using libgphoto2 as the low-level USB/PTP transport; real EOS/RPi HIL is still pending.
-- Sandboxed out-of-process driver host is not implemented; an ABI-v2 manifest requesting it is rejected rather than downgraded.
-- QHY live streaming/SER remains pending and is reported as unsupported.
-- ASTAP solve remains synchronous at the current HTTP endpoint.
-- Durable operation persistence, idempotency, RFC 9457, sequenced event replay, security/safety and final science data plane remain pending.
-
-## v0.2.9 native Canon EOS increment
-
-- `tools/native_canon_driver_check.py`: PASS (static integration/capability assertions).
-- `drivers/canon/oal_driver_canon.cpp`: compiled locally with C++20 `-Wall -Wextra -Wpedantic -Werror` against a minimal libgphoto2 API-shape stub and the system libjpeg headers. This validates C++/ABI/library-call shape, not a real EOS/libgphoto2 hardware session. Canon Bulb control now probes actual `eosremoterelease` choices instead of assuming one fixed label and falls back to legacy `bulb`.
-- All existing project smoke/operation/native-telescope/RPi checks pass after the Canon integration.
-- `tests/native_protocol_smoke.cpp`: PASS with `-Wall -Wextra -Wpedantic -Werror`.
-- All repository JSON files parse and all shell scripts pass `bash -n`.
-
-Still pending and must not be presented as passed: real Raspberry Pi compile against distro `libgphoto2-dev`, Canon EOS USB HIL, Bulb cancel on the user's exact model, RAW/CR2/CR3 preview behavior, and multi-camera/USB reconnect qualification.
-
-## v0.2.9 validation gates
-
-The release adds `zwo_native_driver_check.py`, `dual_camera_optics_check.py` and `stellarium_bridge_check.py`. The ZWO sources are additionally compiled against SDK-compatible API stubs with warnings treated as errors; this is not a substitute for real ZWO SDK linking or hardware validation. The Stellarium bridge still requires an interoperability test with a real Stellarium build and mount.
+- Windows Canon EDSDK transport is implemented but HIL-pending.
+- Native Gemini and native Sky-Watcher are still HIL-pending on the exact hardware/firmware; unsupported semantics remain deliberately unadvertised.
+- QHY/ZWO high-rate planetary data plane/SER is not yet production-complete.
+- Guiding, durable scheduler/session recovery, final FITS/RAW data plane, RFC 9457/idempotency/replay, security/safety, and out-of-process driver sandboxing remain future hardening work.

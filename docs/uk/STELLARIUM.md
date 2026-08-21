@@ -1,6 +1,6 @@
 # Інтеграція зі Stellarium
 
-Версія: 0.2.9
+Версія: 0.2.10
 
 OpenAstroLink має прямий TCP-міст, сумісний із зовнішнім Stellarium Telescope Control protocol. Це міст для монтування, а не заміна повного API обсерваторії OAL.
 

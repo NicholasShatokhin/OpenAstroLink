@@ -1,6 +1,6 @@
 # OpenAstroSuite / OpenAstroLink
 
-**v0.2.9 — нативні драйвери ZWO, міст Stellarium, дві камери та профілі оптичних трактів**
+**v0.2.10 — кросплатформна desktop observatory збірка (Windows x64, Linux x86_64, Linux ARM64/RPi)**
 
 Канонічна документація проєкту ведеться англійською. Цей файл і `docs/uk/` є українськими дзеркальними версіями.
 
@@ -10,7 +10,7 @@ OpenAstroLink (OAL) — сучасний local-first стек керування
 
 ```text
 OpenAstroSuite GUI
-  ├─ локально на Raspberry Pi
+  ├─ локально на observatory host (Windows/Linux/RPi)
   └─ віддалено на іншому комп'ютері
               │
         OAL HTTP / WebSocket
@@ -21,7 +21,7 @@ OpenAstroSuite GUI
               │
       Native OAL ABI v2
       ├─ oal.qhy          → QHYCCD SDK → QHY
-      ├─ oal.canon        → USB/PTP/libgphoto2 → Canon EOS
+      ├─ oal.canon        → Canon EDSDK (Windows) / USB/PTP-libgphoto2 (Linux) → Canon EOS
       ├─ oal.zwo.asi      → ZWO ASI SDK → ZWO ASI
       ├─ oal.zwo.eaf      → ZWO EAF SDK → ZWO EAF
       ├─ oal.gemini       → USB serial → Gemini EAF
@@ -33,7 +33,7 @@ OpenAstroSuite GUI
 
 Node володіє обладнанням та тривалими операціями. Закриття GUI не зупиняє node і не від'єднує пристрої.
 
-## Нове у v0.2.9
+## Нове у v0.2.10
 
 - Нативний `oal.zwo.asi`: discovery, capabilities, exposure, ROI, binning, gain/offset, cancel, native frame publication.
 - Нативний `oal.zwo.eaf`: absolute/relative move, halt, position/moving state, temperature, backlash/reverse/max-step.
@@ -82,3 +82,9 @@ image_scale_arcsec_per_pixel = 206.265 × pixel_size_um / focal_length_mm
 INDI залишається дуже легко ввімкнути для широкої підтримки стороннього обладнання. Він не є залежністю нативних OAL-драйверів і не обмежує модель можливостей OAL.
 
 Поточний стан та перевірки: `docs/uk/STATUS.md`, `docs/uk/VALIDATION.md`, `docs/uk/ZWO_NATIVE.md`, `docs/uk/STELLARIUM.md`, `docs/uk/OPTICAL_TRAINS_AND_DUAL_CAMERAS.md`.
+
+## v0.2.10: Windows/Linux як observatory node
+
+RPi більше не обов'язковий. Якщо обладнання під'єднане прямо до Windows x64 або Linux x86_64 комп'ютера, цей комп'ютер може запускати `openastrolink-node` і локальний GUI; інший GUI та Stellarium можуть підключатися віддалено.
+
+Portable build presets охоплюють Windows, desktop Linux, headless Linux і RPi. Локальні Qt/OpenCV/vendor SDK paths зберігаються у `CMakeUserPresets.json`, який ігнорується Git. Native Canon використовує EDSDK на Windows та libgphoto2/PTP на Linux за `AUTO` policy. Деталі: `docs/uk/BUILD_PLATFORMS.md`.

@@ -189,7 +189,7 @@ The HTTP request-processing thread must never wait for a long physical operation
 - meridian flip → `mount + guider + camera`;
 - roof motion → `roof + safety dependencies`.
 
-The dual-camera model introduced in v0.2.9 deliberately separates `camera` and `camera.guide` so a guide acquisition does not inherently block the main imager.
+The dual-camera model introduced in v0.2.10 deliberately separates `camera` and `camera.guide` so a guide acquisition does not inherently block the main imager.
 
 ---
 

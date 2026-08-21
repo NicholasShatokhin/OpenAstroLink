@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.9 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,13 @@ set(CMAKE_AUTORCC ON)
 # remain available for existing devices/ecosystems.
 option(OAS_ENABLE_QHY "Build native OAL QHYCCD driver (requires QHYCCD SDK)" OFF)
 option(OAS_ENABLE_GPHOTO2 "Enable legacy in-core Canon/libgphoto2 compatibility backend" OFF)
-option(OAS_ENABLE_NATIVE_CANON "Build native OAL Canon EOS driver (direct USB/PTP via linked libgphoto2)" OFF)
+option(OAS_ENABLE_NATIVE_CANON "Build native OAL Canon EOS driver" OFF)
+set(OAS_CANON_TRANSPORT "AUTO" CACHE STRING "Native Canon transport: AUTO, EDSDK, or GPHOTO2")
+set_property(CACHE OAS_CANON_TRANSPORT PROPERTY STRINGS AUTO EDSDK GPHOTO2)
+set(CANON_EDSDK_ROOT "" CACHE PATH "Canon EDSDK root")
+set(CANON_EDSDK_INCLUDE_DIR "" CACHE PATH "Directory containing EDSDK.h")
+set(CANON_EDSDK_LIBRARY "" CACHE FILEPATH "Canon EDSDK import/shared library")
+set(CANON_EDSDK_RUNTIME_DIR "" CACHE PATH "Directory containing EDSDK runtime DLLs (packaging hint)")
 option(OAS_ENABLE_NATIVE_ZWO_ASI "Build native OAL ZWO ASI camera driver (requires ZWO ASI SDK)" OFF)
 option(OAS_ENABLE_NATIVE_ZWO_EAF "Build native OAL ZWO EAF focuser driver (requires ZWO EAF SDK)" OFF)
 option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" ON)
@@ -70,10 +76,31 @@ set(OAS_CORE_SOURCES
     src/integrations/stellarium_telescope_server.cpp
 )
 
-if(OAS_ENABLE_GPHOTO2 OR OAS_ENABLE_NATIVE_CANON)
+set(OAS_CANON_TRANSPORT_RESOLVED "")
+if(OAS_ENABLE_NATIVE_CANON)
+    string(TOUPPER "${OAS_CANON_TRANSPORT}" OAS_CANON_TRANSPORT_RESOLVED)
+    if(OAS_CANON_TRANSPORT_RESOLVED STREQUAL "AUTO")
+        if(WIN32)
+            set(OAS_CANON_TRANSPORT_RESOLVED "EDSDK")
+        else()
+            set(OAS_CANON_TRANSPORT_RESOLVED "GPHOTO2")
+        endif()
+    endif()
+    if(NOT OAS_CANON_TRANSPORT_RESOLVED MATCHES "^(EDSDK|GPHOTO2)$")
+        message(FATAL_ERROR "OAS_CANON_TRANSPORT must be AUTO, EDSDK, or GPHOTO2")
+    endif()
+endif()
+
+if(OAS_ENABLE_GPHOTO2 OR (OAS_ENABLE_NATIVE_CANON AND OAS_CANON_TRANSPORT_RESOLVED STREQUAL "GPHOTO2"))
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GPHOTO2 REQUIRED libgphoto2)
 endif()
+
+# Export selected build features for packaging/diagnostics.
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config/build_features.json.in
+               ${CMAKE_BINARY_DIR}/build_features.json @ONLY)
+install(FILES ${CMAKE_BINARY_DIR}/build_features.json DESTINATION share/OpenAstroSuite)
+
 
 if(OAS_ENABLE_GPHOTO2)
     list(APPEND OAS_CORE_SOURCES src/backends/canon_camera.cpp)
@@ -171,6 +198,7 @@ if(OAS_ENABLE_QHY)
     set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root")
     set(QHYCCD_INCLUDE_DIR "" CACHE PATH "Directory containing qhyccd.h")
     set(QHYCCD_LIBRARY "" CACHE FILEPATH "Exact QHYCCD SDK library path (for example /opt/qhyccd/lib/libqhy.so)")
+    set(QHYCCD_RUNTIME_DIR "" CACHE PATH "QHYCCD runtime DLL/shared-library directory (packaging hint)")
     if(NOT QHYCCD_INCLUDE_DIR)
         find_path(QHYCCD_INCLUDE_DIR qhyccd.h
             HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT ENV QHYCCD_INCLUDE_DIR
@@ -201,6 +229,7 @@ if(OAS_ENABLE_NATIVE_ZWO_ASI)
     set(ZWO_ASI_ROOT "" CACHE PATH "ZWO ASI SDK root")
     set(ZWO_ASI_INCLUDE_DIR "" CACHE PATH "Directory containing ASICamera2.h")
     set(ZWO_ASI_LIBRARY "" CACHE FILEPATH "Exact ZWO ASI SDK library path")
+    set(ZWO_ASI_RUNTIME_DIR "" CACHE PATH "ZWO ASI runtime DLL/shared-library directory (packaging hint)")
     if(NOT ZWO_ASI_INCLUDE_DIR)
         find_path(ZWO_ASI_INCLUDE_DIR ASICamera2.h HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT ENV ZWO_ASI_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
@@ -220,6 +249,7 @@ if(OAS_ENABLE_NATIVE_ZWO_EAF)
     set(ZWO_EAF_ROOT "" CACHE PATH "ZWO EAF SDK root")
     set(ZWO_EAF_INCLUDE_DIR "" CACHE PATH "Directory containing EAF_focuser.h")
     set(ZWO_EAF_LIBRARY "" CACHE FILEPATH "Exact ZWO EAF SDK library path")
+    set(ZWO_EAF_RUNTIME_DIR "" CACHE PATH "ZWO EAF runtime DLL/shared-library directory (packaging hint)")
     if(NOT ZWO_EAF_INCLUDE_DIR)
         find_path(ZWO_EAF_INCLUDE_DIR EAF_focuser.h HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT ENV ZWO_EAF_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
@@ -237,14 +267,32 @@ endif()
 
 
 if(OAS_ENABLE_NATIVE_CANON)
-    find_package(JPEG REQUIRED)
-    add_library(oal_driver_canon SHARED drivers/canon/oal_driver_canon.cpp)
-    target_include_directories(oal_driver_canon PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${GPHOTO2_INCLUDE_DIRS})
-    target_link_directories(oal_driver_canon PRIVATE ${GPHOTO2_LIBRARY_DIRS})
-    target_compile_options(oal_driver_canon PRIVATE ${GPHOTO2_CFLAGS_OTHER})
-    target_link_libraries(oal_driver_canon PRIVATE ${GPHOTO2_LIBRARIES} JPEG::JPEG)
+    if(OAS_CANON_TRANSPORT_RESOLVED STREQUAL "EDSDK")
+        if(NOT CANON_EDSDK_INCLUDE_DIR)
+            find_path(CANON_EDSDK_INCLUDE_DIR EDSDK.h
+                HINTS ${CANON_EDSDK_ROOT} ENV CANON_EDSDK_ROOT ENV CANON_EDSDK_INCLUDE_DIR
+                PATH_SUFFIXES Header include Include EDSDK/Header REQUIRED)
+        endif()
+        if(NOT CANON_EDSDK_LIBRARY)
+            find_library(CANON_EDSDK_LIBRARY NAMES EDSDK edsdk
+                HINTS ${CANON_EDSDK_ROOT} ENV CANON_EDSDK_ROOT
+                PATH_SUFFIXES Library lib Lib x64 REQUIRED)
+        endif()
+        add_library(oal_driver_canon SHARED drivers/canon/oal_driver_canon_edsdk.cpp)
+        target_include_directories(oal_driver_canon PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include ${CANON_EDSDK_INCLUDE_DIR})
+        target_link_libraries(oal_driver_canon PRIVATE ${CANON_EDSDK_LIBRARY} Qt6::Core Qt6::Gui)
+        target_compile_definitions(oal_driver_canon PRIVATE OAL_CANON_TRANSPORT_EDSDK=1)
+    elseif(OAS_CANON_TRANSPORT_RESOLVED STREQUAL "GPHOTO2")
+        find_package(JPEG REQUIRED)
+        add_library(oal_driver_canon SHARED drivers/canon/oal_driver_canon.cpp)
+        target_include_directories(oal_driver_canon PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include ${GPHOTO2_INCLUDE_DIRS})
+        target_link_directories(oal_driver_canon PRIVATE ${GPHOTO2_LIBRARY_DIRS})
+        target_compile_options(oal_driver_canon PRIVATE ${GPHOTO2_CFLAGS_OTHER})
+        target_link_libraries(oal_driver_canon PRIVATE ${GPHOTO2_LIBRARIES} JPEG::JPEG)
+        target_compile_definitions(oal_driver_canon PRIVATE OAL_CANON_TRANSPORT_GPHOTO2=1)
+    endif()
     oal_set_driver_output(oal_driver_canon)
     configure_file(drivers/canon/oal_driver_canon.manifest.json
                    ${OAL_DRIVER_BUILD_DIR}/oal_driver_canon.manifest.json COPYONLY)
@@ -252,8 +300,7 @@ if(OAS_ENABLE_NATIVE_CANON)
         RUNTIME DESTINATION lib/openastrolink/drivers
         LIBRARY DESTINATION lib/openastrolink/drivers
         ARCHIVE DESTINATION lib/openastrolink/drivers)
-    install(FILES drivers/canon/oal_driver_canon.manifest.json
-        DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/canon/oal_driver_canon.manifest.json DESTINATION lib/openastrolink/drivers)
 endif()
 
 

@@ -1,4 +1,4 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.9
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10
 
 Канонічна документація — англійська. `PROJECT_MANIFEST_UA.md` є українським дзеркалом.
 
@@ -7,7 +7,7 @@
 - Діагностика обладнання: `oal-hardware-probe`
 - Core library: `oas_core`
 - Протокол і нативний driver framework: `OpenAstroLink (OAL)`
-- Версія: `0.2.9-zwo-stellarium-dual-optics`
+- Версія: `0.2.10-cross-platform-desktop-observatory`
 - Мова: C++20
 - UI: Qt 6.4+
 - Обробка зображень: OpenCV 4
@@ -40,3 +40,7 @@ Core має незалежні ролі `main` і `guide` та ресурси `c
 
 Головна: `README.md`, `PROJECT_MANIFEST.md`, `docs/*.md`.
 Українські дзеркала: `README_UA.md`, `PROJECT_MANIFEST_UA.md`, `docs/uk/*.md`.
+
+## Першокласні deployment targets
+
+Windows x64/MSVC, Linux x86_64 та Linux ARM64/Raspberry Pi можуть напряму володіти під'єднаним observatory hardware. `CMakePresets.json` portable; локальні SDK paths зберігаються в ignored `CMakeUserPresets.json`. Для Windows/Linux додані packaging scripts у `scripts/`.

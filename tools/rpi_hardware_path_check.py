@@ -9,7 +9,7 @@ def require(path,*needles):
     text=p.read_text(errors='replace')
     for n in needles: checks.append((n in text,f"{path}: {n}"))
 
-require(Path('CMakeLists.txt'),'VERSION 0.2.9','oal_driver_qhy','oal_driver_canon','oal_driver_gemini','oal_driver_skywatcher','OAL_DRIVER_BUILD_DIR')
+require(Path('CMakeLists.txt'),'VERSION 0.2.10','oal_driver_qhy','oal_driver_canon','oal_driver_gemini','oal_driver_skywatcher','OAL_DRIVER_BUILD_DIR')
 require(Path('src/algorithms/astap_solver.cpp'),'OAL_ASTAP_EXECUTABLE','OAL_ASTAP_DATABASE','"-fov"','"-spd"','PLTSOLVD','CRVAL1','CRVAL2')
 require(Path('src/backends/indi_devices.cpp'),'EQUATORIAL_EOD_COORD','TELESCOPE_ABORT_MOTION','ABS_FOCUS_POSITION','FOCUS_ABORT_MOTION','short-lived client')
 require(Path('drivers/qhy/oal_driver_qhy.cpp'),'InitQHYCCDResource','SetQHYCCDStreamMode(c->handle,0)','CONTROL_TRANSFERBIT','CancelQHYCCDExposingAndReadout','GetQHYCCDSingleFrame','publishFrame')

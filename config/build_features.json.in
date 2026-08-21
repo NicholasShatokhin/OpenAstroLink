@@ -1,0 +1,15 @@
+{
+  "version": "@PROJECT_VERSION@",
+  "system": "@CMAKE_SYSTEM_NAME@",
+  "processor": "@CMAKE_SYSTEM_PROCESSOR@",
+  "buildGui": "@OAS_BUILD_GUI@",
+  "buildNode": "@OAS_BUILD_NODE@",
+  "nativeQhy": "@OAS_ENABLE_QHY@",
+  "nativeCanon": "@OAS_ENABLE_NATIVE_CANON@",
+  "canonTransport": "@OAS_CANON_TRANSPORT_RESOLVED@",
+  "nativeZwoAsi": "@OAS_ENABLE_NATIVE_ZWO_ASI@",
+  "nativeZwoEaf": "@OAS_ENABLE_NATIVE_ZWO_EAF@",
+  "nativeGemini": "@OAS_ENABLE_NATIVE_GEMINI@",
+  "nativeSkyWatcher": "@OAS_ENABLE_NATIVE_SKYWATCHER@",
+  "indiCompatibility": "@OAS_ENABLE_INDI@"
+}

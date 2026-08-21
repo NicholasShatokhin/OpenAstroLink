@@ -1,4 +1,4 @@
-# Матриця зрілості модулів — v0.2.9
+# Матриця зрілості модулів — v0.2.10
 
 Канонічна англійська версія: `../STATUS.md`.
 
@@ -9,7 +9,7 @@
 | Native driver registry | Реалізовано | Manifest validation, search paths, device enumeration, generic adapters |
 | Native reference simulator | Реалізовано | ABI-v2 camera/mount/focuser |
 | Native QHY `oal.qhy` | Реалізовано, HIL pending | Direct QHYCCD SDK; exact hardware ID, capture, ROI/bin/gain/offset, abort, frame publication |
-| Native Canon EOS `oal.canon` | Реалізовано, HIL pending | Native ABI-v2; USB/PTP через linked libgphoto2, shutter/ISO, Bulb, cancel, original-file spool, preview |
+| Native Canon EOS `oal.canon` | Реалізовано, HIL pending | Native ABI-v2; Canon EDSDK на Windows, libgphoto2/PTP на Linux; original-file spool + preview |
 | Native ZWO ASI `oal.zwo.asi` | Реалізовано, HIL pending | Direct ASI SDK; multi-camera enumeration, exposure, ROI/binning, gain/offset, cancel, native frame publication |
 | Native ZWO EAF `oal.zwo.eaf` | Реалізовано, HIL pending | Direct EAF SDK; absolute/relative move, halt, status, temperature, limits, backlash/reverse |
 | Native Gemini `oal.gemini` | Protocol path реалізовано, HIL pending | Direct persistent MyFocuserPro2-compatible serial |
@@ -49,10 +49,18 @@
 
 Native OAL означає, що драйвер говорить ABI v2 безпосередньо з OAL host і може використовувати лише manufacturer SDK або documented low-level protocol нижче нього. Він не проходить через INDI, Alpaca чи LX200.
 
-## Нове у v0.2.9
+## Нове у v0.2.10
 
 - Native ZWO ASI camera та native ZWO EAF focuser.
 - Dual main/guide camera ownership з independent resource locks.
 - Main і guide optical-train profiles у node-side `TelescopeProfile`.
 - Stellarium Telescope Control TCP bridge для mount position/GOTO.
 - Англійська документація канонічна; українські mirrors підтримуються паралельно.
+
+## v0.2.10: cross-platform build/deployment
+
+- Windows x64 core/native/observatory presets — реалізовано, hardware build/HIL ще треба прогнати на цільовій машині.
+- Linux x86_64 native/observatory/headless presets — реалізовано.
+- Canon EDSDK transport — source/API-shape compile PASS, реальний EOS HIL pending.
+- Windows `windeployqt` і Linux install/tar packaging scripts — реалізовано, target packaging validation pending.
+- Локальні SDK paths винесені в ignored `CMakeUserPresets.json`.

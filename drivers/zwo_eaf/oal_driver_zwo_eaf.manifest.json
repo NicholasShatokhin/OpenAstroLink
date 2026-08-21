@@ -1,7 +1,7 @@
 {
   "driverId": "oal.zwo.eaf",
   "name": "OpenAstroLink Native ZWO EAF Focuser Driver",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "abiVersion": 2,
   "library": "oal_driver_zwo_eaf",
   "deviceClasses": ["focuser"],

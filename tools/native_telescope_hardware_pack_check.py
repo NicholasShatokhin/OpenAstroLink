@@ -9,7 +9,7 @@ def need(path,*tokens):
     text=p.read_text(errors='replace')
     for token in tokens: checks.append((token in text,f'{path}: {token}'))
 
-need(Path('CMakeLists.txt'),'VERSION 0.2.9','OAS_ENABLE_NATIVE_CANON','OAS_ENABLE_NATIVE_GEMINI','OAS_ENABLE_NATIVE_SKYWATCHER','QHYCCD_INCLUDE_DIR','QHYCCD_LIBRARY')
+need(Path('CMakeLists.txt'),'VERSION 0.2.10','OAS_ENABLE_NATIVE_CANON','OAS_ENABLE_NATIVE_GEMINI','OAS_ENABLE_NATIVE_SKYWATCHER','QHYCCD_INCLUDE_DIR','QHYCCD_LIBRARY')
 need(Path('drivers/common_blocking_serial_session.h'),'OalBlockingSerialSession','BlockingQueuedConnection','Keeping the port open','setDataTerminalReady(false)')
 need(Path('drivers/gemini/myfocuserpro2_protocol.h'),':02#',':00#',':01#',':04#',':06#',':08#',':05')
 need(Path('drivers/gemini/oal_driver_gemini.cpp'),'oal.gemini','9600','probeCommand()','controller-reported','powerCycleMayInvalidateMechanicalReference','focuser.moveAbsolute','focuser.moveRelative','focuser.halt','NOT_SUPPORTED',':8#','persistentSession')

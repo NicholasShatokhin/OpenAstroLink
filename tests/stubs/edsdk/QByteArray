@@ -1,0 +1,4 @@
+#pragma once
+#include <cstddef>
+using qsizetype=std::ptrdiff_t;
+class QByteArray{public: QByteArray(const char*,qsizetype){};};

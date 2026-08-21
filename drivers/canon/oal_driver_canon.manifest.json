@@ -2,19 +2,29 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.canon",
   "name": "OpenAstroLink native Canon EOS driver",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "abiVersion": 2,
   "library": "oal_driver_canon",
-  "deviceClasses": ["camera"],
+  "deviceClasses": [
+    "camera"
+  ],
   "isolation": "in-process",
   "permissions": [
-    {"kind": "usb", "vendor": "Canon"},
-    {"kind": "filesystem", "path": "/var/lib/openastrolink/captures/canon", "access": "write"}
+    {
+      "kind": "usb",
+      "vendor": "Canon"
+    },
+    {
+      "kind": "filesystem",
+      "path": "user-capture-directory",
+      "access": "write"
+    }
   ],
   "threadModel": "per-device-serial",
   "trust": "bundled",
   "config": {
-    "spoolDir": "/var/lib/openastrolink/captures/canon",
+    "spoolDir": "",
     "deleteFromCamera": true
-  }
+  },
+  "transportSelection": "build-time: EDSDK on Windows AUTO, libgphoto2 on Linux AUTO"
 }

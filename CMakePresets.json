@@ -7,102 +7,145 @@
   },
   "configurePresets": [
     {
-      "name": "default-release",
-      "displayName": "Default Release (native-first + INDI compatibility available)",
+      "name": "base-release",
+      "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "OAS_BUILD_GUI": "ON",
         "OAS_BUILD_NODE": "ON",
         "OAS_BUILD_EXAMPLE_DRIVER": "ON",
+        "OAS_BUILD_HARDWARE_PROBE": "ON",
+        "OAS_BUILD_NATIVE_REFERENCE_DRIVERS": "ON",
         "OAS_ENABLE_NATIVE_GEMINI": "ON",
         "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
-        "OAS_ENABLE_INDI": "ON",
-        "OAS_ENABLE_NATIVE_CANON": "OFF",
-        "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
-        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF"
+        "OAS_ENABLE_GPHOTO2": "OFF"
       }
     },
     {
-      "name": "windows-vs2022",
-      "displayName": "Windows VS2022 (native telescope pack + INDI compatibility)",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
-      "binaryDir": "${sourceDir}/build/vs2022",
+      "name": "windows-core-release",
+      "displayName": "Windows x64 core (MSVC/Qt, no vendor SDKs)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-core",
+      "inherits": "base-release",
       "cacheVariables": {
-        "OAS_BUILD_GUI": "ON",
-        "OAS_BUILD_NODE": "ON",
-        "OAS_BUILD_EXAMPLE_DRIVER": "ON",
-        "OAS_ENABLE_NATIVE_GEMINI": "ON",
-        "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
-        "OAS_ENABLE_INDI": "ON",
+        "OAS_ENABLE_QHY": "OFF",
         "OAS_ENABLE_NATIVE_CANON": "OFF",
         "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
-        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF"
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
+        "OAS_ENABLE_INDI": "OFF"
+      }
+    },
+    {
+      "name": "windows-native-release",
+      "displayName": "Windows x64 native observatory (vendor SDKs, no INDI)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-native",
+      "inherits": "base-release",
+      "cacheVariables": {
+        "OAS_ENABLE_QHY": "ON",
+        "OAS_ENABLE_NATIVE_CANON": "ON",
+        "OAS_CANON_TRANSPORT": "EDSDK",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "ON",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "ON",
+        "OAS_ENABLE_INDI": "OFF"
+      }
+    },
+    {
+      "name": "windows-observatory-release",
+      "displayName": "Windows x64 observatory (native + INDI compatibility)",
+      "inherits": "windows-native-release",
+      "binaryDir": "${sourceDir}/build/windows-observatory",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
+      }
+    },
+    {
+      "name": "linux-native-release",
+      "displayName": "Linux x86_64 native observatory",
+      "inherits": "base-release",
+      "binaryDir": "${sourceDir}/build/linux-native",
+      "cacheVariables": {
+        "OAS_ENABLE_QHY": "ON",
+        "OAS_ENABLE_NATIVE_CANON": "ON",
+        "OAS_CANON_TRANSPORT": "GPHOTO2",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "ON",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "ON",
+        "OAS_ENABLE_INDI": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr/local"
+      }
+    },
+    {
+      "name": "linux-observatory-release",
+      "displayName": "Linux x86_64 observatory (native + INDI compatibility)",
+      "inherits": "linux-native-release",
+      "binaryDir": "${sourceDir}/build/linux-observatory",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
+      }
+    },
+    {
+      "name": "linux-node-release",
+      "displayName": "Linux headless observatory node",
+      "inherits": "linux-observatory-release",
+      "binaryDir": "${sourceDir}/build/linux-node",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF"
       }
     },
     {
       "name": "rpi4-native-release",
-      "displayName": "Raspberry Pi 4 native-only observatory (QHY + Canon EOS + Gemini + Sky-Watcher)",
-      "inherits": "default-release",
-      "binaryDir": "${sourceDir}/build/rpi4-native",
-      "cacheVariables": {
-        "OAS_BUILD_GUI": "ON",
-        "OAS_BUILD_NODE": "ON",
-        "OAS_ENABLE_QHY": "ON",
-        "OAS_ENABLE_NATIVE_GEMINI": "ON",
-        "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
-        "OAS_ENABLE_INDI": "OFF",
-        "OAS_ENABLE_GPHOTO2": "OFF",
-        "OAS_BUILD_HARDWARE_PROBE": "ON",
-        "CMAKE_INSTALL_PREFIX": "/usr/local",
-        "OAS_ENABLE_NATIVE_CANON": "ON",
-        "OAS_ENABLE_NATIVE_ZWO_ASI": "ON",
-        "OAS_ENABLE_NATIVE_ZWO_EAF": "ON"
-      }
+      "displayName": "Raspberry Pi 4 / ARM64 native observatory",
+      "inherits": "linux-native-release",
+      "binaryDir": "${sourceDir}/build/rpi4-native"
     },
     {
       "name": "rpi4-observatory-release",
-      "displayName": "Raspberry Pi 4 observatory (native QHY/Canon/Gemini/Sky-Watcher + INDI compatibility)",
-      "inherits": "rpi4-native-release",
-      "binaryDir": "${sourceDir}/build/rpi4-observatory",
-      "cacheVariables": {
-        "OAS_ENABLE_INDI": "ON",
-        "OAS_ENABLE_NATIVE_CANON": "ON",
-        "OAS_ENABLE_NATIVE_ZWO_ASI": "ON",
-        "OAS_ENABLE_NATIVE_ZWO_EAF": "ON"
-      }
+      "displayName": "Raspberry Pi 4 / ARM64 observatory (native + INDI compatibility)",
+      "inherits": "linux-observatory-release",
+      "binaryDir": "${sourceDir}/build/rpi4-observatory"
     },
     {
       "name": "node-sim-release",
-      "displayName": "Headless node only (native simulator)",
-      "inherits": "default-release",
+      "displayName": "Headless simulator node",
+      "inherits": "base-release",
       "binaryDir": "${sourceDir}/build/node-sim",
       "cacheVariables": {
         "OAS_BUILD_GUI": "OFF",
-        "OAS_BUILD_NODE": "ON",
         "OAS_ENABLE_QHY": "OFF",
-        "OAS_ENABLE_NATIVE_GEMINI": "OFF",
-        "OAS_ENABLE_NATIVE_SKYWATCHER": "OFF",
-        "OAS_ENABLE_INDI": "OFF",
-        "OAS_ENABLE_GPHOTO2": "OFF",
-        "OAS_BUILD_HARDWARE_PROBE": "ON",
         "OAS_ENABLE_NATIVE_CANON": "OFF",
         "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
-        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF"
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
+        "OAS_ENABLE_NATIVE_GEMINI": "OFF",
+        "OAS_ENABLE_NATIVE_SKYWATCHER": "OFF",
+        "OAS_ENABLE_INDI": "OFF"
       }
     }
   ],
   "buildPresets": [
     {
-      "name": "default-release",
-      "configurePreset": "default-release"
+      "name": "windows-core-release",
+      "configurePreset": "windows-core-release"
     },
     {
-      "name": "windows-vs2022",
-      "configurePreset": "windows-vs2022",
-      "configuration": "Release"
+      "name": "windows-native-release",
+      "configurePreset": "windows-native-release"
+    },
+    {
+      "name": "windows-observatory-release",
+      "configurePreset": "windows-observatory-release"
+    },
+    {
+      "name": "linux-native-release",
+      "configurePreset": "linux-native-release"
+    },
+    {
+      "name": "linux-observatory-release",
+      "configurePreset": "linux-observatory-release"
+    },
+    {
+      "name": "linux-node-release",
+      "configurePreset": "linux-node-release"
     },
     {
       "name": "rpi4-native-release",

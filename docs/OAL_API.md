@@ -1,4 +1,4 @@
-# OpenAstroLink HTTP API — v0.2.9 reference implementation
+# OpenAstroLink HTTP API — v0.2.10 reference implementation
 
 The transitional envelope remains:
 
@@ -103,6 +103,6 @@ Existing guiding, polar-alignment and session endpoints remain node-local. Polar
 - production FITS/RAW/SER data plane;
 - TLS/auth/scopes/audit/safety policy.
 
-## v0.2.9 camera roles and Stellarium integration
+## v0.2.10 camera roles and Stellarium integration
 
 `POST /api/v1/devices/connect` accepts optional `role: "main" | "guide"` for cameras. Omitting role preserves backward-compatible main-camera behavior. Guide exposures use `POST /api/v1/cameras/guide/capture` and resource `camera.guide`. `GET/POST /api/v1/integrations/stellarium` reads or configures the mount-only Stellarium TCP bridge.

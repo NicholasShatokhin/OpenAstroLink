@@ -1,0 +1,4 @@
+#pragma once
+#include "QByteArray"
+#include <cstdint>
+class QImage{public: enum Format{Format_RGB888}; static QImage fromData(const QByteArray&){return {};}; QImage convertToFormat(Format) const{return {};}; bool isNull() const{return false;} int width()const{return 1;} int height()const{return 1;} int bytesPerLine()const{return 3;} const std::uint8_t* constBits()const{static std::uint8_t x[3]{};return x;} qsizetype sizeInBytes()const{return 3;}};

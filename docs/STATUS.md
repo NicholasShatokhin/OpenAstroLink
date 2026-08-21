@@ -1,4 +1,4 @@
-# Module maturity matrix — v0.2.9
+# Module maturity matrix — v0.2.10
 
 | Module | Status | Notes |
 |---|---|---|
@@ -7,7 +7,7 @@
 | Native driver registry | Implemented | Manifest validation, default search paths, device enumeration, generic adapters |
 | Native reference simulator | Implemented | ABI-v2 camera/mount/focuser |
 | Native QHY `oal.qhy` | Implemented, HIL pending | Direct QHYCCD SDK; exact hardware ID, single capture, ROI/bin/gain/offset, abort, frame publication |
-| Native Canon EOS `oal.canon` | Implemented, HIL pending | Native ABI-v2 driver; USB/PTP via linked libgphoto2, shutter/ISO, Bulb, cooperative cancel, original-file spool, preview publication |
+| Native Canon EOS `oal.canon` | Implemented, HIL pending | Native ABI-v2; Canon EDSDK on Windows, libgphoto2/PTP on Linux; original-file spool + operational preview |
 | Native ZWO ASI `oal.zwo.asi` | Implemented, HIL pending | Direct ASI SDK; multi-camera enumeration, exposure, ROI/binning, gain/offset, cancel, native frame publication |
 | Native ZWO EAF `oal.zwo.eaf` | Implemented, HIL pending | Direct EAF SDK; absolute/relative move, halt, status, temperature, limits, backlash/reverse capability reporting |
 | Native Gemini `oal.gemini` | Protocol path implemented, HIL pending | Direct persistent 9600-baud MyFocuserPro2-compatible serial; position/move/temp/max-position |
@@ -47,10 +47,22 @@
 
 Native OAL means that a driver speaks ABI v2 directly to the OAL host and may use a manufacturer SDK or documented low-level hardware protocol beneath it. It does not pass through INDI, Alpaca, or LX200.
 
-## v0.2.9 additions
+## v0.2.10 additions
 
 - Native ZWO ASI camera driver and native ZWO EAF focuser driver.
 - Dual main/guide camera ownership with independent resource locks.
 - Main and guide optical-train profiles stored in the node-side `TelescopeProfile`.
 - Stellarium Telescope Control TCP bridge for mount position/GOTO.
 - English-canonical documentation with Ukrainian mirrors.
+
+## v0.2.10 cross-platform build/deployment status
+
+| Area | Status | Notes |
+|---|---|---|
+| Windows x64 core build model | Implemented | MSVC/Qt/OpenCV preset without vendor SDKs. |
+| Windows native observatory preset | Implemented / HIL pending | QHY/ZWO + Canon EDSDK + Gemini/Sky-Watcher; exact vendor SDK paths supplied via user preset. |
+| Linux x86_64 native/observatory presets | Implemented / HIL pending | Native drivers with optional INDI compatibility. |
+| Linux headless preset | Implemented | Node without GUI. |
+| Canon EDSDK native transport | Implemented / compile-shape PASS / HIL pending | Same `oal.canon` semantics as Linux transport. |
+| Packaging scripts | Implemented / target validation pending | Windows uses `windeployqt`; Linux uses install/tar staging. |
+| Local SDK path hygiene | Implemented | `CMakeUserPresets.json` is ignored; example file supplied. |

@@ -1,4 +1,4 @@
-# Gemini EAF — v0.2.9
+# Gemini EAF — v0.2.10
 
 Канонічний документ: `../GEMINI_EAF.md`.
 

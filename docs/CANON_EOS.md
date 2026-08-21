@@ -8,7 +8,7 @@ This is the same architectural rule used by `oal.qhy`: a vendor/protocol library
 
 Canon also publishes EDSDK for supported models and states that EDSDK supports Raspberry Pi OS/Linux. A future EDSDK transport can therefore be added under the same `oal.canon` device/capability contract without changing OAL clients.
 
-## Implemented in v0.2.9
+## Implemented in v0.2.10
 
 - USB/PTP discovery through libgphoto2.
 - Canon/EOS filtering, including generic PTP devices when the probed manufacturer reports Canon.
@@ -67,3 +67,31 @@ Bootstrap installs `libgphoto2-dev` and libjpeg development files. `install_rpi_
 ## Why libgphoto2 is not the compatibility layer here
 
 The old `canon-gphoto2` object under `src/backends/` remains an optional legacy in-core compatibility implementation controlled by `OAS_ENABLE_GPHOTO2`. The new `drivers/canon/` target is a separately discovered ABI-v2 OAL driver. It uses libgphoto2 only as a linked USB/PTP implementation library and exposes no gphoto2 API to the core or GUI.
+
+## v0.2.10 transport selection
+
+Native Canon is now a cross-platform OAL driver with a build-time transport selection:
+
+- `OAS_CANON_TRANSPORT=AUTO` → **EDSDK on Windows**, **GPHOTO2 on Linux**;
+- `OAS_CANON_TRANSPORT=EDSDK` → Canon EDSDK explicitly;
+- `OAS_CANON_TRANSPORT=GPHOTO2` → libgphoto2 explicitly.
+
+The OAL-facing driver id remains `oal.canon`, so GUI/core/session semantics do not depend on the low-level transport.
+
+### EDSDK path
+
+The Windows-native implementation enumerates EOS bodies with EDSDK, opens a camera session, saves the original transferred file to the OAL capture spool, and publishes the EDSDK thumbnail as the operational preview frame. Bulb is used for timed astronomy exposures where the body/mode supports it; the camera's current release mode is used as a fallback. Cancellation ends Bulb best-effort.
+
+Required CMake variables:
+
+```text
+CANON_EDSDK_INCLUDE_DIR
+CANON_EDSDK_LIBRARY
+CANON_EDSDK_RUNTIME_DIR   # packaging hint
+```
+
+This transport is source/API-shape implemented but remains **hardware-HIL pending** until tested with the exact EOS model and current Canon SDK runtime.
+
+### Linux path
+
+The existing libgphoto2/PTP implementation remains the default Linux transport. It is still a native OAL driver: libgphoto2 is only the hardware access layer, not an INDI/ASCOM backend.

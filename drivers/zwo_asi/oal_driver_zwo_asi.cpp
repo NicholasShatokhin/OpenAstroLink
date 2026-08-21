@@ -117,7 +117,7 @@ void stop(void *) {
     for (auto &kv : state.cameras) if (kv.second->connected) { ASIStopExposure(kv.first); ASIStopVideoCapture(kv.first); ASICloseCamera(kv.first); kv.second->connected=false; }
 }
 const char *manifest(void *) {
-    return copyString(R"({"driverId":"oal.zwo.asi","name":"OpenAstroLink native ZWO ASI camera driver","version":"0.2.9","abiVersion":2,"threadModel":"per-device-serial","transport":"ZWO ASI SDK"})");
+    return copyString(R"({"driverId":"oal.zwo.asi","name":"OpenAstroLink native ZWO ASI camera driver","version":"0.2.10","abiVersion":2,"threadModel":"per-device-serial","transport":"ZWO ASI SDK"})");
 }
 const char *devices(void *) {
     const int n = ASIGetNumOfConnectedCameras(); std::ostringstream o; o << '['; bool first=true;
@@ -194,6 +194,6 @@ const char *invoke(void *, const char *device, const char *method, const char *r
 bool cancel(void *, const char *device, const char *) { auto*c=camera(device?device:""); if(!c||!c->connected)return false; c->cancelRequested=true; const auto rc=ASIStopExposure(c->cameraId); return rc==ASI_SUCCESS||rc==ASI_ERROR_INVALID_SEQUENCE; }
 void releaseString(void *, const char *p) { if(p)host.deallocate(host.hostContext,const_cast<char*>(p)); }
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.zwo.asi","OpenAstroLink native ZWO ASI camera driver","0.2.9",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+                "oal.zwo.asi","OpenAstroLink native ZWO ASI camera driver","0.2.10",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 }
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h) { if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||h->structSize<sizeof(OalDriverHostV2))return nullptr; host=*h; return &api; }

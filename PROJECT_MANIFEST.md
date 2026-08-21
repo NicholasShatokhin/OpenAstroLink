@@ -1,4 +1,4 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.9
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
@@ -7,7 +7,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
 - Protocol / native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.9-zwo-stellarium-dual-optics`
+- Version: `0.2.10-cross-platform-desktop-observatory`
 - Language: C++20
 - UI: Qt 6.4+
 - Image processing: OpenCV 4
@@ -19,7 +19,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 ## Native OAL drivers
 
 - `oal.qhy` — QHY cameras through QHYCCD SDK.
-- `oal.canon` — Canon EOS through USB/PTP/libgphoto2 transport.
+- `oal.canon` — Canon EOS through Canon EDSDK on Windows or USB/PTP/libgphoto2 on Linux (selectable at build time).
 - `oal.zwo.asi` — ZWO ASI cameras through ZWO ASI SDK.
 - `oal.zwo.eaf` — ZWO EAF focusers through ZWO EAF SDK.
 - `oal.gemini` — Gemini EAF native serial path.
@@ -47,3 +47,7 @@ The observatory core has independent `main` and `guide` camera roles. Their oper
 Canonical: `README.md`, `PROJECT_MANIFEST.md`, `docs/*.md`.
 Ukrainian mirrors: `README_UA.md`, `PROJECT_MANIFEST_UA.md`, `docs/uk/*.md`.
 Machine-readable API/ABI identifiers remain English.
+
+## First-class deployment targets
+
+Windows x64/MSVC, Linux x86_64 and Linux ARM64/Raspberry Pi can all host directly attached observatory hardware. `CMakePresets.json` is portable; machine-specific SDK paths belong in ignored `CMakeUserPresets.json`. Windows and Linux packaging scripts are provided under `scripts/`.

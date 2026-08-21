@@ -53,9 +53,17 @@ struct CameraState {
 struct DriverState {
     std::mutex mutex;
     std::unordered_map<std::string, std::unique_ptr<CameraState>> cameras;
-    std::string spoolDir{"/var/lib/openastrolink/captures/canon"};
+    std::string spoolDir;
     bool deleteFromCamera{true};
 } state;
+
+std::string defaultSpoolDir() {
+#ifdef _WIN32
+    if (const char *p = std::getenv("USERPROFILE")) return (std::filesystem::path(p) / "Pictures" / "OpenAstroLink" / "Canon").string();
+#endif
+    if (const char *p = std::getenv("HOME")) return (std::filesystem::path(p) / "Pictures" / "OpenAstroLink" / "Canon").string();
+    return (std::filesystem::temp_directory_path() / "OpenAstroLink" / "Canon").string();
+}
 
 char *copyString(const std::string &s) {
     auto *p = static_cast<char *>(host.allocate(host.hostContext, s.size() + 1));
@@ -374,6 +382,7 @@ bool probeDevice(const std::string &model, const std::string &port, std::string 
 }
 
 bool start(void *, const char *config) {
+    state.spoolDir = defaultSpoolDir();
     if (config) {
         const std::string j(config); const auto s = stringValue(j, "spoolDir"); if (!s.empty()) state.spoolDir = s;
         state.deleteFromCamera = boolean(j, "deleteFromCamera", true);
@@ -381,7 +390,7 @@ bool start(void *, const char *config) {
     return true;
 }
 void stop(void *) { std::lock_guard<std::mutex> lock(state.mutex); for (auto &x : state.cameras) { std::lock_guard<std::mutex> op(x.second->operationMutex); closeCamera(*x.second); } }
-const char *manifest(void *) { return copyString(R"({"driverId":"oal.canon","name":"OpenAstroLink native Canon EOS driver","version":"0.2.9","abiVersion":2,"threadModel":"per-device-serial","transport":"USB/PTP via linked libgphoto2"})"); }
+const char *manifest(void *) { return copyString(R"({"driverId":"oal.canon","name":"OpenAstroLink native Canon EOS driver","version":"0.2.10","abiVersion":2,"threadModel":"per-device-serial","transport":"USB/PTP via linked libgphoto2"})"); }
 
 const char *devices(void *) {
     CameraList *list = nullptr; GPContext *ctx = gp_context_new(); if (!ctx || gp_list_new(&list) < GP_OK) { if (ctx) gp_context_unref(ctx); return copyString("[]"); }
@@ -466,7 +475,7 @@ const char *invoke(void *, const char *device, const char *method, const char *r
 bool cancel(void *, const char *device, const char *) { auto *c = camera(device ? device : ""); if (!c) return false; c->abortRequested = true; return true; }
 void releaseString(void *, const char *p) { if (p) host.deallocate(host.hostContext, const_cast<char *>(p)); }
 OalDriverV2 api{OAL_DRIVER_ABI_V2, sizeof(OalDriverV2), OAL_DRIVER_FEATURE_EVENTS | OAL_DRIVER_FEATURE_FRAME_PUBLISH | OAL_DRIVER_FEATURE_CANCELLATION | OAL_DRIVER_FEATURE_HEALTH,
-                "oal.canon", "OpenAstroLink native Canon EOS driver", "0.2.9", nullptr, &manifest, &start, &stop, &devices, &caps, &health, &invoke, &cancel, &releaseString};
+                "oal.canon", "OpenAstroLink native Canon EOS driver", "0.2.10", nullptr, &manifest, &start, &stop, &devices, &caps, &health, &invoke, &cancel, &releaseString};
 } // namespace
 
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h) {

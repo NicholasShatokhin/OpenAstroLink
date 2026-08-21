@@ -1,16 +1,34 @@
 # OpenAstroSuite / OpenAstroLink
 
-**v0.2.9 — ZWO native drivers, Stellarium bridge, dual-camera and optical-train profiles**
+**v0.2.10 — cross-platform desktop observatory builds (Windows x64, Linux x86_64, Linux ARM64/RPi)**
 
 English is the canonical project documentation language. Ukrainian mirrors are provided in `README_UA.md` and `docs/uk/`.
 
 OpenAstroLink (OAL) is a modern, local-first observatory control stack. Native OAL drivers are the reference hardware path; INDI, ASCOM Alpaca and LX200 remain optional compatibility layers for equipment that does not yet have a native OAL driver.
 
+
+## v0.2.10 cross-platform deployment
+
+A Raspberry Pi is no longer a special requirement. If the hardware is attached directly to a Windows or Linux computer, that computer can run `openastrolink-node` and own the observatory hardware. The GUI can run on the same machine or remotely.
+
+```text
+QHY / Canon / ZWO / Gemini / Sky-Watcher
+                    │ USB / serial
+                    ▼
+             openastrolink-node
+               ┌────┴─────┐
+          local GUI   remote GUI + Stellarium
+```
+
+Canon transport is selected per platform: `AUTO` resolves to Canon EDSDK on Windows and libgphoto2 on Linux. INDI remains independently switchable as a compatibility layer. Portable CMake presets are kept in `CMakePresets.json`; developer SDK paths belong in ignored `CMakeUserPresets.json`.
+
+See `docs/BUILD_PLATFORMS.md` for exact build and packaging commands.
+
 ## Runtime architecture
 
 ```text
 OpenAstroSuite GUI
-  ├─ local GUI on the Raspberry Pi
+  ├─ local GUI on the observatory host (Windows/Linux/RPi)
   └─ remote GUI on another computer
               │
         OAL HTTP / WebSocket
@@ -21,7 +39,7 @@ OpenAstroSuite GUI
               │
       Native OAL ABI v2 registry
       ├─ oal.qhy          → QHYCCD SDK → QHY camera
-      ├─ oal.canon        → USB/PTP/libgphoto2 → Canon EOS
+      ├─ oal.canon        → Canon EDSDK (Windows) / USB/PTP-libgphoto2 (Linux) → Canon EOS
       ├─ oal.zwo.asi      → ZWO ASI SDK → ZWO ASI camera
       ├─ oal.zwo.eaf      → ZWO EAF SDK → ZWO EAF focuser
       ├─ oal.gemini       → USB serial → Gemini EAF
@@ -33,7 +51,7 @@ Compatibility path, enabled when needed:
 
 The node owns the hardware and long-running operations. Closing a GUI does not stop the node or disconnect the equipment.
 
-## v0.2.9 additions
+## v0.2.10 additions
 
 - Native `oal.zwo.asi` camera driver with discovery, identity/capabilities, exposure, ROI, binning, gain/offset, cancellation and native frame publication.
 - Native `oal.zwo.eaf` focuser driver with absolute/relative movement, halt, position/moving state, temperature, backlash/reverse/max-step capabilities.
@@ -83,18 +101,14 @@ These values are useful for solver hints, guiding, sampling diagnostics and futu
 
 ## Build presets
 
-- `rpi4-native-release`: native hardware path, INDI disabled.
-- `rpi4-observatory-release`: native hardware path plus INDI compatibility.
-- Windows presets leave vendor SDK drivers optional unless their SDK paths are supplied.
+First-class presets now cover desktop and edge deployments:
 
-ZWO options:
+- `windows-core-release`, `windows-native-release`, `windows-observatory-release`;
+- `linux-native-release`, `linux-observatory-release`, `linux-node-release`;
+- `rpi4-native-release`, `rpi4-observatory-release`;
+- `node-sim-release`.
 
-```text
-OAS_ENABLE_NATIVE_ZWO_ASI
-OAS_ENABLE_NATIVE_ZWO_EAF
-ZWO_ASI_ROOT / ZWO_ASI_INCLUDE_DIR / ZWO_ASI_LIBRARY
-ZWO_EAF_ROOT / ZWO_EAF_INCLUDE_DIR / ZWO_EAF_LIBRARY
-```
+Copy `CMakeUserPresets.example.json` to `CMakeUserPresets.json` for Qt/OpenCV/QHY/ZWO/Canon SDK paths. The local file is ignored by Git.
 
 ## Compatibility policy
 
@@ -102,6 +116,6 @@ INDI is deliberately easy to enable because it provides broad equipment coverage
 
 ## Current maturity
 
-The architecture and source-level checks are ahead of hardware validation. Native QHY/Canon/Gemini/Sky-Watcher and the new ZWO drivers require hardware-in-the-loop qualification on the target Raspberry Pi and actual devices before being labelled production-ready. The Stellarium bridge should likewise be tested against the user's installed Stellarium version and real mount.
+The architecture and source-level checks are ahead of hardware validation. Native QHY/Canon/Gemini/Sky-Watcher and the new ZWO drivers require hardware-in-the-loop qualification on each target host OS/architecture and the actual devices before being labelled production-ready. The Stellarium bridge should likewise be tested against the user's installed Stellarium version and real mount.
 
 See `docs/STATUS.md`, `docs/VALIDATION.md`, `docs/ZWO_NATIVE.md`, `docs/STELLARIUM.md`, and `docs/OPTICAL_TRAINS_AND_DUAL_CAMERAS.md`.
