@@ -111,3 +111,11 @@ sudo usermod -aG dialout "$USER"
 Також встановити udev rules QHY/ZWO та не дозволяти desktop photo manager захоплювати Canon EOS раніше за OAL.
 
 `build_features.json` генерується при configure і дозволяє точно бачити, які hardware transports увійшли в конкретну збірку.
+
+## Захист ABI компілятора Windows (hotfix v0.2.10.1)
+
+Канонічні Windows-presets тепер використовують генератор **Visual Studio 17 2022 / x64** та `OAS_REQUIRE_MSVC=ON`. Це не дозволяє запису в `PATH` (наприклад MinGW GCC, який постачається зі Strawberry Perl) непомітно вибрати `g++`, коли проєкт лінкується з Qt MSVC2022 `.lib`.
+
+Якщо старий build-каталог був сконфігурований через MinGW/GNU, його треба видалити перед повторною конфігурацією. Вибір компілятора кешується CMake і не повинен змінюватися всередині того самого build tree.
+
+У Windows observatory build має бути MSVC, а не `C:/Strawberry/.../c++.exe` чи інший MinGW `g++.exe`.

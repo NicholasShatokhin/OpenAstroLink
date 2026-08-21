@@ -25,7 +25,7 @@
     {
       "name": "windows-core-release",
       "displayName": "Windows x64 core (MSVC/Qt, no vendor SDKs)",
-      "generator": "Ninja",
+      "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/build/windows-core",
       "inherits": "base-release",
       "cacheVariables": {
@@ -33,13 +33,15 @@
         "OAS_ENABLE_NATIVE_CANON": "OFF",
         "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
         "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
-        "OAS_ENABLE_INDI": "OFF"
-      }
+        "OAS_ENABLE_INDI": "OFF",
+        "OAS_REQUIRE_MSVC": "ON"
+      },
+      "architecture": "x64"
     },
     {
       "name": "windows-native-release",
       "displayName": "Windows x64 native observatory (vendor SDKs, no INDI)",
-      "generator": "Ninja",
+      "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/build/windows-native",
       "inherits": "base-release",
       "cacheVariables": {
@@ -48,8 +50,10 @@
         "OAS_CANON_TRANSPORT": "EDSDK",
         "OAS_ENABLE_NATIVE_ZWO_ASI": "ON",
         "OAS_ENABLE_NATIVE_ZWO_EAF": "ON",
-        "OAS_ENABLE_INDI": "OFF"
-      }
+        "OAS_ENABLE_INDI": "OFF",
+        "OAS_REQUIRE_MSVC": "ON"
+      },
+      "architecture": "x64"
     },
     {
       "name": "windows-observatory-release",
@@ -125,15 +129,18 @@
   "buildPresets": [
     {
       "name": "windows-core-release",
-      "configurePreset": "windows-core-release"
+      "configurePreset": "windows-core-release",
+      "configuration": "Release"
     },
     {
       "name": "windows-native-release",
-      "configurePreset": "windows-native-release"
+      "configurePreset": "windows-native-release",
+      "configuration": "Release"
     },
     {
       "name": "windows-observatory-release",
-      "configurePreset": "windows-observatory-release"
+      "configurePreset": "windows-observatory-release",
+      "configuration": "Release"
     },
     {
       "name": "linux-native-release",

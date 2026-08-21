@@ -88,3 +88,7 @@ INDI залишається дуже легко ввімкнути для шир
 RPi більше не обов'язковий. Якщо обладнання під'єднане прямо до Windows x64 або Linux x86_64 комп'ютера, цей комп'ютер може запускати `openastrolink-node` і локальний GUI; інший GUI та Stellarium можуть підключатися віддалено.
 
 Portable build presets охоплюють Windows, desktop Linux, headless Linux і RPi. Локальні Qt/OpenCV/vendor SDK paths зберігаються у `CMakeUserPresets.json`, який ігнорується Git. Native Canon використовує EDSDK на Windows та libgphoto2/PTP на Linux за `AUTO` policy. Деталі: `docs/uk/BUILD_PLATFORMS.md`.
+
+### v0.2.10.2 — виправлення ізоляції QHY headers для MSVC
+
+Windows-ціль QHY більше не додає каталог `include` QHY SDK у глобальний шлях пошуку заголовків MSVC. Деякі версії QHY All-In-One містять сумісні заголовки `stdint.h` / `stdint_windows.h`; через `/I` вони могли підміняти системний `<stdint.h>` і ламати `std::int64_t`, `std::chrono` та інші типи STL. OAL тепер генерує приватний wrapper з абсолютним шляхом до `qhyccd.h`, не дозволяючи vendor headers затіняти CRT/STL headers.

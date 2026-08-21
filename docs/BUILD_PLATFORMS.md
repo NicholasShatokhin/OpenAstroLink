@@ -192,3 +192,11 @@ Linux:
 ```
 
 `build_features.json` is generated at configure time and installed with the package so support logs can state exactly which hardware transports were compiled in.
+
+## Windows compiler ABI guard (v0.2.10.1 hotfix)
+
+The canonical Windows presets now use the **Visual Studio 17 2022 / x64** generator and set `OAS_REQUIRE_MSVC=ON`. This prevents a shell `PATH` entry (for example Strawberry Perl's bundled MinGW GCC) from silently selecting `g++` while the build links against Qt MSVC2022 `.lib` files.
+
+If an older build directory was configured with MinGW/GNU, delete that build directory before reconfiguring. CMake compiler selection is cached and cannot be safely changed in place.
+
+Expected configure diagnostics for a Windows observatory build include an MSVC compiler, not `C:/Strawberry/.../c++.exe` or another MinGW `g++.exe`.

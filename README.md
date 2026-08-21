@@ -119,3 +119,7 @@ INDI is deliberately easy to enable because it provides broad equipment coverage
 The architecture and source-level checks are ahead of hardware validation. Native QHY/Canon/Gemini/Sky-Watcher and the new ZWO drivers require hardware-in-the-loop qualification on each target host OS/architecture and the actual devices before being labelled production-ready. The Stellarium bridge should likewise be tested against the user's installed Stellarium version and real mount.
 
 See `docs/STATUS.md`, `docs/VALIDATION.md`, `docs/ZWO_NATIVE.md`, `docs/STELLARIUM.md`, and `docs/OPTICAL_TRAINS_AND_DUAL_CAMERAS.md`.
+
+### v0.2.10.2 QHY/MSVC header-isolation hotfix
+
+The Windows QHY target no longer adds the QHY SDK `include` directory to MSVC's global include search path. Some QHY All-In-One SDK releases contain compatibility headers named `stdint.h` / `stdint_windows.h`; when that directory is passed through `/I`, MSVC's own `<cstdint>` can accidentally resolve to the vendor header and break `std::int64_t`, `std::chrono`, and other STL types. OAL now generates a private absolute-path wrapper for `qhyccd.h` and keeps vendor headers isolated from the CRT/STL search path.

@@ -1,0 +1,8 @@
+#pragma once
+
+// QHYCCD's Windows SDK ships compatibility headers named stdint.h/stdint_windows.h.
+// Putting the vendor include directory on the compiler's global /I search path can
+// cause MSVC's own <cstdint> to resolve to the QHY compatibility header instead of
+// the CRT header.  Include qhyccd.h by its configured absolute path so QHY sibling
+// headers remain discoverable without polluting the standard-library include path.
+#include "@OAL_QHYCCD_HEADER@"

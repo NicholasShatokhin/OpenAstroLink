@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.10 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,15 @@ option(OAS_BUILD_EXAMPLE_DRIVER "Build legacy ABI-v1 example plug-in" ON)
 option(OAS_BUILD_GUI "Build the OpenAstroSuite Qt GUI client" ON)
 option(OAS_BUILD_NODE "Build the headless openastrolink-node service" ON)
 option(OAS_BUILD_HARDWARE_PROBE "Build oal-hardware-probe diagnostics utility" ON)
+option(OAS_REQUIRE_MSVC "Fail configuration on Windows unless the MSVC toolchain is active" OFF)
+
+if(WIN32 AND OAS_REQUIRE_MSVC AND NOT MSVC)
+    message(FATAL_ERROR
+        "This Windows preset requires the MSVC ABI, but CMake selected '${CMAKE_CXX_COMPILER_ID}' "
+        "with compiler '${CMAKE_CXX_COMPILER}'. Do not mix MinGW/Strawberry GCC with "
+        "Qt MSVC2022 or vendor .lib files. Delete the build directory and configure with "
+        "the Visual Studio 17 2022 x64 preset.")
+endif()
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network SerialPort WebSockets HttpServer Concurrent)
 if(OAS_BUILD_GUI)
@@ -211,8 +220,29 @@ if(OAS_ENABLE_QHY)
             PATH_SUFFIXES lib lib64 usr/local/lib
             REQUIRED)
     endif()
+    # Do not place QHYCCD_INCLUDE_DIR on the compiler's normal include path.
+    # Recent QHY Windows SDK packages ship compatibility headers named stdint.h
+    # and stdint_windows.h.  With MSVC, /I <QHY sdk>/include can make the STL's
+    # <cstdint> pick the vendor header instead of the CRT header, producing a
+    # cascade of int64_t/std::chrono errors.  Generate one absolute-path wrapper
+    # for qhyccd.h instead; quoted includes inside qhyccd.h still resolve relative
+    # to the SDK directory, but the SDK directory cannot shadow standard headers.
+    file(TO_CMAKE_PATH "${QHYCCD_INCLUDE_DIR}/qhyccd.h" OAL_QHYCCD_HEADER)
+    if(NOT EXISTS "${OAL_QHYCCD_HEADER}")
+        message(FATAL_ERROR "QHYCCD_INCLUDE_DIR does not contain qhyccd.h: ${QHYCCD_INCLUDE_DIR}")
+    endif()
+    set(OAL_QHY_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/qhy")
+    file(MAKE_DIRECTORY "${OAL_QHY_GENERATED_INCLUDE_DIR}")
+    configure_file(cmake/qhyccd_sdk_include.h.in
+                   "${OAL_QHY_GENERATED_INCLUDE_DIR}/qhyccd_sdk_include.h" @ONLY)
+
     add_library(oal_driver_qhy SHARED drivers/qhy/oal_driver_qhy.cpp)
-    target_include_directories(oal_driver_qhy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${QHYCCD_INCLUDE_DIR})
+    target_include_directories(oal_driver_qhy PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${OAL_QHY_GENERATED_INCLUDE_DIR})
+    if(MSVC)
+        target_compile_definitions(oal_driver_qhy PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    endif()
     target_link_libraries(oal_driver_qhy PRIVATE ${QHYCCD_LIBRARY})
     oal_set_driver_output(oal_driver_qhy)
     configure_file(drivers/qhy/oal_driver_qhy.manifest.json
