@@ -1,6 +1,6 @@
 # OpenAstroSuite / OpenAstroLink
 
-**Поточний реліз: v0.2.10.10 — hotfix кросплатформної збірки та документації**
+**Поточний реліз: v0.2.10.11 — Gemini HIL + коректне завершення node**
 
 Англійська документація є канонічною. Українські дзеркала знаходяться у `README_UA.md` та `docs/uk/`.
 
@@ -43,7 +43,7 @@ Node володіє обладнанням і довгими операціям�
 
 ## CMake та сумісність presets
 
-У v0.2.10.10 використовується **CMake preset schema v2**, щоб presets читалися CMake 3.20+ і не вимагали CMake 3.25+ лише через формат JSON.
+У v0.2.10.11 використовується **CMake preset schema v2**, щоб presets читалися CMake 3.20+ і не вимагали CMake 3.25+ лише через формат JSON.
 
 Перевір:
 
@@ -69,7 +69,7 @@ CMake >= 3.20
 Unrecognized "version" field
 ```
 
-Для v0.2.10.10 створіть user preset заново:
+Для v0.2.10.11 створіть user preset заново:
 
 ```bash
 rm -f CMakeUserPresets.json
@@ -347,11 +347,11 @@ INDI легко вмикається для іншого обладнання, �
 Проєкт готовий до подальшої supervised HIL-кваліфікації, але ще не до unattended Internet-facing observatory. Потрібно завершити replayable WebSocket events, повний RFC 9457 HTTP error model, idempotency, durable FITS/RAW/SER data plane, production guiding, durable session recovery, safety/weather/roof policy, TLS/auth/scopes/audit, out-of-process driver sandboxing та conformance suite.
 
 
-## v0.2.10.10 — reset-aware пошук Gemini EAF у Windows
+## v0.2.10.11 — reset-aware пошук Gemini EAF у Windows
 
-HIL-перевірка Gemini EAF через USB-UART CH340 у Windows показала, що після відкриття `COMx` контролеру може бути потрібно близько двох секунд, перш ніж команда `:02#` стабільно повертає `EOK#`. Нативний драйвер `oal.gemini` тепер спочатку робить швидку спробу, а якщо відповіді немає — **не закриває порт**, чекає настроюване вікно відновлення після reset (`resetRecoveryMs`, типово 2000 мс) і повторює handshake один раз. Це працює і для `--gemini-port COMx`, і для автоматичного сканування COM-портів. Повторне відкриття між спробами навмисно не використовується, бо воно може знову перезапустити контролер через USB-UART.
+HIL-перевірка Gemini EAF через USB-UART CH340 у Windows показала, що після відкриття `COMx` контролеру може бути потрібно близько двох секунд, перш ніж команда `:02#` стабільно повертає `EOK#`. Нативний драйвер `oal.gemini` тепер після відкриття COM-порту витримує повний quiet-open інтервал (`openSettleMs`, зараз 2200 мс) до першої команди `:02#`. Якщо відповіді все ще немає — **не закриває порт**, чекає додаткове recovery-вікно (`resetRecoveryMs`, зараз 1200 мс) і повторює handshake один раз. Це працює і для `--gemini-port COMx`, і для автоматичного сканування COM-портів. Повторне відкриття між спробами навмисно не використовується, бо воно може знову перезапустити контролер через USB-UART.
 
-## v0.2.10.10: примітки Windows HIL щодо runtime/discovery
+## v0.2.10.11: примітки Windows HIL щодо runtime/discovery
 
 Цей hotfix закриває три проблеми, знайдені під час першого Windows hardware-in-the-loop запуску:
 
@@ -363,11 +363,11 @@ HIL-перевірка Gemini EAF через USB-UART CH340 у Windows пока�
 
 Якщо `CMakeUserPresets.json` був скопійований зі старої версії, постав верхній schema field `"version": 2` для сумісності з CMake 3.20+ та старішими WSL-дистрибутивами. Канонічний шаблон — `CMakeUserPresets.example.json` у репозиторії.
 
-## v0.2.10.10 — ізоляція Windows CRT runtime
+## v0.2.10.11 — ізоляція Windows CRT runtime
 
 Не можна копіювати весь vendor SDK runtime-каталог у каталог програми. Деякі Windows-пакети QHY містять старі `msvcr90.dll` / `msvcp90.dll`; app-local копії можуть конфліктувати з runtime MSVC 2022 і викликати `R6034` ще до нормального старту node.
 
-У v0.2.10.10 копіюються vendor/device DLL, але Microsoft CRT/UCRT redistributables відфільтровуються. Microsoft runtimes потрібно встановлювати штатним redistributable package, а не брати з SDK-каталогів.
+У v0.2.10.11 копіюються vendor/device DLL, але Microsoft CRT/UCRT redistributables відфільтровуються. Microsoft runtimes потрібно встановлювати штатним redistributable package, а не брати з SDK-каталогів.
 
 Після оновлення з v0.2.10.4 один раз зробіть clean build:
 
@@ -378,6 +378,23 @@ cmake --build --preset my-windows-observatory --parallel
 powershell -ExecutionPolicy Bypass -File scripts\diagnose_windows_runtime.ps1 -BuildDir build/windows-observatory
 ```
 
-### v0.2.10.10: виправлення Gemini manifest timing
+### v0.2.10.11: виправлення Gemini manifest timing
 
 HIL Gemini/CH340 показав, що manifest драйвера перезаписував C++ reset-settle default значенням `openSettleMs=150`. Runtime defaults тепер синхронізовані: 2200 мс quiet-open settle та додатковий 1200 мс retry на тому самому відкритому порту. Hardware probe друкує ефективні значення таймінгів.
+
+
+### v0.2.10.11 — коректне завершення node у Windows
+
+Windows HIL виявив race під час завершення `openastrolink-node` через `Ctrl+C`: queued wakeup із worker thread міг прийти вже під час руйнування прихованого message window `QEventDispatcherWin32`, через що з'являлося `QEventDispatcherWin32::wakeUp: Failed to post a message (Invalid window handle.)`, а процес інколи зависав.
+
+Node тепер встановлює мінімальний console control handler. Він не викликає Qt, а лише фіксує interrupt. Qt-таймер у main thread кожні 50 мс перетворює перший `Ctrl+C`/`Ctrl+Break` на `QCoreApplication::quit()`. Cleanup підключений до `aboutToQuit`, тому listeners, operation workers, device connections, native-driver worker threads і serial sessions зупиняються, поки Qt event dispatcher ще валідний. Другий `Ctrl+C` навмисно передається стандартному Windows handler як аварійний force-terminate.
+
+Очікуваний лог завершення:
+
+```text
+Console interrupt received; starting graceful shutdown. Press Ctrl+C again to force termination.
+OpenAstroLink node shutdown: stopping listeners and active work
+OpenAstroLink node shutdown complete
+```
+
+Windows HIL: на реальному обладнанні вже підтверджені native discovery/connection Gemini EAF, фактичний рух фокусера та рух під час autofocus. Окремо ще треба кваліфікувати збіжність і повторюваність autofocus на реальній оптичній цілі.

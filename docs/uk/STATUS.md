@@ -24,7 +24,7 @@
 | Resource locks | ✅ | Main/guide camera, mount, focuser |
 | Async slew | ✅ | operation-backed |
 | Async exposure | ✅ | main + guide |
-| Async autofocus | ✅ | camera + focuser |
+| Async autofocus | ✅ / частковий HIL | camera + focuser; рух реального Gemini під час autofocus підтверджено, але збіжність/повторюваність по реальній оптиці ще треба кваліфікувати |
 | Idempotency | ⏳ | `Idempotency-Key` ще немає |
 | Durable operations | ⏳ | Restart node ще не відновлює operations |
 
@@ -36,7 +36,7 @@
 | Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
 | ZWO ASI | 🟡 | Native ASI SDK, multi-camera; HIL pending |
 | ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
-| Gemini EAF | 🟡 | Direct serial; HIL/firmware qualification pending |
+| Gemini EAF | ✅ базовий HIL | Windows native discovery/connection, прямий рух і рух під час autofocus підтверджені; ще потрібні long-run/reconnect/limits тести |
 | Sky-Watcher/SynScan | 🟡 | Direct SynScan; HIL pending |
 | Sky-Watcher motor-controller | 🧪 | Лише protocol/codec foundation |
 | INDI | ✅ | Optional compatibility client |

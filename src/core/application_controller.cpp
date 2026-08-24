@@ -167,7 +167,30 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
         emitState();
     });
 }
-ApplicationController::~ApplicationController(){operations_.shutdown();stopOalServer();disconnectDevices(false);}
+ApplicationController::~ApplicationController(){shutdown();}
+void ApplicationController::shutdown(){
+    if(shuttingDown_)return;
+    shuttingDown_=true;
+    emit logMessage("OpenAstroLink node shutdown: stopping listeners and active work");
+    // Stop accepting new work first.  Do not persist these runtime stops: a
+    // process shutdown must not silently disable the user's saved server setup.
+    if(stellariumServer_)stellariumServer_->stop();
+    if(oalWsServer_)oalWsServer_->stop();
+    if(oalServer_)oalServer_->stop();
+#ifdef OAS_HAVE_POSITIONING
+    if(positionSource_)positionSource_->stopUpdates();
+#endif
+    if(scheduler_.status().active)scheduler_.stop();
+    if(guiding_.status().active)guiding_.stop();
+    // OperationManager requests cancellation and waits for all worker-pool tasks
+    // while the Qt event dispatcher is still alive (aboutToQuit calls us).
+    operations_.shutdown();
+    disconnectDevices(false);
+    // Destroy native driver-owned worker threads (notably persistent serial
+    // sessions) before QCoreApplication tears down QEventDispatcherWin32.
+    if(driverLoader_)driverLoader_->clear();
+    emit logMessage("OpenAstroLink node shutdown complete");
+}
 void ApplicationController::setProfile(const TelescopeProfile&p){profile_=p;settings_.saveProfile(p);emit profileChanged();emitState();}
 QStringList ApplicationController::cameraBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"camera");x<<"simulated"<<"opencv"<<"oal";
 #ifdef OAS_HAVE_GPHOTO2
@@ -428,6 +451,6 @@ bool ApplicationController::setNativeSerialPortOverride(const QString&driverId,c
 QJsonArray ApplicationController::nativeDriversJson()const{return driverLoader_?driverLoader_->drivers():QJsonArray{};}
 QJsonArray ApplicationController::nativeDevicesJson()const{return driverLoader_?driverLoader_->devices():QJsonArray{};}
 QJsonObject ApplicationController::nativeCapabilitiesJson(const QString&driverId,const QString&deviceId,QString*error)const{return driverLoader_?driverLoader_->capabilities(driverId,deviceId,error):QJsonObject{};}
-void ApplicationController::emitState(){auto j=stateJson();emit stateChanged(j);if(oalWsServer_)oalWsServer_->broadcast("state",j);}
+void ApplicationController::emitState(){if(shuttingDown_)return;auto j=stateJson();emit stateChanged(j);if(oalWsServer_)oalWsServer_->broadcast("state",j);}
 QImage ApplicationController::toQImage(const cv::Mat&i){if(i.empty())return{};cv::Mat rgb;if(i.channels()==1){cv::Mat u8;if(i.depth()==CV_16U){double mn,mx;cv::minMaxLoc(i,&mn,&mx);i.convertTo(u8,CV_8U,255.0/std::max(1.0,mx-mn),-mn*255.0/std::max(1.0,mx-mn));}else i.convertTo(u8,CV_8U);cv::cvtColor(u8,rgb,cv::COLOR_GRAY2RGB);}else cv::cvtColor(i,rgb,cv::COLOR_BGR2RGB);return QImage(rgb.data,rgb.cols,rgb.rows,int(rgb.step),QImage::Format_RGB888).copy();}
 } // namespace oas

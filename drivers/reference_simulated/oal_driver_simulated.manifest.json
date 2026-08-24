@@ -2,7 +2,7 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.simulated",
   "name": "OpenAstroLink native reference simulator",
-  "version": "0.2.10.10",
+  "version": "0.2.10.11",
   "abiVersion": 2,
   "library": "oal_driver_simulated",
   "deviceClasses": [

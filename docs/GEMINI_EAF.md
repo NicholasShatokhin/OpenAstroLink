@@ -1,24 +1,23 @@
 # GeminiAstro EAF — OAL support policy
 
-## Current status in v0.2.10.10
+## Current status in v0.2.10.11
 
-Gemini EAF is currently supported through **compatibility transports**, not yet through a native OAL hardware driver:
-
-```text
-Gemini EAF
-  ├─ INDI  → OAL compatibility adapter   (Linux/RPi)
-  └─ Alpaca → OAL compatibility adapter  (Windows/remote)
-```
-
-This path is deliberately retained so the real telescope can be used before a verified low-level Gemini protocol is available.
-
-The project architecture is nevertheless native-first. The intended final path is:
+Gemini EAF now has a **native OAL ABI-v2 driver path** and has passed basic Windows hardware-in-the-loop validation on real USB-serial hardware:
 
 ```text
-Gemini EAF → verified USB/serial protocol → oal.gemini → ABI v2 → OAL core
+Gemini EAF → USB/serial (9600 8N1) → oal.gemini → ABI v2 → OAL core
 ```
 
-No undocumented safety-critical command is guessed merely to claim a direct driver.
+Confirmed on hardware:
+
+- serial discovery and connection;
+- MyFocuserPro2-compatible `:02# → EOK#` identification;
+- status/temperature traffic;
+- direct focuser motion;
+- focuser motion driven by the node's autofocus operation;
+- cancellation of autofocus by the user.
+
+INDI and Alpaca remain compatibility fallbacks, but native `oal.gemini` is now the preferred path when the device is discovered successfully. Remaining HIL work includes reconnect/power-cycle behavior, mechanical limits, HALT under stress, long-run stability and autofocus convergence/repeatability on a real optical target.
 
 ## Why INDI/Alpaca remain useful
 
@@ -34,16 +33,20 @@ Current autofocus requires a reliable absolute position capability.
 
 ## Native `oal.gemini` qualification plan
 
-1. Record exact model, firmware, USB bridge and VID/PID.
-2. Obtain vendor protocol specification if possible.
-3. If no specification is available, capture official vendor/ASCOM traffic for a complete command matrix.
-4. Cover read status, absolute/relative movement, halt, limits, temperature, errors, reconnect and power-cycle behavior.
-5. Build a golden-transcript simulator.
-6. Implement the transport behind ABI v2, not directly inside `ApplicationController`.
-7. Publish typed capabilities derived from the device/firmware.
-8. Run native driver conformance tests.
-9. Perform hardware-in-the-loop regression including mechanical-limit and disconnect scenarios.
-10. Only then mark `oal.gemini` hardware-validated and prefer it over compatibility adapters.
+Completed foundation/HIL items: native ABI-v2 transport, serial discovery, real-device handshake, connection, status/temperature traffic, direct motion and autofocus-driven motion.
+
+Remaining qualification work:
+
+1. Record/stabilize an exact firmware/USB-bridge compatibility matrix.
+2. Validate absolute position across reconnect and power cycle.
+3. Validate relative/absolute movement near configured mechanical limits.
+4. Validate HALT during a longer move and during cancellation races.
+5. Validate disconnect/reconnect and USB removal during motion.
+6. Build/extend a golden-transcript simulator from the confirmed protocol traffic.
+7. Expand typed capabilities and error mapping from observed firmware behavior.
+8. Run repeated native-driver conformance/HIL cycles.
+9. Validate autofocus convergence and repeatability on real stars/planetary targets.
+10. Only after those tests mark the driver ready for unattended operation.
 
 ## Compatibility HIL checklist now
 
@@ -66,7 +69,7 @@ Before using the compatibility path for unattended autofocus:
 The Gemini compatibility profile must never become the specification for a future native focuser driver. Native OAL may expose richer precision, limits, telemetry, events, cancellation and calibration semantics even if INDI/Alpaca cannot represent all of them.
 
 
-## Serial-port discovery and manual selection (v0.2.10.10)
+## Serial-port discovery and manual selection (v0.2.10.11)
 
 The native `oal.gemini` driver supports three discovery levels, in this order:
 
@@ -80,19 +83,19 @@ The node also exposes `GET /api/v1/system/serial-ports` and `GET/POST /api/v1/dr
 
 Note that selecting the correct port cannot compensate for a protocol-level failure. The current native Gemini handshake sends MyFocuserPro2 `:02#` at 9600 8N1 and expects `EOK#`. If the controller produces no reply, discovery correctly leaves that port unclassified and the serial/protocol path must be diagnosed separately.
 
-### Windows/CH340 reset-aware handshake (v0.2.10.10)
+### Windows/CH340 reset-aware handshake (v0.2.10.11)
 
-If the controller resets when the COM port is opened, `oal.gemini` performs a fast `:02#` probe and, on failure, keeps that same port open until `resetRecoveryMs` (default 2000 ms) has elapsed before retrying. This matches observed Gemini EAF HIL behavior: an immediate manual probe returned no data while a probe after a two-second post-open delay returned `EOK#`.
+If the controller resets when the COM port is opened, `oal.gemini` keeps the port quiet for `openSettleMs` (currently 2200 ms) before the first `:02#` probe. On failure it keeps that same port open for the additional `resetRecoveryMs` interval (currently 1200 ms) before retrying. This matches observed Gemini EAF HIL behavior: an immediate manual probe returned no data while a probe after a two-second post-open delay returned `EOK#`.
 
 
-### Serial diagnostics in `oal-hardware-probe` (v0.2.10.10)
+### Serial diagnostics in `oal-hardware-probe` (v0.2.10.11)
 
 When Gemini discovery is pinned with `--gemini-port`, the probe now prints the driver log synchronously even though the command-line probe does not enter the Qt event loop. Diagnostics include port-open failures, first/recovery `:02#` exchanges, received text/hex bytes, and transport timeout details.
 
 On Windows, remember that a COM port is normally exclusive. A PowerShell/.NET `SerialPort` object left open by a failed `finally` block can prevent OAL from opening the same port. Close it with `$port.Close()`, terminate the owning serial-terminal process, or unplug/replug the USB serial device before retesting.
 
-## v0.2.10.10 — manifest timing hotfix
+## v0.2.10.11 — manifest timing hotfix
 
 Windows HIL isolated a configuration-precedence bug in v0.2.10.8/v0.2.10.9. Although the C++ Gemini driver default had been increased for CH340 controller reset recovery, `oal_driver_gemini.manifest.json` still supplied `openSettleMs: 150`, and the host passes the manifest `config` object into the driver at startup. The runtime therefore continued to probe only about 150 ms after opening the port.
 
-v0.2.10.10 synchronizes the manifest and C++ defaults to `openSettleMs: 2200` and `resetRecoveryMs: 1200`. The first `:02#` probe is sent only after the quiet-open interval; on failure the same port remains open for an additional 1200 ms before one retry. `oal-hardware-probe` also logs the effective serial timing configuration so HIL output proves which values are active.
+v0.2.10.11 synchronizes the manifest and C++ defaults to `openSettleMs: 2200` and `resetRecoveryMs: 1200`. The first `:02#` probe is sent only after the quiet-open interval; on failure the same port remains open for an additional 1200 ms before one retry. `oal-hardware-probe` also logs the effective serial timing configuration so HIL output proves which values are active.

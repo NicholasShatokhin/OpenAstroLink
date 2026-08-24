@@ -1,4 +1,4 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.10
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.11
 
 Канонічна документація — англійська. `PROJECT_MANIFEST_UA.md` є українським дзеркалом.
 
@@ -7,7 +7,7 @@
 - Hardware diagnostics: `oal-hardware-probe`
 - Core: `oas_core`
 - Protocol/native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.10-gemini-manifest-timing-fix`
+- Version: `0.2.10.11-graceful-node-shutdown`
 - C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -46,3 +46,11 @@ Idempotency; повний RFC 9457 HTTP error model; replayable WebSocket events
 Українські дзеркала: `README_UA.md`, `PROJECT_MANIFEST_UA.md`, `docs/uk/*.md`.  
 Специфікація: `docs/OAL_SPECIFICATION.md`.  
 Handoff: `docs/NEW_CHAT_HANDOFF.md` і `docs/uk/NEW_CHAT_HANDOFF.md`.
+
+
+## Windows HIL update v0.2.10.11
+
+- Gemini EAF: native discovery, connection, direct motion і autofocus-driven motion підтверджені на реальному Windows/USB-serial обладнанні.
+- Node shutdown: `Ctrl+C` тепер проходить через main-thread graceful shutdown до руйнування Qt event dispatcher; другий `Ctrl+C` залишається force-terminate escape hatch.
+
+- Статус HIL: Gemini EAF пройшов базову Windows-перевірку discovery/connection/motion; інші physical native drivers ще потребують повної HIL-кваліфікації.

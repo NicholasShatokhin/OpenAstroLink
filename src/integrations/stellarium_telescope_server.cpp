@@ -59,9 +59,10 @@ bool StellariumTelescopeServer::start(quint16 port, QString *error) {
 void StellariumTelescopeServer::stop() {
     positionTimer_.stop();
     for (auto *socket : buffers_.keys()) {
+        if (!socket) continue;
         socket->disconnect(this);
         socket->disconnectFromHost();
-        socket->deleteLater();
+        delete socket;
     }
     buffers_.clear();
     server_.close();

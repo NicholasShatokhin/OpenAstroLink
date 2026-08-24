@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QCoreApplication>
 #include <QEventLoop>
+#include <QEvent>
 #include <QMutexLocker>
 #include <QList>
 #include <QUuid>
@@ -35,7 +36,15 @@ void OperationManager::shutdown() {
             if (it->state == "running" || it->state == "queued") it->cancelFlag->store(true, std::memory_order_relaxed);
         }
     }
-    while(!pool_.waitForDone(25)){if(QCoreApplication::instance())QCoreApplication::processEvents(QEventLoop::AllEvents,25);}
+    while(!pool_.waitForDone(25)){
+        if(QCoreApplication::instance())QCoreApplication::processEvents(QEventLoop::AllEvents,25);
+    }
+    // A worker may post its final queued signal immediately before leaving the
+    // pool. Drain that tail while the main event dispatcher is still valid.
+    if(QCoreApplication::instance()){
+        QCoreApplication::processEvents(QEventLoop::AllEvents,25);
+        QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+    }
 }
 
 QString OperationManager::nowUtc() {

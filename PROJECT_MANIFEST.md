@@ -1,4 +1,4 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.10
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.11
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
@@ -7,7 +7,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
 - Protocol / native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.10-gemini-manifest-timing-fix`
+- Version: `0.2.10.11-graceful-node-shutdown`
 - Language: C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -29,7 +29,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - `oal.skywatcher` — Sky-Watcher SynScan native mount path.
 - `oal.simulated` — reference ABI-v2 simulated devices.
 
-All physical native drivers remain HIL-pending on the actual device/firmware/host combination.
+Gemini EAF has passed basic Windows HIL for discovery, connection and motion; the other physical native drivers remain HIL-pending or only partially qualified on their actual device/firmware/host combinations.
 
 ## Compatibility adapters
 
@@ -64,3 +64,9 @@ Canonical: `README.md`, `PROJECT_MANIFEST.md`, `docs/*.md`.
 Ukrainian mirrors: `README_UA.md`, `PROJECT_MANIFEST_UA.md`, `docs/uk/*.md`.  
 Normative implementation snapshot: `docs/OAL_SPECIFICATION.md`.  
 New-chat handoff: `docs/NEW_CHAT_HANDOFF.md` and `docs/uk/NEW_CHAT_HANDOFF.md`.
+
+
+## Windows HIL update v0.2.10.11
+
+- Gemini EAF: native discovery, connection, direct motion and autofocus-driven motion are confirmed on real Windows/USB-serial hardware.
+- Node shutdown: `Ctrl+C` is converted into a main-thread graceful shutdown before the Qt event dispatcher is destroyed; a second `Ctrl+C` remains a force-termination escape hatch.

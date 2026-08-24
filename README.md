@@ -1,6 +1,6 @@
 # OpenAstroSuite / OpenAstroLink
 
-**Current release: v0.2.10.10 — cross-platform build/documentation hotfix**
+**Current release: v0.2.10.11 — Gemini HIL + graceful node shutdown**
 
 English is the canonical project language. Ukrainian mirrors are provided in `README_UA.md` and `docs/uk/`.
 
@@ -69,7 +69,7 @@ an older Linux CMake can fail with:
 Unrecognized "version" field
 ```
 
-For v0.2.10.10 recreate the user preset from the supplied example:
+For v0.2.10.11 recreate the user preset from the supplied example:
 
 ```bash
 rm -f CMakeUserPresets.json
@@ -415,11 +415,11 @@ The project is suitable for continued supervised hardware qualification, not yet
 See `docs/STATUS.md` and `docs/ROADMAP_P0_P1_IMPLEMENTATION.md`.
 
 
-## v0.2.10.10 — Gemini EAF Windows reset-aware serial discovery
+## v0.2.10.11 — Gemini EAF Windows reset-aware serial discovery
 
-Windows HIL with a Gemini EAF on a CH340 USB-serial adapter showed that the controller can require about two seconds after `COMx` is opened before `:02#` returns `EOK#`. The native `oal.gemini` driver now performs a fast first probe and, if that probe fails, keeps the same serial session open, waits for the configurable controller reset-recovery window (`resetRecoveryMs`, default 2000 ms), and retries once. This applies both to `--gemini-port COMx` and automatic serial-port scanning. Reopening between attempts is deliberately avoided because it can retrigger the USB-UART reset.
+Windows HIL with a Gemini EAF on a CH340 USB-serial adapter showed that the controller can require about two seconds after `COMx` is opened before `:02#` returns `EOK#`. The native `oal.gemini` driver now keeps the COM port quiet for the configured post-open settle interval (`openSettleMs`, currently 2200 ms) before the first `:02#` probe. If that probe still fails, it keeps the same serial session open for the additional recovery window (`resetRecoveryMs`, currently 1200 ms) and retries once. This applies both to `--gemini-port COMx` and automatic serial-port scanning. Reopening between attempts is deliberately avoided because it can retrigger the USB-UART reset.
 
-## v0.2.10.10 Windows HIL runtime/discovery notes
+## v0.2.10.11 Windows HIL runtime/discovery notes
 
 This hotfix addresses three issues found during the first Windows hardware-in-the-loop run:
 
@@ -431,11 +431,11 @@ When vendor SDK paths change, rerun CMake configure so runtime DLL staging is re
 
 If you copied an older `CMakeUserPresets.json`, make sure its top-level preset schema is `"version": 2` for compatibility with CMake 3.20+ and older WSL distributions. The repository's `CMakeUserPresets.example.json` is the canonical template.
 
-## v0.2.10.10 — Windows CRT runtime isolation
+## v0.2.10.11 — Windows CRT runtime isolation
 
 Vendor SDK runtime folders must **not** be copied wholesale into the application directory. Some QHY Windows SDK packages contain legacy `msvcr90.dll` / `msvcp90.dll`; app-local copies can conflict with the MSVC 2022 runtime and produce `R6034` before the node reaches normal startup.
 
-v0.2.10.10 stages vendor/device DLLs but filters Microsoft CRT/UCRT redistributables. Install Microsoft redistributables normally instead of copying them from SDK folders.
+v0.2.10.11 stages vendor/device DLLs but filters Microsoft CRT/UCRT redistributables. Install Microsoft redistributables normally instead of copying them from SDK folders.
 
 After upgrading from v0.2.10.4, make one clean Windows build:
 
@@ -446,6 +446,23 @@ cmake --build --preset my-windows-observatory --parallel
 powershell -ExecutionPolicy Bypass -File scripts\diagnose_windows_runtime.ps1 -BuildDir build/windows-observatory
 ```
 
-### v0.2.10.10 Gemini manifest timing hotfix
+### v0.2.10.11 Gemini manifest timing hotfix
 
 Gemini/CH340 HIL showed that the driver manifest was overriding the C++ reset-settle default with `openSettleMs=150`. Runtime defaults are now synchronized at 2200 ms quiet-open settle plus a 1200 ms same-handle recovery retry. The hardware probe logs the effective timing values.
+
+
+### v0.2.10.11 — graceful node shutdown on Windows
+
+Windows HIL exposed a shutdown race when `openastrolink-node` was stopped with `Ctrl+C`: worker-thread queued wakeups could arrive while `QEventDispatcherWin32` was already tearing down its hidden message window, producing `QEventDispatcherWin32::wakeUp: Failed to post a message (Invalid window handle.)` and in some runs leaving the process stuck.
+
+The node now installs a minimal console control handler. The handler never calls Qt; it only records the interrupt. A 50 ms Qt timer on the main thread converts the first `Ctrl+C`/`Ctrl+Break` into `QCoreApplication::quit()`. Cleanup is connected to `aboutToQuit`, so listeners, operation workers, device connections, native driver worker threads and serial sessions are stopped while the Qt event dispatcher is still valid. A second console interrupt deliberately falls through to the Windows default handler as a force-termination escape hatch.
+
+Expected shutdown log:
+
+```text
+Console interrupt received; starting graceful shutdown. Press Ctrl+C again to force termination.
+OpenAstroLink node shutdown: stopping listeners and active work
+OpenAstroLink node shutdown complete
+```
+
+Windows HIL status: native Gemini EAF discovery/connection, direct focuser motion and autofocus-driven motion have now been confirmed on real hardware. Autofocus convergence/repeatability on a real optical target remains a separate validation item.

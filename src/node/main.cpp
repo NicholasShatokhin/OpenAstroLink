@@ -5,11 +5,52 @@
 #include <QDebug>
 #include <QTimer>
 
+#ifdef Q_OS_WIN
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#else
+#  include <csignal>
+#  include <cstdlib>
+#endif
+
+namespace {
+#ifdef Q_OS_WIN
+volatile LONG gConsoleInterruptCount = 0;
+BOOL WINAPI oalConsoleCtrlHandler(DWORD type) {
+    if (type != CTRL_C_EVENT && type != CTRL_BREAK_EVENT) return FALSE;
+    const LONG count = InterlockedIncrement(&gConsoleInterruptCount);
+    // First interrupt requests an orderly Qt-thread shutdown.  A second
+    // interrupt falls through to Windows' default handler as an escape hatch.
+    return count == 1 ? TRUE : FALSE;
+}
+bool consoleShutdownRequested() {
+    return InterlockedCompareExchange(&gConsoleInterruptCount, 0, 0) > 0;
+}
+#else
+volatile std::sig_atomic_t gConsoleInterruptCount = 0;
+void oalPosixSignalHandler(int) {
+    if (gConsoleInterruptCount > 0) std::_Exit(130);
+    gConsoleInterruptCount = 1;
+}
+bool consoleShutdownRequested() { return gConsoleInterruptCount > 0; }
+#endif
+}
+
 int main(int argc,char **argv){
     QCoreApplication app(argc,argv);
     QCoreApplication::setApplicationName("openastrolink-node");
     QCoreApplication::setApplicationVersion(OAS_VERSION);
     QCoreApplication::setOrganizationName("OpenAstroLink");
+
+#ifdef Q_OS_WIN
+    const bool consoleHandlerInstalled = SetConsoleCtrlHandler(&oalConsoleCtrlHandler, TRUE) != FALSE;
+    if(!consoleHandlerInstalled)qWarning()<<"Could not install Windows console Ctrl+C handler; shutdown may be abrupt.";
+#else
+    std::signal(SIGINT,&oalPosixSignalHandler);
+    std::signal(SIGTERM,&oalPosixSignalHandler);
+#endif
 
     QCommandLineParser parser;
     parser.setApplicationDescription("Headless OpenAstroLink observatory node");
@@ -36,6 +77,23 @@ int main(int argc,char **argv){
 
     QTimer reconnectTimer;
     reconnectTimer.setInterval(10000);
+
+    QTimer consoleSignalTimer;
+    consoleSignalTimer.setInterval(50);
+    QObject::connect(&consoleSignalTimer,&QTimer::timeout,&app,[&](){
+        if(!consoleShutdownRequested())return;
+        consoleSignalTimer.stop();
+        reconnectTimer.stop();
+        qInfo()<<"Console interrupt received; starting graceful shutdown. Press Ctrl+C again to force termination.";
+        QCoreApplication::quit();
+    });
+    consoleSignalTimer.start();
+
+    QObject::connect(&app,&QCoreApplication::aboutToQuit,&controller,[&](){
+        consoleSignalTimer.stop();
+        reconnectTimer.stop();
+        controller.shutdown();
+    });
     if(!parser.isSet(noAuto)){
         auto tryRestore=[&](){
             QStringList errors;bool ok=controller.restoreConfiguredDevices(&errors);
@@ -67,5 +125,9 @@ int main(int argc,char **argv){
         }
     }
     qInfo().noquote()<<"All autofocus, polar-alignment, solve, guiding and session operations execute in this process.";
-    return app.exec();
+    const int exitCode=app.exec();
+#ifdef Q_OS_WIN
+    if(consoleHandlerInstalled)SetConsoleCtrlHandler(&oalConsoleCtrlHandler,FALSE);
+#endif
+    return exitCode;
 }

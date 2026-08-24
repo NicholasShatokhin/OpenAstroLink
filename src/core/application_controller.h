@@ -28,6 +28,7 @@ class ApplicationController final : public ObservatoryController {
 public:
     explicit ApplicationController(QObject *parent=nullptr);
     ~ApplicationController() override;
+    void shutdown();
 
     QString controlMode() const override { return "embedded-core"; }
     QString endpointDescription() const override { return "in-process"; }
@@ -158,5 +159,6 @@ private:
 #ifdef OAS_HAVE_POSITIONING
     ::QGeoPositionInfoSource *positionSource_{};
 #endif
+    bool shuttingDown_{false};
 };
 }
