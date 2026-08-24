@@ -2,7 +2,7 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.canon",
   "name": "OpenAstroLink native Canon EOS driver",
-  "version": "0.2.10",
+  "version": "0.2.10.10",
   "abiVersion": 2,
   "library": "oal_driver_canon",
   "deviceClasses": [

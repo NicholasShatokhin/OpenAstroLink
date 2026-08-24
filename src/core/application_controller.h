@@ -107,6 +107,10 @@ public:
     void stopStellariumServer() override;
     bool stellariumRunning() const override;
     quint16 stellariumPort() const override;
+    bool refreshNativeDiscovery(QString *error=nullptr) override;
+    QJsonArray availableSerialPorts() const override;
+    QString nativeSerialPortOverride(const QString &driverId) const override;
+    bool setNativeSerialPortOverride(const QString &driverId,const QString &port,QString *error=nullptr) override;
     void refreshState() override;
 
     QJsonArray devicesJson() const;

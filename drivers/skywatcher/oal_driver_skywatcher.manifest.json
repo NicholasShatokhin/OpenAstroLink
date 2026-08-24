@@ -2,13 +2,26 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.skywatcher",
   "name": "OpenAstroLink native Sky-Watcher/SynScan driver",
-  "version": "0.2.10",
+  "version": "0.2.10.10",
   "abiVersion": 2,
   "library": "oal_driver_skywatcher",
-  "deviceClasses": ["mount"],
+  "deviceClasses": [
+    "mount"
+  ],
   "isolation": "in-process",
-  "permissions": [{"kind":"serial","purpose":"Sky-Watcher SynScan hand-controller protocol"}],
+  "permissions": [
+    {
+      "kind": "serial",
+      "purpose": "Sky-Watcher SynScan hand-controller protocol"
+    }
+  ],
   "threadModel": "per-device-serial",
   "trust": "bundled",
-  "config": {"ports":[],"probeTimeoutMs":850,"commandTimeoutMs":3000,"gotoTimeoutMs":180000,"openSettleMs":40}
+  "config": {
+    "ports": [],
+    "probeTimeoutMs": 850,
+    "commandTimeoutMs": 3000,
+    "gotoTimeoutMs": 180000,
+    "openSettleMs": 40
+  }
 }

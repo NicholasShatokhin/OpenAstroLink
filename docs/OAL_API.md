@@ -1,4 +1,4 @@
-# OpenAstroLink HTTP API — v0.2.10 reference implementation
+# OpenAstroLink HTTP API — v0.2.10.5 reference implementation
 
 The transitional envelope remains:
 

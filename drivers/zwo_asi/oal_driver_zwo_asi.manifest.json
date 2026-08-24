@@ -1,12 +1,25 @@
 {
+  "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.zwo.asi",
-  "name": "OpenAstroLink Native ZWO ASI Camera Driver",
-  "version": "0.2.10",
+  "name": "OpenAstroLink native ZWO ASI camera driver",
+  "version": "0.2.10.10",
   "abiVersion": 2,
   "library": "oal_driver_zwo_asi",
-  "deviceClasses": ["camera"],
-  "threadModel": "per-device-serial",
+  "deviceClasses": [
+    "camera"
+  ],
   "isolation": "in-process",
-  "permissions": {"usb": true},
-  "transport": {"kind": "vendor-sdk", "sdk": "ZWO ASI SDK"}
+  "permissions": [
+    {
+      "kind": "usb",
+      "vendor": "ZWO"
+    }
+  ],
+  "threadModel": "per-device-serial",
+  "trust": "bundled",
+  "transport": {
+    "kind": "vendor-sdk",
+    "sdk": "ZWO ASI SDK"
+  },
+  "config": {}
 }

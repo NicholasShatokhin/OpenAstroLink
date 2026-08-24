@@ -32,6 +32,9 @@ public:
     void saveGuideCameraBinding(const DeviceBinding &binding) const;
     void saveMountBinding(const DeviceBinding &binding) const;
     void saveFocuserBinding(const DeviceBinding &binding) const;
+
+    QString nativeSerialPort(const QString &driverId) const;
+    void saveNativeSerialPort(const QString &driverId, const QString &port) const;
 private:
     DeviceBinding loadBinding(const QString &prefix) const;
     void saveBinding(const QString &prefix, const DeviceBinding &binding) const;

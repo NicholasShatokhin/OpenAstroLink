@@ -27,6 +27,7 @@
 #include <QUrl>
 #include <QTimer>
 #include <QThread>
+#include <QSerialPortInfo>
 #include <QMetaObject>
 #include <QSysInfo>
 #include <opencv2/imgproc.hpp>
@@ -137,7 +138,13 @@ private:QObject *owner_;std::shared_ptr<IMount> inner_;bool direct_{false};
 }
 static QJsonObject sessionJson(const SessionStatus&s){return{{"id",s.id},{"name",s.name},{"active",s.active},{"targetIndex",s.targetIndex},{"targetCount",s.targetCount},{"completedFrames",s.completedFrames},{"state",s.state}};}
 ApplicationController::ApplicationController(QObject *parent):ObservatoryController(parent),scheduler_(this),operations_(this){
-    profile_=settings_.loadProfile();catalog_=std::make_shared<StarCatalog>();QString err;QString catalogPath=QDir(QCoreApplication::applicationDirPath()).filePath("config/stars_example.csv");if(!catalog_->loadCsv(catalogPath,&err)){catalogPath=QDir::current().filePath("config/stars_example.csv");catalog_->loadCsv(catalogPath,&err);}catalogSolver_=std::make_shared<PatternPlateSolver>(catalog_);astapSolver_=std::make_shared<AstapSolver>();neuralSolver_=std::make_shared<NeuralSolver>();solver_=astapSolver_->available(nullptr)?astapSolver_:catalogSolver_;
+    profile_=settings_.loadProfile();
+    // Persisted serial overrides are applied before native drivers perform their
+    // initial discovery. Explicit process environment variables (for example
+    // --gemini-port on the node) always win over saved GUI settings.
+    if(qEnvironmentVariable("OAL_GEMINI_PORT").trimmed().isEmpty()){const QString p=settings_.nativeSerialPort("oal.gemini");if(!p.isEmpty())qputenv("OAL_GEMINI_PORT",p.toUtf8());}
+    if(qEnvironmentVariable("OAL_SKYWATCHER_PORT").trimmed().isEmpty()){const QString p=settings_.nativeSerialPort("oal.skywatcher");if(!p.isEmpty())qputenv("OAL_SKYWATCHER_PORT",p.toUtf8());}
+    catalog_=std::make_shared<StarCatalog>();QString err;QString catalogPath=QDir(QCoreApplication::applicationDirPath()).filePath("config/stars_example.csv");if(!catalog_->loadCsv(catalogPath,&err)){catalogPath=QDir::current().filePath("config/stars_example.csv");catalog_->loadCsv(catalogPath,&err);}catalogSolver_=std::make_shared<PatternPlateSolver>(catalog_);astapSolver_=std::make_shared<AstapSolver>();neuralSolver_=std::make_shared<NeuralSolver>();solver_=astapSolver_->available(nullptr)?astapSolver_:catalogSolver_;
     driverLoader_=std::make_shared<OalDriverPluginLoader>();QStringList driverErrors;const int nativeCount=driverLoader_->scanDefaultPaths(&driverErrors);
     connect(driverLoader_.get(),&OalDriverPluginLoader::driverLog,this,[this](const QString&driver,int,const QString&message){emit logMessage(QString("[%1] %2").arg(driver,message));});
     connect(driverLoader_.get(),&OalDriverPluginLoader::driverEvent,this,[this](const QString&driver,const QString&device,const QJsonObject&event){QJsonObject p=event;p["driverId"]=driver;p["deviceId"]=device;if(oalWsServer_)oalWsServer_->broadcast("driverEvent",p);});
@@ -383,6 +390,40 @@ QJsonObject ApplicationController::nodeInfoJson()const{
             {"wsPort",settings_.wsPort()},
             {"nativeDriverCount",driverLoader_?int(driverLoader_->drivers().size()):0},
             {"controlExecution","node-local"}};
+}
+bool ApplicationController::refreshNativeDiscovery(QString *error){
+    if(!driverLoader_){if(error)*error="Native OAL driver registry unavailable";return false;}
+    QStringList errors;const auto devices=driverLoader_->refreshDevices(&errors);
+    if(!errors.isEmpty()){for(const auto&e:errors)emit logMessage("Native discovery warning: "+e);if(error)*error=errors.join("; ");}
+    emit logMessage(QString("Native OAL discovery refreshed: %1 device(s)").arg(devices.size()));
+    emitState();
+    return errors.isEmpty();
+}
+QJsonArray ApplicationController::availableSerialPorts()const{
+    QJsonArray out;
+    for(const auto &info:QSerialPortInfo::availablePorts()){
+        QJsonObject p{{"port",info.portName()},{"systemLocation",info.systemLocation()},{"description",info.description()},{"manufacturer",info.manufacturer()},{"serialNumber",info.serialNumber()}};
+        if(info.hasVendorIdentifier())p["vendorId"]=int(info.vendorIdentifier());
+        if(info.hasProductIdentifier())p["productId"]=int(info.productIdentifier());
+        out.append(p);
+    }
+    return out;
+}
+QString ApplicationController::nativeSerialPortOverride(const QString&driverId)const{
+    if(driverId=="oal.gemini")return qEnvironmentVariable("OAL_GEMINI_PORT").trimmed();
+    if(driverId=="oal.skywatcher")return qEnvironmentVariable("OAL_SKYWATCHER_PORT").trimmed();
+    return {};
+}
+bool ApplicationController::setNativeSerialPortOverride(const QString&driverId,const QString&port,QString*error){
+    const QString value=port.trimmed();QString envName;
+    if(driverId=="oal.gemini")envName="OAL_GEMINI_PORT";
+    else if(driverId=="oal.skywatcher")envName="OAL_SKYWATCHER_PORT";
+    else{if(error)*error="Serial-port override is supported only for oal.gemini and oal.skywatcher";return false;}
+    const QByteArray env=envName.toUtf8();
+    if(value.isEmpty())qunsetenv(env.constData());else qputenv(env.constData(),value.toUtf8());
+    settings_.saveNativeSerialPort(driverId,value);
+    emit logMessage(value.isEmpty()?QString("%1 serial discovery set to automatic scan").arg(driverId):QString("%1 serial discovery pinned to %2").arg(driverId,value));
+    return refreshNativeDiscovery(error);
 }
 QJsonArray ApplicationController::nativeDriversJson()const{return driverLoader_?driverLoader_->drivers():QJsonArray{};}
 QJsonArray ApplicationController::nativeDevicesJson()const{return driverLoader_?driverLoader_->devices():QJsonArray{};}

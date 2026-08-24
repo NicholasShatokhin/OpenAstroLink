@@ -1,4 +1,4 @@
-# Raspberry Pi observatory node — v0.2.10
+# Raspberry Pi observatory node — v0.2.10.5
 
 Канонічний документ: `../RPI_NODE.md`.
 

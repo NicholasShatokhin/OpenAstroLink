@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.24)
-project(OpenAstroSuite VERSION 0.2.10.2 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.20)
+project(OpenAstroSuite VERSION 0.2.10.10 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,7 +17,7 @@ set_property(CACHE OAS_CANON_TRANSPORT PROPERTY STRINGS AUTO EDSDK GPHOTO2)
 set(CANON_EDSDK_ROOT "" CACHE PATH "Canon EDSDK root")
 set(CANON_EDSDK_INCLUDE_DIR "" CACHE PATH "Directory containing EDSDK.h")
 set(CANON_EDSDK_LIBRARY "" CACHE FILEPATH "Canon EDSDK import/shared library")
-set(CANON_EDSDK_RUNTIME_DIR "" CACHE PATH "Directory containing EDSDK runtime DLLs (packaging hint)")
+set(CANON_EDSDK_RUNTIME_DIR "" CACHE PATH "Directory containing EDSDK runtime DLLs (Windows build-tree staging + packaging)")
 option(OAS_ENABLE_NATIVE_ZWO_ASI "Build native OAL ZWO ASI camera driver (requires ZWO ASI SDK)" OFF)
 option(OAS_ENABLE_NATIVE_ZWO_EAF "Build native OAL ZWO EAF focuser driver (requires ZWO EAF SDK)" OFF)
 option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" ON)
@@ -36,7 +36,7 @@ if(WIN32 AND OAS_REQUIRE_MSVC AND NOT MSVC)
         "This Windows preset requires the MSVC ABI, but CMake selected '${CMAKE_CXX_COMPILER_ID}' "
         "with compiler '${CMAKE_CXX_COMPILER}'. Do not mix MinGW/Strawberry GCC with "
         "Qt MSVC2022 or vendor .lib files. Delete the build directory and configure with "
-        "the Visual Studio 17 2022 x64 preset.")
+        "a Ninja preset from an x64 MSVC developer environment (or use scripts/build_windows.ps1).")
 endif()
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network SerialPort WebSockets HttpServer Concurrent)
@@ -189,6 +189,53 @@ function(oal_set_driver_output target)
     endforeach()
 endfunction()
 
+function(oal_is_microsoft_crt_dll dll_path out_var)
+    get_filename_component(_oal_dll_name "${dll_path}" NAME)
+    string(TOLOWER "${_oal_dll_name}" _oal_dll_name_lower)
+    # Never app-local-stage Microsoft CRT/UCRT redistributables from vendor SDK
+    # folders.  In particular, QHY Windows SDKs may ship msvcr90.dll/msvcp90.dll;
+    # copying those beside an MSVC 2022 executable can trigger R6034/SxS loader
+    # failures.  Install the appropriate Microsoft redistributable instead.
+    if(_oal_dll_name_lower MATCHES "^(msvcr|msvcp|vcruntime|ucrtbase|concrt|vcamp|atl|mfc|mfcm)[0-9_]*.*\\.dll$"
+       OR _oal_dll_name_lower MATCHES "^(api-ms-win-|ext-ms-win-).+\\.dll$")
+        set(${out_var} TRUE PARENT_SCOPE)
+    else()
+        set(${out_var} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(oal_stage_windows_runtime runtime_dir label)
+    if(NOT WIN32 OR NOT runtime_dir OR NOT IS_DIRECTORY "${runtime_dir}")
+        return()
+    endif()
+    file(GLOB _oal_runtime_candidates CONFIGURE_DEPENDS "${runtime_dir}/*.dll" "${runtime_dir}/*.DLL")
+    if(NOT _oal_runtime_candidates)
+        message(WARNING "${label}: runtime directory contains no DLL files: ${runtime_dir}")
+        return()
+    endif()
+
+    set(_oal_runtime_dlls)
+    set(_oal_skipped_crt)
+    foreach(_oal_dll IN LISTS _oal_runtime_candidates)
+        oal_is_microsoft_crt_dll("${_oal_dll}" _oal_is_crt)
+        if(_oal_is_crt)
+            list(APPEND _oal_skipped_crt "${_oal_dll}")
+        else()
+            list(APPEND _oal_runtime_dlls "${_oal_dll}")
+        endif()
+    endforeach()
+
+    # Build-tree execution must work without manually editing PATH.  Stage only
+    # vendor/device DLLs; Microsoft CRTs must come from the installed VC redist.
+    if(_oal_runtime_dlls)
+        file(COPY ${_oal_runtime_dlls} DESTINATION "${CMAKE_BINARY_DIR}")
+        file(COPY ${_oal_runtime_dlls} DESTINATION "${OAL_DRIVER_BUILD_DIR}")
+    endif()
+    list(LENGTH _oal_runtime_dlls _oal_runtime_count)
+    list(LENGTH _oal_skipped_crt _oal_skipped_count)
+    message(STATUS "${label}: staged ${_oal_runtime_count} vendor DLL(s); skipped ${_oal_skipped_count} Microsoft CRT/UCRT DLL(s)")
+endfunction()
+
 if(OAS_BUILD_NATIVE_REFERENCE_DRIVERS)
     add_library(oal_driver_simulated SHARED drivers/reference_simulated/oal_driver_simulated.cpp)
     target_include_directories(oal_driver_simulated PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -207,7 +254,7 @@ if(OAS_ENABLE_QHY)
     set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root")
     set(QHYCCD_INCLUDE_DIR "" CACHE PATH "Directory containing qhyccd.h")
     set(QHYCCD_LIBRARY "" CACHE FILEPATH "Exact QHYCCD SDK library path (for example /opt/qhyccd/lib/libqhy.so)")
-    set(QHYCCD_RUNTIME_DIR "" CACHE PATH "QHYCCD runtime DLL/shared-library directory (packaging hint)")
+    set(QHYCCD_RUNTIME_DIR "" CACHE PATH "QHYCCD runtime DLL/shared-library directory (Windows build-tree staging + packaging)")
     if(NOT QHYCCD_INCLUDE_DIR)
         find_path(QHYCCD_INCLUDE_DIR qhyccd.h
             HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT ENV QHYCCD_INCLUDE_DIR
@@ -253,13 +300,14 @@ if(OAS_ENABLE_QHY)
         ARCHIVE DESTINATION lib/openastrolink/drivers)
     install(FILES drivers/qhy/oal_driver_qhy.manifest.json
         DESTINATION lib/openastrolink/drivers)
+    oal_stage_windows_runtime("${QHYCCD_RUNTIME_DIR}" "QHYCCD")
 endif()
 
 if(OAS_ENABLE_NATIVE_ZWO_ASI)
     set(ZWO_ASI_ROOT "" CACHE PATH "ZWO ASI SDK root")
     set(ZWO_ASI_INCLUDE_DIR "" CACHE PATH "Directory containing ASICamera2.h")
     set(ZWO_ASI_LIBRARY "" CACHE FILEPATH "Exact ZWO ASI SDK library path")
-    set(ZWO_ASI_RUNTIME_DIR "" CACHE PATH "ZWO ASI runtime DLL/shared-library directory (packaging hint)")
+    set(ZWO_ASI_RUNTIME_DIR "" CACHE PATH "ZWO ASI runtime DLL/shared-library directory (Windows build-tree staging + packaging)")
     if(NOT ZWO_ASI_INCLUDE_DIR)
         find_path(ZWO_ASI_INCLUDE_DIR ASICamera2.h HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT ENV ZWO_ASI_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
@@ -273,13 +321,14 @@ if(OAS_ENABLE_NATIVE_ZWO_ASI)
     configure_file(drivers/zwo_asi/oal_driver_zwo_asi.manifest.json ${OAL_DRIVER_BUILD_DIR}/oal_driver_zwo_asi.manifest.json COPYONLY)
     install(TARGETS oal_driver_zwo_asi RUNTIME DESTINATION lib/openastrolink/drivers LIBRARY DESTINATION lib/openastrolink/drivers ARCHIVE DESTINATION lib/openastrolink/drivers)
     install(FILES drivers/zwo_asi/oal_driver_zwo_asi.manifest.json DESTINATION lib/openastrolink/drivers)
+    oal_stage_windows_runtime("${ZWO_ASI_RUNTIME_DIR}" "ZWO ASI")
 endif()
 
 if(OAS_ENABLE_NATIVE_ZWO_EAF)
     set(ZWO_EAF_ROOT "" CACHE PATH "ZWO EAF SDK root")
     set(ZWO_EAF_INCLUDE_DIR "" CACHE PATH "Directory containing EAF_focuser.h")
     set(ZWO_EAF_LIBRARY "" CACHE FILEPATH "Exact ZWO EAF SDK library path")
-    set(ZWO_EAF_RUNTIME_DIR "" CACHE PATH "ZWO EAF runtime DLL/shared-library directory (packaging hint)")
+    set(ZWO_EAF_RUNTIME_DIR "" CACHE PATH "ZWO EAF runtime DLL/shared-library directory (Windows build-tree staging + packaging)")
     if(NOT ZWO_EAF_INCLUDE_DIR)
         find_path(ZWO_EAF_INCLUDE_DIR EAF_focuser.h HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT ENV ZWO_EAF_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
@@ -293,6 +342,7 @@ if(OAS_ENABLE_NATIVE_ZWO_EAF)
     configure_file(drivers/zwo_eaf/oal_driver_zwo_eaf.manifest.json ${OAL_DRIVER_BUILD_DIR}/oal_driver_zwo_eaf.manifest.json COPYONLY)
     install(TARGETS oal_driver_zwo_eaf RUNTIME DESTINATION lib/openastrolink/drivers LIBRARY DESTINATION lib/openastrolink/drivers ARCHIVE DESTINATION lib/openastrolink/drivers)
     install(FILES drivers/zwo_eaf/oal_driver_zwo_eaf.manifest.json DESTINATION lib/openastrolink/drivers)
+    oal_stage_windows_runtime("${ZWO_EAF_RUNTIME_DIR}" "ZWO EAF")
 endif()
 
 
@@ -331,6 +381,9 @@ if(OAS_ENABLE_NATIVE_CANON)
         LIBRARY DESTINATION lib/openastrolink/drivers
         ARCHIVE DESTINATION lib/openastrolink/drivers)
     install(FILES drivers/canon/oal_driver_canon.manifest.json DESTINATION lib/openastrolink/drivers)
+    if(OAS_CANON_TRANSPORT_RESOLVED STREQUAL "EDSDK")
+        oal_stage_windows_runtime("${CANON_EDSDK_RUNTIME_DIR}" "Canon EDSDK")
+    endif()
 endif()
 
 

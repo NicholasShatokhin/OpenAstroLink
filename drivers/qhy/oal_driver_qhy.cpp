@@ -67,7 +67,7 @@ void closeCamera(CameraState &c){
 void stop(void*){
     std::lock_guard<std::mutex> lock(state.mutex);for(auto &x:state.cameras){std::lock_guard<std::mutex> op(x.second->operationMutex);closeCamera(*x.second);}if(state.sdkReady){ReleaseQHYCCDResource();state.sdkReady=false;}
 }
-const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.2","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
+const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.10","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
 const char *devices(void*){
     if(!state.sdkReady)return copyString("[]");const int count=int(ScanQHYCCD());std::ostringstream o;o<<'[';bool first=true;for(int i=0;i<count;++i){char id[128]{};if(GetQHYCCDId(i,id)!=QHYCCD_SUCCESS)continue;if(!first)o<<',';first=false;const std::string raw=id,dev="qhy:"+raw;o<<"{\"id\":"<<quote(dev)<<",\"type\":\"camera\",\"name\":"<<quote(raw)<<",\"vendor\":\"QHYCCD\",\"transport\":{\"kind\":\"vendor-sdk\",\"hardwareId\":"<<quote(raw)<<"}}";camera(dev);}o<<']';return copyString(o.str());
 }
@@ -135,7 +135,7 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
 bool cancel(void*,const char *device,const char*){auto*c=camera(device?device:"");if(!c||!c->handle)return false;c->abortRequested=true;return CancelQHYCCDExposingAndReadout(c->handle)==QHYCCD_SUCCESS;}
 void releaseString(void*,const char*p){if(p)host.deallocate(host.hostContext,const_cast<char*>(p));}
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.2",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.10",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 } // namespace
 
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h){if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||h->structSize<sizeof(OalDriverHostV2))return nullptr;host=*h;return &api;}

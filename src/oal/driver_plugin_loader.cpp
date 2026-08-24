@@ -14,6 +14,7 @@
 #include <QProcessEnvironment>
 #include <QSet>
 #include <QStandardPaths>
+#include <QThread>
 #include <chrono>
 
 namespace oas {
@@ -91,12 +92,15 @@ void OalDriverPluginLoader::clear() {
         else if (x->api1 && x->api1->stop) x->api1->stop(x->api1->context);
     }
     loaded_.clear();
+    { QMutexLocker deviceLock(&deviceCacheMutex_); deviceCache_ = QJsonArray{}; }
     QMutexLocker lock(&frameMutex_);
     frames_.clear();
 }
 
 int OalDriverPluginLoader::scan(const QString &directory, QStringList *errors, bool append) {
-    return scanDirectory(directory, errors, append);
+    const int count = scanDirectory(directory, errors, append);
+    refreshDevices(errors);
+    return count;
 }
 
 int OalDriverPluginLoader::scanDefaultPaths(QStringList *errors) {
@@ -125,6 +129,10 @@ int OalDriverPluginLoader::scanDefaultPaths(QStringList *errors) {
         scanDirectory(clean, errors, !first);
         first = false;
     }
+    // Perform hardware discovery once during node/controller startup.  After
+    // this point devices() is cache-only; explicit refresh is required for
+    // hot-plug discovery.  This keeps /node/backends and /state responsive.
+    refreshDevices(errors);
     return int(loaded_.size());
 }
 
@@ -149,6 +157,14 @@ int OalDriverPluginLoader::scanDirectory(const QString &directory, QStringList *
     filters << "*.so";
 #endif
     for (const auto &file : d.entryList(filters, QDir::Files, QDir::Name)) {
+        // Only OpenAstroLink driver libraries are eligible for the legacy
+        // manifest-less ABI-v1 compatibility path. Vendor runtime DLLs (QHY,
+        // ZWO, Canon, USB bridges, TBB, etc.) may intentionally live beside
+        // drivers so the OS loader can resolve dependencies, but they are not
+        // plugins and must never be dlopen/QLibrary-probed as OAL drivers.
+        const QString base = QFileInfo(file).completeBaseName();
+        if (!base.startsWith(QStringLiteral("oal_driver_"), Qt::CaseInsensitive))
+            continue;
         const QString full = canonicalLibraryPath(d.filePath(file));
         if (claimed.contains(full)) continue;
         loadLibrary(d.filePath(file), {}, {}, errors);
@@ -352,14 +368,24 @@ QJsonArray OalDriverPluginLoader::drivers() const {
 }
 
 QJsonArray OalDriverPluginLoader::devices() const {
+    QMutexLocker lock(&deviceCacheMutex_);
+    return deviceCache_;
+}
+
+QJsonArray OalDriverPluginLoader::refreshDevices(QStringList *errors) {
     QJsonArray out;
     for (const auto &x : loaded_) {
         const char *p = nullptr;
+        // Device enumeration is driver-wide hardware I/O. Serialize it with the
+        // normal driver call mutex so it cannot race a connect/capture/move.
+        OptionalMutexLocker callLock(callMutex(x.get(), QString()));
         if (x->api2 && x->api2->enumerateDevicesJson)
             p = x->api2->enumerateDevicesJson(x->api2->context);
         else if (x->api1 && x->api1->enumerateDevicesJson)
             p = x->api1->enumerateDevicesJson(x->api1->context);
         const auto arr = parseArray(p);
+        if (p && arr.isEmpty() && QByteArray(p).trimmed() != "[]" && errors)
+            errors->append(x->id + ": device enumeration returned invalid JSON");
         for (auto v : arr) {
             auto o = v.toObject();
             o["driverId"] = x->id;
@@ -374,6 +400,7 @@ QJsonArray OalDriverPluginLoader::devices() const {
             else if (x->api1 && x->api1->releaseString) x->api1->releaseString(x->api1->context, p);
         }
     }
+    { QMutexLocker lock(&deviceCacheMutex_); deviceCache_ = out; }
     return out;
 }
 
@@ -519,6 +546,17 @@ void OalDriverPluginLoader::logFromDriver(int level, const char *driverIdUtf8,
                                            const char *messageUtf8) {
     const QString driver = QString::fromUtf8(driverIdUtf8 ? driverIdUtf8 : "");
     const QString message = QString::fromUtf8(messageUtf8 ? messageUtf8 : "");
+
+    // Command-line tools such as oal-hardware-probe intentionally do not enter
+    // QCoreApplication::exec(). If the driver calls us from the loader's own
+    // thread, a queued delivery would therefore never be processed and the most
+    // useful diagnostics (for example "COM4: open failed: Access is denied")
+    // would disappear. Emit synchronously on the owning thread; retain queued
+    // delivery only for callbacks arriving from a driver worker thread.
+    if (QThread::currentThread() == thread()) {
+        emit driverLog(driver, level, message);
+        return;
+    }
     QMetaObject::invokeMethod(this, [this, driver, level, message]() {
         emit driverLog(driver, level, message);
     }, Qt::QueuedConnection);

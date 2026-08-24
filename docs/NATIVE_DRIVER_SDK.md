@@ -1,4 +1,4 @@
-# OpenAstroLink Native Driver SDK — ABI v2 (v0.2.10)
+# OpenAstroLink Native Driver SDK — ABI v2 (v0.2.10.5)
 
 ## 1. Architectural rule
 

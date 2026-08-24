@@ -1,12 +1,10 @@
-# Validation — v0.2.10 cross-platform desktop observatory
+# Validation plan — v0.2.10.5
 
-English is canonical. Ukrainian mirror: `docs/uk/VALIDATION.md`.
+This release is primarily a build/HIL qualification checkpoint.
 
-Validation deliberately separates source/static checks, SDK API-shape checks, simulator tests, platform builds, and real hardware-in-the-loop (HIL). A driver is not called production-ready merely because it compiles.
+## A. Repository/static gates
 
-## Source/static regression
-
-The v0.2.10 package must pass:
+Run from repository root:
 
 ```bash
 python3 tools/project_smoke_check.py
@@ -14,81 +12,164 @@ python3 tools/node_architecture_check.py
 python3 tools/runtime_state_ui_check.py
 python3 tools/operation_model_check.py
 python3 tools/async_exposure_check.py
-python3 tools/rpi_hardware_path_check.py
 python3 tools/native_driver_foundation_check.py
 python3 tools/native_telescope_hardware_pack_check.py
 python3 tools/native_canon_driver_check.py
-python3 tools/canon_edsdk_compile_check.py
 python3 tools/zwo_native_driver_check.py
 python3 tools/dual_camera_optics_check.py
 python3 tools/stellarium_bridge_check.py
 python3 tools/cross_platform_build_check.py
+python3 tools/qhy_header_isolation_check.py
+python3 tools/rpi_hardware_path_check.py
+python3 tools/cmake_presets_compat_check.py
 ```
 
-Also validate:
+Also verify:
 
-- `CMakePresets.json` and `CMakeUserPresets.example.json` parse as JSON;
-- `cmake --list-presets` succeeds;
-- shell scripts pass `bash -n`;
-- PowerShell build/package scripts are exercised on Windows;
-- `docs/openapi.yaml` parses successfully.
+```bash
+cmake --list-presets
+python3 -m json.tool CMakePresets.json >/dev/null
+python3 -m json.tool CMakeUserPresets.example.json >/dev/null
+```
 
-## v0.2.10 cross-platform build gates
+## B. Build environment gates
 
-### Windows x64 / MSVC 2022
+### Windows
 
-Required gates:
+```powershell
+.\scripts\check_build_environment.ps1
+```
 
-1. `windows-core-release` configures and compiles with Qt 6 MSVC + OpenCV and no vendor SDKs.
-2. `windows-native-release` compiles with Windows x64 QHY, ZWO ASI/EAF, and Canon EDSDK SDK artifacts.
-3. `windows-observatory-release` compiles with the INDI compatibility adapter enabled in parallel.
-4. `scripts/package_windows.ps1` produces a self-contained Qt/OpenCV application package when the required runtime DLL directories are supplied.
-5. The packaged node starts outside Qt Creator without manually editing `PATH`.
+PASS requires:
 
-### Linux x86_64
+- CMake >=3.20;
+- Ninja available;
+- MSVC `cl.exe` selected;
+- no MinGW/Strawberry compiler in the configured build;
+- Qt/OpenCV/vendor libraries use compatible x64 MSVC ABI.
 
-Required gates:
+### Linux
 
-1. `linux-native-release` configures and compiles with x86_64 QHY/ZWO SDKs and native Canon/libgphoto2.
-2. `linux-observatory-release` repeats with INDI compatibility enabled.
-3. `linux-node-release` builds without the GUI.
-4. `cmake --install` and `scripts/package_linux.sh` produce the documented installation layout.
-5. `ldd` reports no unresolved runtime dependencies for OAL executables and native driver `.so` files after vendor runtimes are installed.
+```bash
+./scripts/check_build_environment.sh
+```
 
-### Linux ARM64 / Raspberry Pi
+PASS requires:
 
-The same gates apply with ARM64/AArch64 vendor libraries. `file` must confirm the architecture of every vendor SDK library before linking.
+- CMake >=3.20;
+- Ninja available;
+- native compiler works;
+- vendor `.so` architecture matches `uname -m`;
+- required Qt/OpenCV/libgphoto2 development packages are visible.
 
-## Canon transport checks
+## C. Windows build gates
 
-### libgphoto2 transport
+First build without Canon EDSDK if EDSDK is unavailable:
 
-The existing native Canon implementation remains the default Linux path. Its source/API integration checks pass, but real EOS USB/PTP HIL is still required.
+```powershell
+.\scripts\build_windows.ps1 -Preset my-windows-observatory -Clean
+```
 
-### Canon EDSDK transport
+Inspect QHY compile commands: the QHY SDK include directory must **not** be present as a normal `/I` path. The generated QHY wrapper path should be present instead.
 
-`drivers/canon/oal_driver_canon_edsdk.cpp` has a dependency-light API-shape compile gate using `tests/stubs/edsdk/` with `-Wall -Wextra -Wpedantic -Werror`. The implementation covers SDK init/enumeration/session open, host transfer, timed Bulb/cancel, original-file storage, thumbnail preview publication, and OAL ABI-v2 frame publication.
+Later:
 
-This is **not** a substitute for linking to the user's actual Canon EDSDK or testing a real camera. Real Windows HIL must validate EDSDK version compatibility, transfer callbacks/message-loop behavior, body mode requirements for Bulb, CR2/CR3 transfer, reconnect, and cancellation.
+```powershell
+.\scripts\build_windows.ps1 -Preset my-windows-observatory-edsdk -Clean
+```
 
-## Native hardware HIL
+## D. Linux/WSL build gates
 
-For each target OS that will directly own hardware:
+For a current checkout:
 
-1. discover and connect the exact QHY camera by stable identity;
-2. discover and connect Canon EOS with the platform-selected native transport;
-3. discover every attached ZWO ASI camera distinctly, including simultaneous main+guide cameras;
-4. validate ZWO EAF and Gemini safe-range movement and status;
-5. validate Sky-Watcher small GOTO, abort, tracking, sync, guide pulses and reported coordinates;
-6. stop `indiserver` and repeat the native telescope test to prove the native path is independent;
-7. re-enable INDI and connect at least one compatibility-only device alongside the native devices;
-8. run ASTAP on repeated real-star frames;
-9. verify local GUI and remote GUI observe the same node state;
-10. verify Stellarium position/GOTO interoperability.
+```bash
+rm -f CMakeUserPresets.json
+cp CMakeUserPresets.example.json CMakeUserPresets.json
+# edit local SDK paths
+./scripts/build_linux.sh my-linux-observatory
+```
 
-## Known boundaries after v0.2.10
+If preset parsing fails, capture:
 
-- Windows Canon EDSDK transport is implemented but HIL-pending.
-- Native Gemini and native Sky-Watcher are still HIL-pending on the exact hardware/firmware; unsupported semantics remain deliberately unadvertised.
-- QHY/ZWO high-rate planetary data plane/SER is not yet production-complete.
-- Guiding, durable scheduler/session recovery, final FITS/RAW data plane, RFC 9457/idempotency/replay, security/safety, and out-of-process driver sandboxing remain future hardening work.
+```bash
+cmake --version
+head -20 CMakePresets.json
+head -20 CMakeUserPresets.json
+```
+
+## E. Hardware-in-the-loop gates
+
+Run native-only first where practical, then re-run with compatibility enabled.
+
+### Mount
+
+1. connect/discover;
+2. read RA/Dec/status;
+3. small safe GOTO;
+4. abort during GOTO;
+5. tracking off/on;
+6. sync;
+7. pier-side query if supported;
+8. short pulse guide;
+9. disconnect/reconnect;
+10. node restart/reconnect.
+
+### Focuser
+
+1. read position;
+2. ±100 and ±500 step movements;
+3. absolute movement;
+4. moving state;
+5. halt where capability is advertised;
+6. temperature/limits if supported;
+7. reconnect/power-cycle behavior;
+8. repeated autofocus sweeps.
+
+### QHY/ZWO camera
+
+1. enumerate exact hardware IDs;
+2. 10 ms / 1 s / 5 s / 30 s exposures;
+3. gain/offset;
+4. ROI/binning;
+5. 8/16-bit mode where supported;
+6. cancel exposure;
+7. 20–100 sequential frames;
+8. unplug/replug;
+9. node restart;
+10. main+guide simultaneous operation for two-camera configurations.
+
+### Canon
+
+Linux/libgphoto2 or Windows/EDSDK:
+
+1. discover/open session;
+2. short capture;
+3. original CR2/CR3/JPEG transfer;
+4. Bulb exposure;
+5. Bulb cancel;
+6. preview;
+7. repeated capture;
+8. unplug/replug.
+
+### ASTAP / real sky
+
+1. solve known archived image;
+2. solve real frame using configured optical profile;
+3. compare solved image scale to configured image scale;
+4. repeated solve near target;
+5. closed-loop correction test.
+
+## F. Supervised first-light acceptance
+
+Minimum acceptable supervised use:
+
+- clean build/package on the observatory host;
+- hardware probe successful;
+- mount/focuser/camera HIL successful;
+- ASTAP successful on real frames;
+- autofocus repeats reliably;
+- abort paths verified.
+
+## G. Not yet an unattended acceptance gate
+
+Do not mark unattended production PASS until reliable event replay, idempotency, durable science storage, production guiding/session recovery, security/auth/audit, weather/roof/power safety, driver crash isolation and public conformance have been implemented and tested.

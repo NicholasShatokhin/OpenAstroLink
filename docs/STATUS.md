@@ -1,68 +1,118 @@
-# Module maturity matrix — v0.2.10
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.5
 
-| Module | Status | Notes |
-|---|---|---|
-| Core/GUI separation | Implemented | `openastrolink-node` owns hardware/workflows; GUI can be local or remote |
-| Native OAL ABI v2 | Foundation implemented | Manifest, lifecycle, discovery, capabilities, health, events, frame publication |
-| Native driver registry | Implemented | Manifest validation, default search paths, device enumeration, generic adapters |
-| Native reference simulator | Implemented | ABI-v2 camera/mount/focuser |
-| Native QHY `oal.qhy` | Implemented, HIL pending | Direct QHYCCD SDK; exact hardware ID, single capture, ROI/bin/gain/offset, abort, frame publication |
-| Native Canon EOS `oal.canon` | Implemented, HIL pending | Native ABI-v2; Canon EDSDK on Windows, libgphoto2/PTP on Linux; original-file spool + operational preview |
-| Native ZWO ASI `oal.zwo.asi` | Implemented, HIL pending | Direct ASI SDK; multi-camera enumeration, exposure, ROI/binning, gain/offset, cancel, native frame publication |
-| Native ZWO EAF `oal.zwo.eaf` | Implemented, HIL pending | Direct EAF SDK; absolute/relative move, halt, status, temperature, limits, backlash/reverse capability reporting |
-| Native Gemini `oal.gemini` | Protocol path implemented, HIL pending | Direct persistent 9600-baud MyFocuserPro2-compatible serial; position/move/temp/max-position |
-| Gemini HALT | Not advertised | Exact target-firmware stop command is not HIL-verified; capability remains false rather than guessed |
-| Native Sky-Watcher `oal.skywatcher` | SynScan v3.3 path implemented, HIL pending | Precise J2000 status/GOTO/abort/sync/tracking/alignment/pier-side/pulse guide |
-| Sky-Watcher park | Not supported by this profile | SynScan serial v3.3 has no normative park command |
-| Sky-Watcher direct motor-controller | Experimental codec only | Published protocol foundation exists; direct axis→RA/Dec still needs calibrated OAL alignment/model math |
-| Persistent native serial transport | Implemented | Dedicated serial I/O thread avoids cross-thread `QSerialPort` use and repeated DTR/open cycles |
-| INDI | Optional compatibility backend | Available in observatory builds; `rpi4-native-release` proves the no-INDI path |
-| Easy INDI enablement | Implemented | `enable_indi_compat.sh`, `rpi4-observatory-release`, `OAS_ENABLE_INDI=ON` |
-| ASCOM Alpaca | Compatibility backend | Maintained for interoperability/migration |
-| LX200 | Compatibility backend | Minimal generic mount migration path |
-| Per-device disconnect | Implemented | Main camera, guide camera, mount, and focuser are independent |
-| Main + guide camera roles | Implemented | Separate `main` / `guide` bindings and resource locks `camera` / `camera.guide` |
-| Optical-train profiles | Implemented | Main and guide aperture, effective focal length, sampling/sensor data, derived f-ratio and image scale |
-| Stellarium bridge | Implemented, HIL pending | External Telescope Control TCP bridge for mount position and GOTO; default port 10000 |
-| Operation manager | Vertical slice | Queue/state/progress/cancel/resource locks |
-| Async autofocus | Implemented | Locks `camera + focuser` |
-| Async mount slew | Implemented | Locks `mount`; OAL polls status after GOTO acceptance |
-| Async main exposure | Implemented | `camera.exposure`; hardware abort where supported |
-| Async guide exposure | Implemented | `camera.guide.exposure`; independent guide-camera lock |
-| ASTAP adapter | Implemented, real-sky validation pending | CLI discovery/hints/result parsing; solve endpoint is still synchronous |
-| Hardware probe | Updated | Existing native telescope/observatory gates plus optional `--require-zwo` |
-| RPi deployment | Structurally implemented | Native and native+INDI presets; actual Pi/HIL pending |
-| Native protocol smoke test | PASS locally | Pure C++ wire-format tests compile with warnings treated as errors |
-| ZWO driver API-shape compile | PASS locally | Both native ZWO sources compile against SDK-compatible headers with `-Werror`; real SDK/HIL pending |
-| QHY planetary live/SER | Pending | Next data-plane increment |
-| Polar alignment math | Implemented | Automatic capture/rotate/solve/live-adjust wizard pending |
-| Guiding | Basic | Full calibration/dither/recovery pending |
-| Scheduler | State model only | Durable execution/checkpoints/weather recovery pending |
-| Out-of-process driver host | P0/P1 pending | Bundled drivers are currently trusted in-process |
-| Idempotency | P0 pending | Retry-safe create semantics incomplete |
-| RFC 9457 Problem Details | P0 pending | Existing error envelope remains |
-| Sequenced/replayable WS | P0 pending | Snapshot exists; sequence/replay pending |
-| FITS/RAW/SER data plane | P0/P1 pending | Native frame boundary exists; durable science storage pending |
-| Security/TLS/auth/safety | P0 pending | Trusted LAN/VPN only |
+Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL or production qualification pending; 🧪 experimental; ⏳ not yet implemented.
 
-Native OAL means that a driver speaks ABI v2 directly to the OAL host and may use a manufacturer SDK or documented low-level hardware protocol beneath it. It does not pass through INDI, Alpaca, or LX200.
-
-## v0.2.10 additions
-
-- Native ZWO ASI camera driver and native ZWO EAF focuser driver.
-- Dual main/guide camera ownership with independent resource locks.
-- Main and guide optical-train profiles stored in the node-side `TelescopeProfile`.
-- Stellarium Telescope Control TCP bridge for mount position/GOTO.
-- English-canonical documentation with Ukrainian mirrors.
-
-## v0.2.10 cross-platform build/deployment status
+## Core and control plane
 
 | Area | Status | Notes |
 |---|---|---|
-| Windows x64 core build model | Implemented | MSVC/Qt/OpenCV preset without vendor SDKs. |
-| Windows native observatory preset | Implemented / HIL pending | QHY/ZWO + Canon EDSDK + Gemini/Sky-Watcher; exact vendor SDK paths supplied via user preset. |
-| Linux x86_64 native/observatory presets | Implemented / HIL pending | Native drivers with optional INDI compatibility. |
-| Linux headless preset | Implemented | Node without GUI. |
-| Canon EDSDK native transport | Implemented / compile-shape PASS / HIL pending | Same `oal.canon` semantics as Linux transport. |
-| Packaging scripts | Implemented / target validation pending | Windows uses `windeployqt`; Linux uses install/tar staging. |
-| Local SDK path hygiene | Implemented | `CMakeUserPresets.json` is ignored; example file supplied. |
+| GUI / node separation | ✅ | Node owns hardware and workflows; GUI can be local or remote |
+| Node survives GUI exit | ✅ | Confirmed in simulator runtime tests |
+| Device reconnect/state snapshot | ✅ | GUI rehydrates aggregate state from node |
+| Per-device disconnect | ✅ | Main camera, guide camera, mount, focuser independent |
+| HTTP API | ✅ | `/api/v1` reference API present |
+| WebSocket state/events | 🟡 | Channel exists; reliable sequence/replay contract still missing |
+| Stellarium bridge | 🟡 | Position/GOTO implemented; HIL/interoperability pending |
+
+## Operations
+
+| Area | Status | Notes |
+|---|---|---|
+| Operation resource/state machine | ✅ | queued/running/succeeded/failed/cancelled |
+| Progress/phase/result/problem | ✅ | Stored in operation records |
+| Cancellation | ✅ | Implemented for operation-backed paths where driver supports it |
+| Resource locks | ✅ | Main camera, guide camera, mount, focuser locking |
+| Async mount slew | ✅ | Operation-backed |
+| Async main/guide exposure | ✅ | Operation-backed |
+| Async autofocus | ✅ | Camera + focuser reservation |
+| Idempotency | ⏳ | HTTP `Idempotency-Key` not implemented |
+| Durable operations | ⏳ | Operations are not yet restored after node restart |
+
+## Native driver platform
+
+| Area | Status | Notes |
+|---|---|---|
+| Native OAL ABI v2 | ✅ | Manifest/lifecycle/discovery/capabilities/events/cancellation/frame publication foundation |
+| Driver registry | ✅ | Manifest/device enumeration and generic adapters |
+| Reference simulator | ✅ | Camera/mount/focuser |
+| Out-of-process sandbox | ⏳ | Manifest policy groundwork exists; driver host not production implemented |
+| Third-party conformance suite | ⏳ | Project checks exist, public conformance suite does not |
+
+## Hardware drivers
+
+| Driver | Status | Notes |
+|---|---|---|
+| QHY | 🟡 | Native QHYCCD SDK driver; Windows QHY header isolation added; HIL pending |
+| Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
+| ZWO ASI | 🟡 | Native ASI SDK, multi-camera discovery; HIL pending |
+| ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
+| Gemini EAF | 🟡 | Direct serial protocol path; HIL/firmware qualification pending |
+| Sky-Watcher/SynScan | 🟡 | Direct SynScan path; HIL pending |
+| Sky-Watcher direct motor-controller | 🧪 | Codec/protocol foundation only |
+| INDI compatibility | ✅ | Optional compatibility client; independent of native drivers |
+| ASCOM Alpaca | ✅ | Compatibility backend |
+| LX200 | ✅ | Minimal compatibility path |
+
+## Imaging and optics
+
+| Area | Status | Notes |
+|---|---|---|
+| Main + guide camera roles | ✅ | Independent roles and locks |
+| Optical train profiles | ✅ | Main/guide aperture, focal length, pixel/sensor data, derived sampling |
+| Single-frame capture | ✅ | Main/guide paths |
+| In-memory preview | ✅ | PNG preview endpoint |
+| Native frame publication | ✅ | Driver ABI supports non-JSON frame handoff |
+| Canon original-file spool | ✅ | Driver path supports original file handling |
+| Durable FITS/RAW store | ⏳ | Final science data plane not complete |
+| Planetary SER pipeline | ⏳ | Production ring-buffer/SER/drop accounting not complete |
+
+## Astronomy workflows
+
+| Area | Status | Notes |
+|---|---|---|
+| ASTAP adapter | 🟡 | Adapter exists; real-sky qualification pending |
+| Closed-loop GOTO/recenter | 🟡 | Groundwork exists; end-to-end HIL pending |
+| Autofocus | 🟡 | Algorithm/operation exists; real optics/backlash tuning pending |
+| Polar-axis math | ✅ | Sample/estimation API exists |
+| Automatic polar wizard | 🟡 | Full live adjustment orchestration not production-qualified |
+| Guiding | 🟡 | Basic state/API and pulse-guide primitives; production loop pending |
+| Session/scheduler | 🟡 | Scaffolding exists; durable recovery/flip/dither/refocus pending |
+| Target resolver/ephemerides | 🟡 | Not yet a complete normative production service |
+
+## P0 protocol hardening
+
+| Item | Status |
+|---|---|
+| Capabilities/identity/discovery | 🟡 foundation implemented; schemas still evolving |
+| Async operations | 🟡 major paths implemented; not every long workflow converted |
+| Resource locks | ✅ |
+| Idempotency | ⏳ |
+| TLS/auth/roles/scopes/audit | ⏳ |
+| Safety interlocks/weather/roof/power | ⏳ |
+| Separate durable science data plane | 🟡 ABI/preview foundation only |
+| Reliable replayable WebSocket stream | ⏳ |
+| RFC 9457 HTTP Problem Details | 🟡 operation problems exist; HTTP model incomplete |
+| Conformance suite | 🟡 regression checks/simulator exist; public suite incomplete |
+
+## Cross-platform build status
+
+| Target | Status | Notes |
+|---|---|---|
+| Windows x64, MSVC + Ninja | 🟡 | Configure path qualified; full vendor SDK build still being iterated on physical host |
+| Linux x86_64 | 🟡 | Presets and docs prepared; vendor SDK architecture/runtime must be qualified |
+| Linux ARM64 / Raspberry Pi | 🟡 | Same Linux architecture; hardware HIL pending |
+| WSL compile/test | 🟡 | Supported for build testing; direct hardware requires explicit passthrough |
+
+### v0.2.10.5 build fixes
+
+- CMake preset schema reduced to **v2**, compatible with CMake 3.20+.
+- `cmake_minimum_required` reduced to 3.20 because the project does not require 3.24-only CMake features.
+- Windows official preset path is now **Ninja + MSVC**, avoiding Visual Studio instance discovery and avoiding MinGW/MSVC ABI mixing.
+- Windows build helper can load `vcvars64.bat` automatically.
+- QHY Windows header isolation retained from v0.2.10.2.
+- `CMakeUserPresets.example.json` now has a no-Canon Windows preset and a separate EDSDK-enabled preset.
+- Linux SDK staging and architecture checks are documented.
+
+## Release posture
+
+v0.2.10.5 is a **build/HIL qualification release**, not yet an unattended observatory release. The next engineering priority is a clean full build on a physical Windows/Linux host followed by supervised HIL qualification of each connected device.

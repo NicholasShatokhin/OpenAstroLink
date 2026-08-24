@@ -1,22 +1,36 @@
 {
-  "version": 6,
+  "version": 2,
   "configurePresets": [
     {
       "name": "my-windows-observatory",
-      "displayName": "My Windows observatory SDK paths",
+      "displayName": "My Windows observatory (without Canon EDSDK)",
       "inherits": "windows-observatory-release",
       "cacheVariables": {
         "CMAKE_PREFIX_PATH": "C:/Qt/6.10.0/msvc2022_64",
         "OpenCV_DIR": "C:/opencv/opencv/build/x64/vc16/lib",
-        "QHYCCD_INCLUDE_DIR": "C:/SDK/QHY/include",
-        "QHYCCD_LIBRARY": "C:/SDK/QHY/lib/qhyccd.lib",
-        "QHYCCD_RUNTIME_DIR": "C:/SDK/QHY/bin",
-        "ZWO_ASI_INCLUDE_DIR": "C:/SDK/ZWO/ASI/include",
-        "ZWO_ASI_LIBRARY": "C:/SDK/ZWO/ASI/lib/x64/ASICamera2.lib",
-        "ZWO_ASI_RUNTIME_DIR": "C:/SDK/ZWO/ASI/lib/x64",
+
+        "QHYCCD_INCLUDE_DIR": "C:/Program Files/QHYCCD/AllInOne/sdk/include",
+        "QHYCCD_LIBRARY": "C:/Program Files/QHYCCD/AllInOne/sdk/x64/qhyccd.lib",
+        "QHYCCD_RUNTIME_DIR": "C:/Program Files/QHYCCD/AllInOne/sdk/x64",
+
+        "ZWO_ASI_INCLUDE_DIR": "C:/SDK/ZWO/ASI SDK/include",
+        "ZWO_ASI_LIBRARY": "C:/SDK/ZWO/ASI SDK/lib/x64/ASICamera2.lib",
+        "ZWO_ASI_RUNTIME_DIR": "C:/SDK/ZWO/ASI SDK/lib/x64",
+
         "ZWO_EAF_INCLUDE_DIR": "C:/SDK/ZWO/EAF/include",
-        "ZWO_EAF_LIBRARY": "C:/SDK/ZWO/EAF/lib/x64/EAFFocuser.lib",
-        "ZWO_EAF_RUNTIME_DIR": "C:/SDK/ZWO/EAF/lib/x64",
+        "ZWO_EAF_LIBRARY": "C:/SDK/ZWO/EAF/lib/Windows/x64/Release/EAF_focuser.lib",
+        "ZWO_EAF_RUNTIME_DIR": "C:/SDK/ZWO/EAF/lib/Windows/x64/Release",
+
+        "OAS_ENABLE_NATIVE_CANON": "OFF"
+      }
+    },
+    {
+      "name": "my-windows-observatory-edsdk",
+      "displayName": "My Windows observatory (Canon EDSDK enabled)",
+      "inherits": "my-windows-observatory",
+      "cacheVariables": {
+        "OAS_ENABLE_NATIVE_CANON": "ON",
+        "OAS_CANON_TRANSPORT": "EDSDK",
         "CANON_EDSDK_INCLUDE_DIR": "C:/SDK/Canon/EDSDK/Header",
         "CANON_EDSDK_LIBRARY": "C:/SDK/Canon/EDSDK/Library/EDSDK.lib",
         "CANON_EDSDK_RUNTIME_DIR": "C:/SDK/Canon/EDSDK/Dll"
@@ -27,23 +41,18 @@
       "displayName": "My Linux observatory SDK paths",
       "inherits": "linux-observatory-release",
       "cacheVariables": {
-        "QHYCCD_INCLUDE_DIR": "/opt/qhy/include",
-        "QHYCCD_LIBRARY": "/opt/qhy/lib/libqhy.so",
-        "ZWO_ASI_INCLUDE_DIR": "/opt/zwo/asi/include",
-        "ZWO_ASI_LIBRARY": "/opt/zwo/asi/lib/libASICamera2.so",
-        "ZWO_EAF_INCLUDE_DIR": "/opt/zwo/eaf/include",
-        "ZWO_EAF_LIBRARY": "/opt/zwo/eaf/lib/libEAFFocuser.so"
+        "QHYCCD_INCLUDE_DIR": "/opt/openastrolink-sdk/qhy/include",
+        "QHYCCD_LIBRARY": "/opt/openastrolink-sdk/qhy/lib/libqhy.so",
+        "ZWO_ASI_INCLUDE_DIR": "/opt/openastrolink-sdk/zwo/asi/include",
+        "ZWO_ASI_LIBRARY": "/opt/openastrolink-sdk/zwo/asi/lib/libASICamera2.so",
+        "ZWO_EAF_INCLUDE_DIR": "/opt/openastrolink-sdk/zwo/eaf/include",
+        "ZWO_EAF_LIBRARY": "/opt/openastrolink-sdk/zwo/eaf/lib/libEAFFocuser.so"
       }
     }
   ],
   "buildPresets": [
-    {
-      "name": "my-windows-observatory",
-      "configurePreset": "my-windows-observatory"
-    },
-    {
-      "name": "my-linux-observatory",
-      "configurePreset": "my-linux-observatory"
-    }
+    { "name": "my-windows-observatory", "configurePreset": "my-windows-observatory" },
+    { "name": "my-windows-observatory-edsdk", "configurePreset": "my-windows-observatory-edsdk" },
+    { "name": "my-linux-observatory", "configurePreset": "my-linux-observatory" }
   ]
 }

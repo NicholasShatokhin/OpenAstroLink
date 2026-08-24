@@ -1,4 +1,4 @@
-# Raspberry Pi 4 first-hardware path — v0.2.10 native observatory pack
+# Raspberry Pi 4 first-hardware path — v0.2.10.5 native observatory pack
 
 ## Target topology
 

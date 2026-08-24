@@ -107,21 +107,49 @@ public:
         return result;
     }
 
+    QString lastExchangeDiagnostic() const {
+        QString result;
+        run([&] { result = lastExchangeDiagnostic_; });
+        return result;
+    }
+
     bool exchange(const QByteArray &command, QByteArray *reply, int timeoutMs,
                   bool expectReply = true, char terminator = '#') {
         bool result = false;
         QByteArray data;
         run([&] {
-            if (!port_ || !port_->isOpen()) return;
+            lastExchangeDiagnostic_.clear();
+            if (!port_ || !port_->isOpen()) {
+                lastExchangeDiagnostic_ = QStringLiteral("serial port is not open");
+                return;
+            }
             // Discard only stale input. Never clear output after a command was
             // issued because that can truncate bytes still in the OS buffer.
             port_->clear(QSerialPort::Input);
             const auto written = port_->write(command);
-            if (written != command.size() ||
-                !port_->waitForBytesWritten(std::max(1, std::min(timeoutMs, 1500))))
+            if (written != command.size()) {
+                lastExchangeDiagnostic_ = QStringLiteral("write accepted %1/%2 byte(s): %3")
+                                              .arg(written).arg(command.size()).arg(port_->errorString());
                 return;
+            }
+
+            // A tiny serial write can already have left Qt's buffer before the
+            // blocking wait begins on some Windows USB-UART drivers. In that
+            // case bytesToWrite()==0 is success, not a transport failure. If a
+            // wait times out, re-check the pending byte count before rejecting
+            // the exchange. We still wait when data is actually queued.
+            if (port_->bytesToWrite() > 0) {
+                const bool writeSignal =
+                    port_->waitForBytesWritten(std::max(1, std::min(timeoutMs, 1500)));
+                if (!writeSignal && port_->bytesToWrite() > 0) {
+                    lastExchangeDiagnostic_ = QStringLiteral("write timeout with %1 byte(s) pending: %2")
+                                                  .arg(port_->bytesToWrite()).arg(port_->errorString());
+                    return;
+                }
+            }
             if (!expectReply) {
                 result = true;
+                lastExchangeDiagnostic_ = QStringLiteral("write complete; no reply requested");
                 return;
             }
             QElapsedTimer timer;
@@ -136,6 +164,15 @@ public:
                     break;
                 }
             }
+            if (result)
+                lastExchangeDiagnostic_ = QStringLiteral("reply %1 byte(s): %2")
+                                              .arg(data.size())
+                                              .arg(QString::fromLatin1(data.toHex(' ')));
+            else
+                lastExchangeDiagnostic_ = QStringLiteral("read timeout; received %1 byte(s): %2; serial=%3")
+                                              .arg(data.size())
+                                              .arg(QString::fromLatin1(data.toHex(' ')))
+                                              .arg(port_->errorString());
         });
         if (reply) *reply = data;
         return result;
@@ -155,4 +192,5 @@ private:
     mutable QThread thread_;
     mutable QObject worker_;
     mutable std::unique_ptr<QSerialPort> port_;
+    mutable QString lastExchangeDiagnostic_;
 };

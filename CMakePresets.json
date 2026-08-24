@@ -1,10 +1,5 @@
 {
-  "version": 6,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 24,
-    "patch": 0
-  },
+  "version": 2,
   "configurePresets": [
     {
       "name": "base-release",
@@ -24,10 +19,9 @@
     },
     {
       "name": "windows-core-release",
-      "displayName": "Windows x64 core (MSVC/Qt, no vendor SDKs)",
-      "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/build/windows-core",
+      "displayName": "Windows x64 core (MSVC + Ninja; no vendor camera SDKs)",
       "inherits": "base-release",
+      "binaryDir": "${sourceDir}/build/windows-core",
       "cacheVariables": {
         "OAS_ENABLE_QHY": "OFF",
         "OAS_ENABLE_NATIVE_CANON": "OFF",
@@ -35,15 +29,13 @@
         "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
         "OAS_ENABLE_INDI": "OFF",
         "OAS_REQUIRE_MSVC": "ON"
-      },
-      "architecture": "x64"
+      }
     },
     {
       "name": "windows-native-release",
-      "displayName": "Windows x64 native observatory (vendor SDKs, no INDI)",
-      "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/build/windows-native",
+      "displayName": "Windows x64 native observatory (MSVC + Ninja; vendor SDKs; no INDI)",
       "inherits": "base-release",
+      "binaryDir": "${sourceDir}/build/windows-native",
       "cacheVariables": {
         "OAS_ENABLE_QHY": "ON",
         "OAS_ENABLE_NATIVE_CANON": "ON",
@@ -52,12 +44,11 @@
         "OAS_ENABLE_NATIVE_ZWO_EAF": "ON",
         "OAS_ENABLE_INDI": "OFF",
         "OAS_REQUIRE_MSVC": "ON"
-      },
-      "architecture": "x64"
+      }
     },
     {
       "name": "windows-observatory-release",
-      "displayName": "Windows x64 observatory (native + INDI compatibility)",
+      "displayName": "Windows x64 observatory (native + optional compatibility)",
       "inherits": "windows-native-release",
       "binaryDir": "${sourceDir}/build/windows-observatory",
       "cacheVariables": {
@@ -66,7 +57,7 @@
     },
     {
       "name": "linux-native-release",
-      "displayName": "Linux x86_64 native observatory",
+      "displayName": "Linux native observatory (x86_64 or ARM64)",
       "inherits": "base-release",
       "binaryDir": "${sourceDir}/build/linux-native",
       "cacheVariables": {
@@ -81,7 +72,7 @@
     },
     {
       "name": "linux-observatory-release",
-      "displayName": "Linux x86_64 observatory (native + INDI compatibility)",
+      "displayName": "Linux observatory (native + INDI compatibility)",
       "inherits": "linux-native-release",
       "binaryDir": "${sourceDir}/build/linux-observatory",
       "cacheVariables": {
@@ -127,44 +118,14 @@
     }
   ],
   "buildPresets": [
-    {
-      "name": "windows-core-release",
-      "configurePreset": "windows-core-release",
-      "configuration": "Release"
-    },
-    {
-      "name": "windows-native-release",
-      "configurePreset": "windows-native-release",
-      "configuration": "Release"
-    },
-    {
-      "name": "windows-observatory-release",
-      "configurePreset": "windows-observatory-release",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-native-release",
-      "configurePreset": "linux-native-release"
-    },
-    {
-      "name": "linux-observatory-release",
-      "configurePreset": "linux-observatory-release"
-    },
-    {
-      "name": "linux-node-release",
-      "configurePreset": "linux-node-release"
-    },
-    {
-      "name": "rpi4-native-release",
-      "configurePreset": "rpi4-native-release"
-    },
-    {
-      "name": "rpi4-observatory-release",
-      "configurePreset": "rpi4-observatory-release"
-    },
-    {
-      "name": "node-sim-release",
-      "configurePreset": "node-sim-release"
-    }
+    { "name": "windows-core-release", "configurePreset": "windows-core-release" },
+    { "name": "windows-native-release", "configurePreset": "windows-native-release" },
+    { "name": "windows-observatory-release", "configurePreset": "windows-observatory-release" },
+    { "name": "linux-native-release", "configurePreset": "linux-native-release" },
+    { "name": "linux-observatory-release", "configurePreset": "linux-observatory-release" },
+    { "name": "linux-node-release", "configurePreset": "linux-node-release" },
+    { "name": "rpi4-native-release", "configurePreset": "rpi4-native-release" },
+    { "name": "rpi4-observatory-release", "configurePreset": "rpi4-observatory-release" },
+    { "name": "node-sim-release", "configurePreset": "node-sim-release" }
   ]
 }

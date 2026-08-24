@@ -1,51 +1,56 @@
-# Платформи збірки — v0.2.10
+# Платформи збірки — v0.2.10.5
 
-Канонічна версія документа: `docs/BUILD_PLATFORMS.md`. Українська версія є перекладом.
+## Підтримувані observatory hosts
 
-OpenAstroSuite більше не прив'язаний до Raspberry Pi. Windows x64 ПК, Linux x86_64 ПК або Linux ARM64/Raspberry Pi можуть самі бути **observatory node**, якщо обладнання під'єднане безпосередньо до цього комп'ютера. Той самий GUI може працювати локально або підключатися до іншого node через OAL HTTP/WebSocket.
+Windows x64, Linux x86_64, Linux ARM64/RPi та headless Linux. Обладнання може бути підключене напряму до desktop host; RPi не є обов'язковим.
 
-## Першокласні цілі
+## CMake
 
-| Платформа | GUI | Node | Native drivers | INDI compatibility |
-|---|---:|---:|---|---:|
-| Windows x64 / MSVC 2022 | так | так | QHY, Canon EDSDK, ZWO ASI/EAF, Gemini, Sky-Watcher | опційно |
-| Linux x86_64 | так | так | QHY, Canon libgphoto2, ZWO ASI/EAF, Gemini, Sky-Watcher | опційно |
-| Linux ARM64 / Raspberry Pi | так | так | ті самі Linux drivers | опційно |
-| Linux headless | ні | так | вибірково | опційно |
+Presets тепер мають **schema version 2** і потребують **CMake 3.20+**.
 
-Native OAL є основним шляхом. INDI легко вмикається для обладнання, для якого ще немає native OAL driver.
+Помилка:
 
-## Presets
-
-`CMakePresets.json` містить лише portable presets без локальних шляхів SDK. Локальні шляхи тримаємо у `CMakeUserPresets.json`, який ігнорується Git. Приклад: `CMakeUserPresets.example.json`.
-
-Основні presets:
-
-- `windows-core-release` — Windows без vendor camera SDK;
-- `windows-native-release` — усі native drivers, INDI off;
-- `windows-observatory-release` — native + INDI;
-- `linux-native-release` — усі native drivers, INDI off;
-- `linux-observatory-release` — native + INDI;
-- `linux-node-release` — headless Linux node;
-- `rpi4-native-release`, `rpi4-observatory-release` — ARM64/RPi;
-- `node-sim-release` — лише simulator.
-
-## Windows x64
-
-Рекомендовано MSVC 2022 x64 + Qt 6 MSVC2022_64 + CMake/Ninja + сумісний OpenCV. Не змішувати MinGW бібліотеки з MSVC.
-
-```powershell
-Copy-Item CMakeUserPresets.example.json CMakeUserPresets.json
-# Відредагувати my-windows-observatory.
-cmake --preset my-windows-observatory
-cmake --build --preset my-windows-observatory --parallel
+```text
+Unrecognized "version" field
 ```
 
-Для Canon `AUTO` на Windows означає Canon EDSDK. Потрібні `CANON_EDSDK_INCLUDE_DIR`, `CANON_EDSDK_LIBRARY`, а для packaging — `CANON_EDSDK_RUNTIME_DIR`.
+зазвичай означає старіший CMake або старий локальний `CMakeUserPresets.json` із `"version": 6`.
 
-Для QHY/ZWO використовуються саме Windows x64 `.lib/.dll`; Linux `.so` під MSVC не підходить.
+Після переходу на v0.2.10.5:
 
-## Linux x86_64
+```bash
+cmake --version
+rm -f CMakeUserPresets.json
+cp CMakeUserPresets.example.json CMakeUserPresets.json
+```
+
+## Windows
+
+Офіційний toolchain:
+
+```text
+MSVC 2022 x64 + Ninja + Qt MSVC2022_64
+```
+
+Не змішувати MinGW/Strawberry GCC з MSVC Qt/vendor `.lib`.
+
+Рекомендовано:
+
+```powershell
+.\scripts\build_windows.ps1 -Preset my-windows-observatory -Clean
+```
+
+Configure має показати `The CXX compiler identification is MSVC`.
+
+QHY: Windows x64 SDK. OAL ізолює QHY include directory, щоб vendor `stdint.h` не затіняв MSVC CRT/STL.  
+ZWO: Windows x64 ASI/EAF `.lib` + runtime DLL.  
+Canon: без EDSDK використовуйте `my-windows-observatory`; з EDSDK — `my-windows-observatory-edsdk`.
+
+Packaging: `scripts/package_windows.ps1`.
+
+## Linux x86_64 / ARM64
+
+Типові Debian/Ubuntu залежності:
 
 ```bash
 sudo apt update
@@ -55,67 +60,46 @@ sudo apt install -y \
   libopencv-dev libgphoto2-dev libjpeg-dev
 ```
 
-Після встановлення x86_64 QHY/ZWO SDK:
-
-```bash
-cmake --preset my-linux-observatory
-cmake --build --preset my-linux-observatory -j$(nproc)
-sudo cmake --install build/linux-observatory
-```
-
-На Linux `OAS_CANON_TRANSPORT=AUTO` вибирає libgphoto2. Якщо встановлено Canon Linux EDSDK, можна явно вибрати `EDSDK`.
-
-## RPi / Linux ARM64
-
-RPi тепер використовує ту саму модель, що й desktop Linux; різняться лише архітектура SDK та systemd deployment. Перевіряти vendor libraries командою `file`: для 64-bit RPi потрібен AArch64/ARM64.
-
-## Якщо залізо під'єднане прямо до ПК
+Рекомендований vendor SDK layout:
 
 ```text
-QHY / ZWO / Canon / Gemini / Sky-Watcher
-                 │ USB / serial
-                 ▼
-          openastrolink-node
-             ┌────┴─────┐
-       local GUI    remote GUI
-                       + Stellarium
+/opt/openastrolink-sdk/qhy/include/qhyccd.h
+/opt/openastrolink-sdk/qhy/lib/libqhy.so
+/opt/openastrolink-sdk/zwo/asi/include/ASICamera2.h
+/opt/openastrolink-sdk/zwo/asi/lib/libASICamera2.so
+/opt/openastrolink-sdk/zwo/eaf/include/EAF_focuser.h
+/opt/openastrolink-sdk/zwo/eaf/lib/libEAFFocuser.so
 ```
 
-Тобто RPi — один із deployment modes, а не обов'язковий посередник.
-
-## Packaging
-
-Windows:
-
-```powershell
-./scripts/package_windows.ps1 -BuildDir build/windows-observatory \
-  -QtBin C:/Qt/6.10.0/msvc2022_64/bin \
-  -OpenCvBin C:/opencv/opencv/build/x64/vc16/bin \
-  -VendorRuntimeDirs @("C:/SDK/QHY/bin","C:/SDK/ZWO/ASI/bin","C:/SDK/ZWO/EAF/bin","C:/SDK/Canon/EDSDK/Dll") -Zip
-```
-
-Linux:
+Перевірити:
 
 ```bash
-./scripts/package_linux.sh build/linux-observatory dist/linux-observatory
+uname -m
+file /opt/openastrolink-sdk/qhy/lib/libqhy.so
+file /opt/openastrolink-sdk/zwo/asi/lib/libASICamera2.so
+file /opt/openastrolink-sdk/zwo/eaf/lib/libEAFFocuser.so
 ```
 
-Vendor SDK libraries не копіюються на Linux автоматично через різні ліцензійні умови.
+Canon Linux за замовчуванням використовує libgphoto2, тому EDSDK path не потрібен.
 
-## Доступ до пристроїв у Linux
+Збірка:
 
 ```bash
-sudo usermod -aG dialout "$USER"
+./scripts/check_build_environment.sh
+./scripts/build_linux.sh my-linux-observatory
 ```
 
-Також встановити udev rules QHY/ZWO та не дозволяти desktop photo manager захоплювати Canon EOS раніше за OAL.
+Install:
 
-`build_features.json` генерується при configure і дозволяє точно бачити, які hardware transports увійшли в конкретну збірку.
+```bash
+sudo cmake --install build/linux-observatory
+sudo ldconfig
+```
 
-## Захист ABI компілятора Windows (hotfix v0.2.10.1)
+## WSL
 
-Канонічні Windows-presets тепер використовують генератор **Visual Studio 17 2022 / x64** та `OAS_REQUIRE_MSVC=ON`. Це не дозволяє запису в `PATH` (наприклад MinGW GCC, який постачається зі Strawberry Perl) непомітно вибрати `g++`, коли проєкт лінкується з Qt MSVC2022 `.lib`.
+`/mnt/c/...` — лише WSL path. Windows `.lib/.dll` не підходять Linux build. Linux `.so` має відповідати архітектурі WSL. Для реального hardware direct USB/serial passthrough у WSL треба налаштовувати окремо; для observatory host рекомендується native Linux.
 
-Якщо старий build-каталог був сконфігурований через MinGW/GNU, його треба видалити перед повторною конфігурацією. Вибір компілятора кешується CMake і не повинен змінюватися всередині того самого build tree.
+## INDI
 
-У Windows observatory build має бути MSVC, а не `C:/Strawberry/.../c++.exe` чи інший MinGW `g++.exe`.
+`OAS_ENABLE_INDI=ON` вмикає compatibility client. Native OAL drivers не залежать від INDI. `indiserver` потрібен лише для фактичних INDI-only devices.

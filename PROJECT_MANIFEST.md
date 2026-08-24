@@ -1,4 +1,4 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.10
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
@@ -7,8 +7,11 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
 - Protocol / native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10-cross-platform-desktop-observatory`
+- Version: `0.2.10.10-gemini-manifest-timing-fix`
 - Language: C++20
+- Minimum CMake: 3.20
+- Preset schema: v2
+- Windows toolchain: MSVC 2022 x64 + Ninja
 - UI: Qt 6.4+
 - Image processing: OpenCV 4
 - REST: Qt HTTP Server
@@ -18,36 +21,46 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 
 ## Native OAL drivers
 
-- `oal.qhy` — QHY cameras through QHYCCD SDK.
-- `oal.canon` — Canon EOS through Canon EDSDK on Windows or USB/PTP/libgphoto2 on Linux (selectable at build time).
+- `oal.qhy` — QHY cameras through QHYCCD SDK; Windows vendor-header isolation included.
+- `oal.canon` — Canon EOS through Canon EDSDK on Windows or USB/PTP/libgphoto2 on Linux.
 - `oal.zwo.asi` — ZWO ASI cameras through ZWO ASI SDK.
 - `oal.zwo.eaf` — ZWO EAF focusers through ZWO EAF SDK.
 - `oal.gemini` — Gemini EAF native serial path.
 - `oal.skywatcher` — Sky-Watcher SynScan native mount path.
 - `oal.simulated` — reference ABI-v2 simulated devices.
 
+All physical native drivers remain HIL-pending on the actual device/firmware/host combination.
+
 ## Compatibility adapters
 
-INDI, ASCOM Alpaca, LX200, OpenCV/UVC and OAL remote-device adapters remain available. Native OAL is preferred but INDI is intentionally easy to compile and enable for broad third-party equipment coverage.
+INDI, ASCOM Alpaca, LX200, OpenCV/UVC and OAL remote-device adapters remain available. Native OAL is preferred; INDI remains intentionally easy to enable for equipment not yet covered natively.
 
-## Multi-camera roles
+## Current implemented foundations
 
-The observatory core has independent `main` and `guide` camera roles. Their operation resources are `camera` and `camera.guide`. Both can be connected concurrently, including two devices from the same multi-device native driver.
+- Local/remote GUI with node-owned hardware.
+- Per-device disconnect and state snapshot/reconnect.
+- Operation manager with queue/run/success/fail/cancel, progress and resource locks.
+- Async mount slew, main/guide exposure and autofocus.
+- Main + guide camera roles and optical profiles.
+- Native OAL ABI-v2 registry/capabilities/events/cancellation/frame publication.
+- Stellarium mount position/GOTO TCP bridge.
+- Cross-platform presets/scripts for Windows/Linux/RPi.
 
-## Optical profiles
+## Current major gaps
 
-`TelescopeProfile` stores the main optical train and a separate guide optical train: aperture, effective focal length, camera pixel/sensor geometry, derived f-ratio and image scale, plus main optical design and optional central obstruction.
+- Idempotency.
+- Full RFC 9457 HTTP error model.
+- Replayable sequenced WebSocket events.
+- TLS/auth/roles/scopes/audit and observatory safety policy.
+- Durable science FITS/RAW/SER data plane.
+- Production guiding.
+- Durable scheduler/recovery.
+- Out-of-process driver sandbox/crash recovery.
+- Public conformance suite.
 
-## Stellarium
+## Documentation
 
-`StellariumTelescopeServer` implements the external Stellarium Telescope Control TCP bridge for mount position and GOTO. Default TCP port: `10000`. Full camera/focuser/workflow control remains OAL-native.
-
-## Documentation policy
-
-Canonical: `README.md`, `PROJECT_MANIFEST.md`, `docs/*.md`.
-Ukrainian mirrors: `README_UA.md`, `PROJECT_MANIFEST_UA.md`, `docs/uk/*.md`.
-Machine-readable API/ABI identifiers remain English.
-
-## First-class deployment targets
-
-Windows x64/MSVC, Linux x86_64 and Linux ARM64/Raspberry Pi can all host directly attached observatory hardware. `CMakePresets.json` is portable; machine-specific SDK paths belong in ignored `CMakeUserPresets.json`. Windows and Linux packaging scripts are provided under `scripts/`.
+Canonical: `README.md`, `PROJECT_MANIFEST.md`, `docs/*.md`.  
+Ukrainian mirrors: `README_UA.md`, `PROJECT_MANIFEST_UA.md`, `docs/uk/*.md`.  
+Normative implementation snapshot: `docs/OAL_SPECIFICATION.md`.  
+New-chat handoff: `docs/NEW_CHAT_HANDOFF.md` and `docs/uk/NEW_CHAT_HANDOFF.md`.

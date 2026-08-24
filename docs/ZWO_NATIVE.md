@@ -1,6 +1,6 @@
 # Native ZWO ASI camera and EAF focuser drivers
 
-Version: 0.2.10
+Version: 0.2.10.5
 
 ## Purpose
 

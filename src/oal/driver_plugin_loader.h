@@ -44,7 +44,12 @@ public:
     void clear();
 
     QJsonArray drivers() const;
+    // Return the most recently discovered native devices without touching hardware.
+    // Discovery is intentionally cached so ordinary metadata/state HTTP requests
+    // can never block on USB/serial probes.
     QJsonArray devices() const;
+    // Explicitly rescan all loaded native drivers and update the device cache.
+    QJsonArray refreshDevices(QStringList *errors=nullptr);
     QJsonObject capabilities(const QString &driverId, const QString &deviceId,
                              QString *error=nullptr) const;
     QJsonObject health(const QString &driverId, const QString &deviceId,
@@ -83,6 +88,8 @@ private:
     const Loaded *find(const QString &driverId) const;
     QMutex *callMutex(const Loaded *driver, const QString &deviceId) const;
 
+    mutable QMutex deviceCacheMutex_;
+    QJsonArray deviceCache_;
     mutable QMutex frameMutex_;
     QHash<quint64, NativeDriverFrame> frames_;
     std::atomic<quint64> nextFrameToken_{1};

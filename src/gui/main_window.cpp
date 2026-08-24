@@ -68,16 +68,31 @@ QWidget *MainWindow::buildDevicesTab(){auto*w=new QWidget;auto*l=new QVBoxLayout
         else mountEndpoint_->setPlaceholderText("Compatibility endpoint / URL");
     });
     if(mountBackend_->currentText().startsWith("native:")){mountEndpoint_->clear();mountEndpoint_->setEnabled(false);mountEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}
-    make("Focuser",focuserBackend_,focuserEndpoint_,focuserDeviceStatus_,c_->focuserBackends(),&ObservatoryController::connectFocuser,&ObservatoryController::disconnectFocuser);focuserEndpoint_->setPlaceholderText("Gemini: indi:127.0.0.1:7624/Exact Device Name");
+    make("Focuser",focuserBackend_,focuserEndpoint_,focuserDeviceStatus_,c_->focuserBackends(),&ObservatoryController::connectFocuser,&ObservatoryController::disconnectFocuser);focuserEndpoint_->setPlaceholderText("Compatibility only; native Gemini appears as native:oal.gemini/... after discovery");
     connect(focuserBackend_,&QComboBox::currentTextChanged,this,[this](const QString&b){
         const bool native=b.startsWith("native:");focuserEndpoint_->setEnabled(!native);
         if(native){focuserEndpoint_->clear();focuserEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}
-        else if(b=="gemini-eaf")focuserEndpoint_->setPlaceholderText("Compatibility: indi:127.0.0.1:7624/Exact Gemini INDI device name");
+        else if(b=="gemini-eaf")focuserEndpoint_->setPlaceholderText("Compatibility only: alpaca:<URL> or indi:127.0.0.1:7624/Device; native Gemini uses native:oal.gemini/...");
         else if(b=="indi")focuserEndpoint_->setPlaceholderText("127.0.0.1:7624/Exact INDI focuser device name");
         else focuserEndpoint_->setPlaceholderText("Compatibility endpoint / URL");
     });
     if(focuserBackend_->currentText().startsWith("native:")){focuserEndpoint_->clear();focuserEndpoint_->setEnabled(false);focuserEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}
+
+    auto*serialBox=new QGroupBox("Native serial discovery");auto*serialForm=new QFormLayout(serialBox);
+    nativeSerialDriver_=new QComboBox;nativeSerialDriver_->addItem("Gemini EAF","oal.gemini");nativeSerialDriver_->addItem("Sky-Watcher mount","oal.skywatcher");nativeSerialPort_=new QComboBox;
+    auto reloadSerialPorts=[this](){
+        const QString driverId=nativeSerialDriver_->currentData().toString();const QString selected=c_->nativeSerialPortOverride(driverId);nativeSerialPort_->clear();nativeSerialPort_->addItem("Auto — scan all serial ports",QString());int selectedIndex=0;
+        for(const auto&v:c_->availableSerialPorts()){const auto p=v.toObject();const QString port=p.value("port").toString();QString label=port;const QString description=p.value("description").toString();const QString manufacturer=p.value("manufacturer").toString();if(!description.isEmpty())label+=" — "+description;else if(!manufacturer.isEmpty())label+=" — "+manufacturer;nativeSerialPort_->addItem(label,port);if(port==selected)selectedIndex=nativeSerialPort_->count()-1;}
+        if(!selected.isEmpty()&&selectedIndex==0){nativeSerialPort_->addItem(selected+" — not currently present",selected);selectedIndex=nativeSerialPort_->count()-1;}nativeSerialPort_->setCurrentIndex(selectedIndex);
+    };
+    auto*refreshPorts=new QPushButton("Refresh serial port list");auto*applySerial=new QPushButton("Apply & rediscover native devices");
+    serialForm->addRow("Driver",nativeSerialDriver_);serialForm->addRow("Serial port",nativeSerialPort_);serialForm->addRow(refreshPorts);serialForm->addRow(applySerial);l->addWidget(serialBox);
+    connect(nativeSerialDriver_,&QComboBox::currentIndexChanged,this,[reloadSerialPorts](int){reloadSerialPorts();});connect(refreshPorts,&QPushButton::clicked,this,reloadSerialPorts);
+    connect(applySerial,&QPushButton::clicked,this,[this,reloadSerialPorts](){const QString driverId=nativeSerialDriver_->currentData().toString();const QString port=nativeSerialPort_->currentData().toString();QString e;if(!c_->setNativeSerialPortOverride(driverId,port,&e)){showError(e);return;}auto refresh=[&](QComboBox*combo,const QStringList&items){const QString old=combo->currentText();populateBackendCombo(combo,items);const int i=combo->findText(old);if(i>=0)combo->setCurrentIndex(i);};refresh(cameraBackend_,c_->cameraBackends());refresh(guideCameraBackend_,c_->cameraBackends());refresh(mountBackend_,c_->mountBackends());refresh(focuserBackend_,c_->focuserBackends());reloadSerialPorts();c_->refreshState();appendLog(port.isEmpty()?driverId+" serial discovery: automatic scan":driverId+" serial discovery: "+port);});
+    reloadSerialPorts();
+
     auto*refreshDiscovery=new QPushButton("Refresh native device discovery");connect(refreshDiscovery,&QPushButton::clicked,this,[this](){
+        QString discoveryError;if(!c_->refreshNativeDiscovery(&discoveryError)){showError(discoveryError);return;}
         auto refresh=[&](QComboBox*combo,const QStringList&items){const QString old=combo->currentText();populateBackendCombo(combo,items);const int i=combo->findText(old);if(i>=0)combo->setCurrentIndex(i);};
         refresh(cameraBackend_,c_->cameraBackends());refresh(guideCameraBackend_,c_->cameraBackends());refresh(mountBackend_,c_->mountBackends());refresh(focuserBackend_,c_->focuserBackends());c_->refreshState();appendLog("Native OAL discovery refreshed");
     });l->addWidget(refreshDiscovery);

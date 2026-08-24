@@ -40,7 +40,8 @@ QStringList gConfiguredPorts;
 int gProbeTimeoutMs{900};
 int gCommandTimeoutMs{2500};
 int gMoveTimeoutMs{120000};
-int gOpenSettleMs{250};
+int gOpenSettleMs{2200};
+int gResetRecoveryMs{1200};
 
 char *copyString(const QByteArray &bytes) {
     auto *p = static_cast<char *>(gHost.allocate(gHost.hostContext,
@@ -111,6 +112,13 @@ void fillPortMetadata(Device &device) {
     }
 }
 
+
+void driverLog(int level, const QString &message) {
+    if (!gHost.log) return;
+    const QByteArray m = message.toUtf8();
+    gHost.log(gHost.hostContext, level, "oal.gemini", m.constData());
+}
+
 bool rawExchange(const std::shared_ptr<OalBlockingSerialSession> &session,
                  const QByteArray &command, QByteArray *reply, int timeoutMs,
                  bool expectReply = true) {
@@ -139,11 +147,13 @@ std::optional<bool> queryMoving(const Device &device) {
     return oal::gemini::parseMoving(response.trimmed().toStdString());
 }
 
-bool populateIdentity(Device &device) {
+bool populateIdentity(Device &device, QByteArray *probeReply = nullptr) {
     QByteArray response;
-    if (!rawExchange(device.session,
-                     QByteArray::fromStdString(oal::gemini::probeCommand()),
-                     &response, gProbeTimeoutMs) ||
+    const bool exchangeOk = rawExchange(device.session,
+                                        QByteArray::fromStdString(oal::gemini::probeCommand()),
+                                        &response, gProbeTimeoutMs);
+    if (probeReply) *probeReply = response;
+    if (!exchangeOk ||
         !oal::gemini::isProbeResponse(response.trimmed().toStdString()))
         return false;
 
@@ -180,12 +190,54 @@ bool probePort(const QString &port, Device &device, bool keepOpen) {
     result.id = idForPort(result.port);
     fillPortMetadata(result);
     result.session = std::make_shared<OalBlockingSerialSession>();
+    const bool explicitPort = !qEnvironmentVariable("OAL_GEMINI_PORT").trimmed().isEmpty() ||
+                              gConfiguredPorts.contains(result.port);
+    if (explicitPort) driverLog(1, QString("probing %1 at 9600 baud").arg(result.port));
     QString error;
-    if (!result.session->open(result.port, 9600, gOpenSettleMs, &error)) return false;
-    if (!populateIdentity(result)) {
+    if (!result.session->open(result.port, 9600, gOpenSettleMs, &error)) {
+        if (explicitPort) driverLog(2, QString("%1: open failed: %2").arg(result.port, error));
+        return false;
+    }
+
+    // Windows HIL established that this CH340/Gemini controller needs a quiet
+    // boot window after Open() before the first :02# byte.  The driver manifest
+    // is the authoritative runtime configuration, so v0.2.10.10 keeps its
+    // openSettleMs in lock-step with the C++ default (2200 ms).  If the first
+    // post-settle exchange still fails, keep the same port open and retry only
+    // after an additional recovery delay.  Reopening would restart the device.
+    QByteArray probeReply;
+    bool identityOk = populateIdentity(result, &probeReply);
+    if (explicitPort)
+        driverLog(identityOk ? 1 : 2,
+                  QString("%1: first :02# exchange: %2; reply='%3' hex=%4")
+                      .arg(result.port, result.session->lastExchangeDiagnostic(),
+                           QString::fromLatin1(probeReply),
+                           QString::fromLatin1(probeReply.toHex(' '))));
+    if (!identityOk && gResetRecoveryMs > 0) {
+        const int remainingRecoveryMs = gResetRecoveryMs;
+        if (explicitPort)
+            driverLog(1, QString("%1: no reply after %2 ms quiet-open settle; waiting an additional %3 ms before retry")
+                             .arg(result.port)
+                             .arg(gOpenSettleMs)
+                             .arg(remainingRecoveryMs));
+        if (remainingRecoveryMs > 0) QThread::msleep(unsigned(remainingRecoveryMs));
+        probeReply.clear();
+        identityOk = populateIdentity(result, &probeReply);
+        if (explicitPort)
+            driverLog(identityOk ? 1 : 2,
+                      QString("%1: recovery :02# exchange: %2; reply='%3' hex=%4")
+                          .arg(result.port, result.session->lastExchangeDiagnostic(),
+                               QString::fromLatin1(probeReply),
+                               QString::fromLatin1(probeReply.toHex(' '))));
+    }
+    if (!identityOk) {
+        if (explicitPort)
+            driverLog(2, QString("%1: MyFocuserPro2/Gemini handshake failed (:02# -> EOK# expected) after reset-aware retry")
+                             .arg(result.port));
         result.session->close();
         return false;
     }
+    if (explicitPort) driverLog(1, QString("%1: Gemini EAF discovered (firmware %2)").arg(result.port, result.firmware.isEmpty()?QString("unknown"):result.firmware));
     if (!keepOpen) {
         result.session->close();
         result.session.reset();
@@ -254,7 +306,15 @@ bool start(void *, const char *configJson) {
                                 1000, 600000);
     gOpenSettleMs = std::clamp(object.value("openSettleMs").toInt(gOpenSettleMs),
                                0, 3000);
-    refreshDevices();
+    gResetRecoveryMs =
+        std::clamp(object.value("resetRecoveryMs").toInt(gResetRecoveryMs), 0, 10000);
+    driverLog(1, QString("serial config: probeTimeoutMs=%1 commandTimeoutMs=%2 openSettleMs=%3 resetRecoveryMs=%4")
+                     .arg(gProbeTimeoutMs)
+                     .arg(gCommandTimeoutMs)
+                     .arg(gOpenSettleMs)
+                     .arg(gResetRecoveryMs));
+    // Hardware discovery is owned by the OAL host refresh cycle.  Keep driver
+    // start side-effect-light so startup does not probe serial ports twice.
     return true;
 }
 
@@ -270,7 +330,7 @@ void stop(void *) {
 const char *manifest(void *) {
     return json(QJsonObject{{"driverId", "oal.gemini"},
                             {"name", "OpenAstroLink native Gemini EAF driver"},
-                            {"version", "0.2.10"},
+                            {"version", "0.2.10.10"},
                             {"abiVersion", 2},
                             {"threadModel", "per-device-serial"},
                             {"protocol", "MyFocuserPro2 serial"},
@@ -427,7 +487,7 @@ OalDriverV2 api{OAL_DRIVER_ABI_V2,
                 OAL_DRIVER_FEATURE_EVENTS | OAL_DRIVER_FEATURE_HEALTH,
                 "oal.gemini",
                 "OpenAstroLink native Gemini EAF driver",
-                "0.2.10",
+                "0.2.10.10",
                 nullptr,
                 &manifest,
                 &start,

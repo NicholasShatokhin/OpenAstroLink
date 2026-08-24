@@ -1,4 +1,4 @@
-# Архітектура OpenAstroSuite / OpenAstroLink — v0.2.10
+# Архітектура OpenAstroSuite / OpenAstroLink — v0.2.10.5
 
 Канонічний документ: `../ARCHITECTURE.md`.
 

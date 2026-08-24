@@ -1,84 +1,132 @@
-# Build platforms — v0.2.10
+# Build platforms — v0.2.10.5
 
-English is canonical. Ukrainian mirror: `docs/uk/BUILD_PLATFORMS.md`.
+English is canonical; Ukrainian mirror: `docs/uk/BUILD_PLATFORMS.md`.
 
-OpenAstroSuite is no longer tied to Raspberry Pi. A Windows x64 PC, Linux x86_64 PC, or Linux ARM64/Raspberry Pi can all be the **observatory node** when the hardware is attached directly to that computer. The same GUI can run locally or connect to another node over OAL HTTP/WebSocket.
+## 1. Supported host roles
 
-## Supported first-class targets
+The observatory host may be:
 
-| Target | GUI | Node | Native drivers | INDI compatibility |
-|---|---:|---:|---|---:|
-| Windows x64 / MSVC 2022 | yes | yes | QHY, Canon EDSDK, ZWO ASI/EAF, Gemini, Sky-Watcher | optional |
-| Linux x86_64 | yes | yes | QHY, Canon libgphoto2, ZWO ASI/EAF, Gemini, Sky-Watcher | optional |
-| Linux ARM64 / Raspberry Pi | yes | yes | same as Linux | optional |
-| Linux headless | no | yes | selectable | optional |
+- Windows x64 desktop/mini-PC;
+- Linux x86_64 desktop/mini-PC;
+- Linux ARM64 / Raspberry Pi 4;
+- headless Linux node.
 
-Native OAL remains the preferred hardware path. INDI is deliberately easy to enable for equipment without a native OAL driver.
+The hardware can be attached directly to that host. An RPi is not required when a desktop host owns the devices.
 
-## Presets
+## 2. CMake compatibility
 
-`CMakePresets.json` contains portable presets and **must not contain developer-specific SDK paths**:
+Repository presets use **schema version 2** and require **CMake 3.20+**.
 
-- `windows-core-release` — Qt/OpenCV + serial native drivers, no vendor camera SDKs.
-- `windows-native-release` — all native drivers, INDI off.
-- `windows-observatory-release` — all native drivers + INDI compatibility.
-- `linux-native-release` — all native drivers, INDI off.
-- `linux-observatory-release` — all native drivers + INDI compatibility.
-- `linux-node-release` — headless Linux node.
-- `rpi4-native-release` / `rpi4-observatory-release` — ARM64/RPi aliases of the Linux model.
-- `node-sim-release` — no physical hardware dependencies.
+Why: schema v6 requires newer CMake merely to parse `CMakePresets.json`/`CMakeUserPresets.json`. On older Ubuntu/WSL releases this produced:
 
-Copy `CMakeUserPresets.example.json` to `CMakeUserPresets.json` and edit only that local file. It is ignored by Git.
+```text
+Unrecognized "version" field
+```
 
-## Windows x64
+Always check:
 
-Recommended toolchain:
+```bash
+cmake --version
+```
 
-- Visual Studio 2022 MSVC x64 compiler;
-- Qt 6 MSVC2022 x64;
-- CMake + Ninja;
-- OpenCV built for compatible MSVC ABI;
-- Windows/x64 vendor SDKs for the devices that are enabled.
+If migrating from v0.2.10/v0.2.10.2, recreate `CMakeUserPresets.json` from the current example; an old local file with `"version": 6` can still break preset parsing even when the repository preset has been fixed.
 
-Do not mix MinGW libraries with an MSVC build.
+```bash
+rm -f CMakeUserPresets.json
+cp CMakeUserPresets.example.json CMakeUserPresets.json
+```
 
-Example local setup:
+## 3. Presets
+
+Repository presets:
+
+```text
+windows-core-release
+windows-native-release
+windows-observatory-release
+linux-native-release
+linux-observatory-release
+linux-node-release
+rpi4-native-release
+rpi4-observatory-release
+node-sim-release
+```
+
+Local examples:
+
+```text
+my-windows-observatory          # Canon disabled; no EDSDK required
+my-windows-observatory-edsdk    # Canon enabled
+my-linux-observatory
+```
+
+`CMakeUserPresets.json` is ignored by Git.
+
+## 4. Windows
+
+### Toolchain
+
+Official path:
+
+```text
+MSVC 2022 x64 + Ninja + Qt MSVC2022_64
+```
+
+Do not mix Qt MSVC libraries with MinGW/Strawberry GCC.
+
+Recommended command:
 
 ```powershell
-Copy-Item CMakeUserPresets.example.json CMakeUserPresets.json
-# Edit SDK paths in my-windows-observatory.
+.\scripts\build_windows.ps1 -Preset my-windows-observatory -Clean
+```
+
+The script attempts to load `vcvars64.bat` from Community/Professional/Enterprise/BuildTools if `cl.exe` is not already in PATH, and adds Qt's common Ninja directory when available.
+
+Manual equivalent:
+
+```powershell
 cmake --preset my-windows-observatory
 cmake --build --preset my-windows-observatory --parallel
 ```
 
-For a dependency-light compile first:
-
-```powershell
-cmake --preset windows-core-release `
-  -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64" `
-  -DOpenCV_DIR="C:/opencv/opencv/build/x64/vc16/lib"
-cmake --build --preset windows-core-release --parallel
-```
-
-### Native Canon on Windows
-
-`OAS_CANON_TRANSPORT=AUTO` resolves to **EDSDK** on Windows. Provide:
+The configure output must contain:
 
 ```text
-CANON_EDSDK_INCLUDE_DIR = directory containing EDSDK.h
-CANON_EDSDK_LIBRARY     = EDSDK import library (.lib)
-CANON_EDSDK_RUNTIME_DIR = directory containing EDSDK.dll and companion runtime DLLs
+The CXX compiler identification is MSVC
 ```
 
-The EDSDK transport preserves the original EOS file and publishes the EDSDK thumbnail as an OAL preview frame. Hardware qualification is still required per camera model/firmware.
+and must not contain `GNU`, `MinGW`, `Strawberry`, or `c++.exe` from a GCC distribution.
 
-### Native QHY / ZWO on Windows
+### QHY
 
-Use the Windows x64 SDK artifacts, e.g. `.lib` for link and `.dll` for runtime. A Linux `.so` cannot be linked by MSVC.
+Use Windows x64 QHY SDK headers/import library/runtime. OAL v0.2.10.2+ does not place the QHY include directory in the normal MSVC include path because QHY compatibility `stdint.h` headers can shadow the CRT/STL. The driver instead includes `qhyccd.h` through a generated absolute-path wrapper.
 
-## Linux x86_64
+### ZWO
 
-Debian/Ubuntu baseline:
+Use Windows x64 ASI and EAF import libraries and matching DLLs. Do not point MSVC at Linux `.so` files.
+
+### Canon
+
+The transport is controlled by `OAS_CANON_TRANSPORT` (`EDSDK`, `GPHOTO2`, or `AUTO`).
+
+
+Without EDSDK:
+
+```text
+OAS_ENABLE_NATIVE_CANON=OFF
+```
+
+With EDSDK use the dedicated local preset and set `CANON_EDSDK_*` paths.
+
+### Packaging
+
+Use `scripts/package_windows.ps1`. It performs `cmake --install`, runs `windeployqt`, and copies OpenCV/vendor runtime DLLs from explicit directories.
+
+## 5. Linux x86_64 / ARM64
+
+### Base packages
+
+Typical Debian/Ubuntu dependencies:
 
 ```bash
 sudo apt update
@@ -88,115 +136,80 @@ sudo apt install -y \
   libopencv-dev libgphoto2-dev libjpeg-dev
 ```
 
-Install the x86_64 QHY and ZWO SDKs separately, then put their exact paths in `CMakeUserPresets.json` or pass them on the command line.
+Qt package names vary across distributions. Install missing Qt 6 module development packages indicated by CMake.
+
+### Vendor SDK staging
+
+Recommended tree:
+
+```text
+/opt/openastrolink-sdk/
+  qhy/
+    include/qhyccd.h
+    lib/libqhy.so
+  zwo/
+    asi/
+      include/ASICamera2.h
+      lib/libASICamera2.so
+    eaf/
+      include/EAF_focuser.h
+      lib/libEAFFocuser.so
+```
+
+Verify every binary:
+
+```bash
+uname -m
+file /opt/openastrolink-sdk/qhy/lib/libqhy.so
+file /opt/openastrolink-sdk/zwo/asi/lib/libASICamera2.so
+file /opt/openastrolink-sdk/zwo/eaf/lib/libEAFFocuser.so
+```
+
+Expected architectures must match (`x86-64` for x86_64 host, `aarch64` for 64-bit RPi).
+
+### Canon
+
+The transport is controlled by `OAS_CANON_TRANSPORT` (`EDSDK`, `GPHOTO2`, or `AUTO`).
+
+
+Default Linux transport is libgphoto2, found by `pkg-config`; therefore no EDSDK path is required.
+
+### Build
+
+```bash
+./scripts/check_build_environment.sh
+./scripts/build_linux.sh my-linux-observatory
+```
+
+or manually:
 
 ```bash
 cmake --preset my-linux-observatory
-cmake --build --preset my-linux-observatory -j$(nproc)
+cmake --build --preset my-linux-observatory -j"$(nproc)"
+```
+
+### Install
+
+```bash
 sudo cmake --install build/linux-observatory
+sudo ldconfig
 ```
 
-Use `file` before linking a vendor library:
+## 6. WSL
 
-```bash
-file /opt/qhy/lib/libqhy.so
-file /opt/zwo/asi/lib/libASICamera2.so
-```
+WSL is useful as a Linux compile/test environment. Important distinctions:
 
-On x86_64 they must report x86-64 ELF objects. On ARM64/RPi they must report AArch64/ARM64.
+- `/mnt/c/...` is a WSL path, not a native Linux workstation/RPi path;
+- Linux `.so` architecture must match the WSL Linux architecture;
+- Windows `.dll`/`.lib` cannot be linked into Linux targets;
+- direct USB camera/serial access requires explicit WSL passthrough (for example through the Windows USB forwarding stack) and is not the recommended observatory deployment path.
 
-### Native Canon on Linux
+When a WSL build reports `Unrecognized "version" field`, first check both `CMakePresets.json` **and** the ignored `CMakeUserPresets.json` schema versions and the installed CMake version.
 
-`OAS_CANON_TRANSPORT=AUTO` resolves to **GPHOTO2** on Linux. This is a native OAL driver using libgphoto2 only as the low-level USB/PTP access layer. `OAS_CANON_TRANSPORT=EDSDK` is also supported when a Canon Linux EDSDK matching the machine is installed.
+## 7. INDI
 
-## Raspberry Pi / Linux ARM64
+`OAS_ENABLE_INDI=ON` enables the built-in compatibility client. It does not link native drivers through INDI. A separate `indiserver` is only required when using an actual INDI-only device.
 
-The RPi presets now use the same build model as desktop Linux. The only difference is the architecture of Qt/OpenCV/vendor SDK binaries and deployment service configuration.
+## 8. Runtime search paths
 
-```bash
-cmake --preset rpi4-observatory-release \
-  -DQHYCCD_INCLUDE_DIR=/opt/qhy/include \
-  -DQHYCCD_LIBRARY=/opt/qhy/lib/libqhy.so \
-  -DZWO_ASI_INCLUDE_DIR=/opt/zwo/asi/include \
-  -DZWO_ASI_LIBRARY=/opt/zwo/asi/lib/libASICamera2.so \
-  -DZWO_EAF_INCLUDE_DIR=/opt/zwo/eaf/include \
-  -DZWO_EAF_LIBRARY=/opt/zwo/eaf/lib/libEAFFocuser.so
-cmake --build --preset rpi4-observatory-release -j$(nproc)
-```
-
-## Directly attached hardware
-
-Windows/Linux/RPi all support this topology:
-
-```text
-QHY / ZWO / Canon / Gemini / Sky-Watcher
-                 │ USB / serial
-                 ▼
-          openastrolink-node
-             ┌────┴─────┐
-       local GUI    remote GUI
-                       + Stellarium
-```
-
-RPi is therefore an edge deployment option, not a mandatory proxy.
-
-## Packaging
-
-### Windows
-
-After a successful build:
-
-```powershell
-./scripts/package_windows.ps1 \
-  -BuildDir build/windows-observatory \
-  -QtBin C:/Qt/6.10.0/msvc2022_64/bin \
-  -OpenCvBin C:/opencv/opencv/build/x64/vc16/bin \
-  -VendorRuntimeDirs @("C:/SDK/QHY/bin","C:/SDK/ZWO/ASI/bin","C:/SDK/ZWO/EAF/bin","C:/SDK/Canon/EDSDK/Dll") \
-  -Zip
-```
-
-The script runs `cmake --install`, `windeployqt`, and copies explicitly supplied vendor runtime DLLs. Vendor DLL redistribution remains subject to each vendor's license.
-
-### Linux
-
-```bash
-./scripts/package_linux.sh build/linux-observatory dist/linux-observatory
-```
-
-The Linux package intentionally does not silently redistribute vendor SDK libraries. Install them on the destination host or bundle them only when their licenses permit it.
-
-## Linux device permissions
-
-Serial users normally need `dialout`:
-
-```bash
-sudo usermod -aG dialout "$USER"
-```
-
-Install QHY/ZWO vendor udev rules. Ensure desktop photo software does not claim a Canon EOS USB/PTP session before OAL does.
-
-## Runtime driver locations
-
-The node scans `OAL_DRIVER_PATH`, `drivers/` beside the executable, and standard installation directories. Normal installation layout:
-
-```text
-Windows package:
-  bin/OpenAstroSuite.exe
-  bin/openastrolink-node.exe
-  lib/openastrolink/drivers/*.dll
-
-Linux:
-  /usr/local/bin/OpenAstroSuite
-  /usr/local/bin/openastrolink-node
-  /usr/local/lib/openastrolink/drivers/*.so
-```
-
-`build_features.json` is generated at configure time and installed with the package so support logs can state exactly which hardware transports were compiled in.
-
-## Windows compiler ABI guard (v0.2.10.1 hotfix)
-
-The canonical Windows presets now use the **Visual Studio 17 2022 / x64** generator and set `OAS_REQUIRE_MSVC=ON`. This prevents a shell `PATH` entry (for example Strawberry Perl's bundled MinGW GCC) from silently selecting `g++` while the build links against Qt MSVC2022 `.lib` files.
-
-If an older build directory was configured with MinGW/GNU, delete that build directory before reconfiguring. CMake compiler selection is cached and cannot be safely changed in place.
-
-Expected configure diagnostics for a Windows observatory build include an MSVC compiler, not `C:/Strawberry/.../c++.exe` or another MinGW `g++.exe`.
+Windows packages should place required DLLs beside the executables/package runtime path. Linux either installs vendor runtime libraries system-wide according to the vendor instructions or configures the dynamic loader appropriately. `package_linux.sh` intentionally does not redistribute vendor `.so` files automatically because licensing differs by vendor.

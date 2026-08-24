@@ -20,6 +20,7 @@ private:
     QComboBox *guideCameraBackend_{}; QLineEdit *guideCameraEndpoint_{}; QLabel *guideCameraDeviceStatus_{};
     QComboBox *mountBackend_{}; QLineEdit *mountEndpoint_{}; QLabel *mountDeviceStatus_{};
     QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{}; QLabel *focuserDeviceStatus_{};
+    QComboBox *nativeSerialDriver_{}; QComboBox *nativeSerialPort_{};
     QDoubleSpinBox *exposure_{}; QComboBox *solverBackend_{}; QLineEdit *catalogPath_{}; QLineEdit *modelPath_{}; QSpinBox *gain_{}; QDoubleSpinBox *hintRa_{}; QDoubleSpinBox *hintDec_{}; QDoubleSpinBox *hintRadius_{};
     QPushButton *captureButton_{}; QPushButton *captureSolveButton_{}; QPushButton *solveButton_{}; QPushButton *motionButton_{}; QTabWidget *tabs_{}; bool captureBusy_{false}; bool captureSolveRequested_{false}; QString captureOperationId_; QString pendingSolveFrameId_;
     QDoubleSpinBox *mountRa_{}; QDoubleSpinBox *mountDec_{}; QLabel *mountStatus_{}; QCheckBox *mountTracking_{}; QCheckBox *mountParked_{};

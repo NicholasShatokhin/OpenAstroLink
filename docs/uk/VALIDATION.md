@@ -1,43 +1,42 @@
-# Валідація — v0.2.10 cross-platform desktop observatory
+# План валідації — v0.2.10.5
 
-Канонічна версія: `docs/VALIDATION.md`.
+Цей реліз — build/HIL qualification checkpoint.
 
-Валідація розділяє static/source checks, SDK API-shape checks, simulator tests, реальні platform builds та hardware-in-the-loop. Сам факт компіляції не означає production-ready driver.
+## Static gates
 
-## Static regression
+Запустити всі `tools/*check.py`, включно з `cmake_presets_compat_check.py`, перевірити JSON і `cmake --list-presets`.
 
-Потрібно запускати всі `tools/*check.py`, включно з `cross_platform_build_check.py` та `canon_edsdk_compile_check.py`, перевіряти JSON presets, `cmake --list-presets`, shell syntax і OpenAPI.
+## Windows
 
-## Windows x64 / MSVC 2022
+```powershell
+.\scripts\check_build_environment.ps1
+.\scripts\build_windows.ps1 -Preset my-windows-observatory -Clean
+```
 
-1. `windows-core-release` — Qt/OpenCV без vendor SDK;
-2. `windows-native-release` — QHY + ZWO ASI/EAF + Canon EDSDK;
-3. `windows-observatory-release` — те саме + INDI compatibility;
-4. `package_windows.ps1` — self-contained Qt/OpenCV package з явно вказаними vendor runtime DLL;
-5. package має запускатися поза Qt Creator без ручного редагування `PATH`.
+PASS: CMake >=3.20, Ninja, MSVC `cl.exe`, без MinGW/Strawberry, сумісні x64 MSVC Qt/OpenCV/vendor libs. QHY SDK include не повинен потрапляти в normal `/I`; використовується generated wrapper.
 
-## Linux x86_64
+## Linux/WSL
 
-1. `linux-native-release` — native hardware, INDI off;
-2. `linux-observatory-release` — native + INDI;
-3. `linux-node-release` — headless;
-4. `cmake --install` і `package_linux.sh`;
-5. після встановлення vendor runtimes `ldd` не має показувати unresolved dependencies.
+```bash
+./scripts/check_build_environment.sh
+rm -f CMakeUserPresets.json
+cp CMakeUserPresets.example.json CMakeUserPresets.json
+# відредагувати SDK paths
+./scripts/build_linux.sh my-linux-observatory
+```
 
-## Linux ARM64 / RPi
+При preset error зберегти `cmake --version` і перші рядки обох preset JSON.
 
-Ті самі gates із ARM64/AArch64 SDK. Перед linking обов'язково перевіряти vendor libraries командою `file`.
+## HIL
 
-## Canon
+Mount: status → safe small GOTO → abort → tracking → sync → pier side → pulse guide → reconnect.  
+Focuser: position → small moves → absolute move → halt if advertised → temp/limits → reconnect → autofocus repeats.  
+QHY/ZWO: exact ID → short/long exposure → gain/offset → ROI/binning → bit depth → cancel → 20–100 frames → unplug/replug → main+guide simultaneous test.  
+Canon: discovery/session → short capture → original file → Bulb → cancel → preview → repeated capture → reconnect.  
+ASTAP: archived frame → real frame → scale check → repeated solve → closed-loop correction.
 
-На Linux native Canon за замовчуванням використовує libgphoto2/PTP. На Windows — Canon EDSDK.
+## Supervised first-light PASS
 
-`oal_driver_canon_edsdk.cpp` проходить dependency-light API-shape compile через `tests/stubs/edsdk/` з warnings-as-errors. Але потрібен реальний Windows HIL із фактичним EDSDK та конкретною EOS: enumeration, session, Bulb, cancel, CR2/CR3 transfer, thumbnail preview, reconnect.
+Чиста збірка/package, hardware probe, HIL mount/focuser/camera, real-sky ASTAP, повторюваний autofocus, перевірені abort paths.
 
-## HIL для observatory hardware
-
-На кожній ОС, яка напряму володітиме обладнанням, перевірити QHY, Canon, ZWO ASI (у тому числі main+guide одночасно), ZWO EAF/Gemini, Sky-Watcher, ASTAP, local+remote GUI та Stellarium. Окремо зупинити `indiserver` і довести, що native telescope продовжує працювати; потім увімкнути INDI і підключити compatibility-only device паралельно.
-
-## Межі v0.2.10
-
-EDSDK transport та частина native hardware drivers ще HIL-pending. Planetary SER/data plane, production guiding, durable sessions, security/safety, RFC 9457/idempotency/replay та out-of-process sandbox ще не завершені.
+Unattended production PASS не ставити до реалізації reliable event replay, idempotency, durable science storage, production guiding/session recovery, security/auth/audit, safety/weather/roof/power, driver isolation і public conformance.

@@ -77,4 +77,14 @@ void AppSettings::saveCameraBinding(const DeviceBinding &b) const { saveBinding(
 void AppSettings::saveGuideCameraBinding(const DeviceBinding &b) const { saveBinding("devices/guideCamera", b); }
 void AppSettings::saveMountBinding(const DeviceBinding &b) const { saveBinding("devices/mount", b); }
 void AppSettings::saveFocuserBinding(const DeviceBinding &b) const { saveBinding("devices/focuser", b); }
+QString AppSettings::nativeSerialPort(const QString &driverId) const {
+    QString key = driverId; key.replace('/', '_').replace('\\', '_').replace(':', '_');
+    return settings_.value("nativeSerial/" + key + "/port").toString().trimmed();
+}
+void AppSettings::saveNativeSerialPort(const QString &driverId, const QString &port) const {
+    QString key = driverId; key.replace('/', '_').replace('\\', '_').replace(':', '_');
+    const QString value = port.trimmed();
+    if (value.isEmpty()) settings_.remove("nativeSerial/" + key + "/port");
+    else settings_.setValue("nativeSerial/" + key + "/port", value);
+}
 } // namespace oas

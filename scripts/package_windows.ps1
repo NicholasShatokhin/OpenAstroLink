@@ -31,8 +31,13 @@ if ($QtBin) {
 
 function Copy-RuntimeDlls([string]$dir) {
     if (-not $dir -or -not (Test-Path $dir)) { return }
+    $crtPattern = '^(?i)(msvcr|msvcp|vcruntime|ucrtbase|concrt|vcamp|atl|mfc|mfcm)[0-9_].*\.dll$|^(?i)(api-ms-win-|ext-ms-win-).+\.dll$'
     Get-ChildItem $dir -Filter *.dll -File -ErrorAction SilentlyContinue | ForEach-Object {
-        Copy-Item $_.FullName $bin -Force
+        if ($_.Name -match $crtPattern) {
+            Write-Host "Skipping Microsoft CRT/UCRT from vendor runtime directory: $($_.Name)"
+        } else {
+            Copy-Item $_.FullName $bin -Force
+        }
     }
 }
 Copy-RuntimeDlls $OpenCvBin

@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QTextStream>
+#include <QSerialPortInfo>
 
 using namespace oas;
 
@@ -34,11 +35,15 @@ int main(int argc, char **argv) {
     parser.addOption({"require-native-telescope", "Require native QHY + Gemini EAF + Sky-Watcher device discovery"});
     parser.addOption({"require-native-observatory", "Require native QHY + Canon EOS + Gemini EAF + Sky-Watcher device discovery"});
     parser.addOption({"require-zwo", "Require at least one native ZWO ASI camera and one native ZWO EAF focuser"});
+    parser.addOption({"gemini-port", "Probe only this serial port for native Gemini EAF (for example COM5 or /dev/ttyUSB0)", "port"});
+    parser.addOption({"skywatcher-port", "Probe only this serial port for native Sky-Watcher", "port"});
     parser.addOption({"no-astap", "Skip ASTAP probe"});
     parser.process(app);
 
     QTextStream out(stdout), err(stderr);
     bool allOk = true;
+    if (parser.isSet("gemini-port")) qputenv("OAL_GEMINI_PORT", parser.value("gemini-port").toUtf8());
+    if (parser.isSet("skywatcher-port")) qputenv("OAL_SKYWATCHER_PORT", parser.value("skywatcher-port").toUtf8());
 
     if (!parser.isSet("no-astap")) {
         AstapSolver astap;
@@ -49,6 +54,11 @@ int main(int argc, char **argv) {
 
     if (!parser.isSet("no-native")) {
         OalDriverPluginLoader loader;
+        QObject::connect(&loader, &OalDriverPluginLoader::driverLog, &loader,
+                         [&out](const QString &driver, int level, const QString &message) {
+            out << "  [" << driver << "] L" << level << ": " << message << "\n";
+            out.flush();
+        });
         QStringList errors;
         loader.scanDefaultPaths(&errors);
         const auto drivers = loader.drivers();
@@ -83,6 +93,20 @@ int main(int argc, char **argv) {
             allOk = false;
         } else if (!parser.isSet("no-canon")) out << "Native Canon EOS: OK\n";
         out << "Native Gemini EAF: " << (geminiFound ? "OK" : "not discovered") << "\n";
+        if (!geminiFound) {
+            out << "  Serial ports visible to Qt:\n";
+            const auto ports = QSerialPortInfo::availablePorts();
+            if (ports.isEmpty()) out << "    (none)\n";
+            for (const auto &pi : ports) {
+                out << "    " << pi.portName();
+                if (!pi.description().isEmpty()) out << "  " << pi.description();
+                if (!pi.serialNumber().isEmpty()) out << "  serial=" << pi.serialNumber();
+                if (pi.hasVendorIdentifier()) out << "  VID=0x" << QString::number(pi.vendorIdentifier(),16);
+                if (pi.hasProductIdentifier()) out << " PID=0x" << QString::number(pi.productIdentifier(),16);
+                out << "\n";
+            }
+            out << "  Hint: rerun with --gemini-port COMx (or set OAL_GEMINI_PORT=COMx) for focused handshake diagnostics.\n";
+        }
         out << "Native Sky-Watcher: " << (skywatcherFound ? "OK" : "not discovered") << "\n";
         if (parser.isSet("require-native-telescope") && (!qhyFound || !geminiFound || !skywatcherFound)) {
             out << "Native telescope pack: NOT READY (QHY=" << qhyFound << ", Gemini=" << geminiFound << ", SkyWatcher=" << skywatcherFound << ")\n";

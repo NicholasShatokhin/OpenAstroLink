@@ -102,6 +102,14 @@ public:
     virtual bool stellariumRunning() const = 0;
     virtual quint16 stellariumPort() const = 0;
 
+    // Explicitly rescan native hardware. Ordinary metadata/state reads use a
+    // cache and never touch USB/serial hardware.
+    virtual bool refreshNativeDiscovery(QString *error = nullptr) = 0;
+    virtual QJsonArray availableSerialPorts() const = 0;
+    virtual QString nativeSerialPortOverride(const QString &driverId) const = 0;
+    virtual bool setNativeSerialPortOverride(const QString &driverId, const QString &port,
+                                             QString *error = nullptr) = 0;
+
     // Request a fresh complete state snapshot. Remote clients use this after
     // connecting/reconnecting so GUI state does not depend on having observed
     // earlier WebSocket events.

@@ -21,9 +21,9 @@ bool GeminiEafFocuser::ensureTransport(QString *error) {
     const QString ep = endpoint_.trimmed();
     if (ep.isEmpty()) {
         if (error) {
-            *error = "GeminiAstro EAF endpoint is required. Use "
-                     "alpaca:http://host:port/api/v1/focuser/0 or "
-                     "indi:host:7624/Exact Device Name.";
+            *error = "gemini-eaf is the compatibility adapter. Use alpaca:<URL> or "
+                     "indi:host:7624/Exact Device Name. For the native Gemini driver, "
+                     "select native:oal.gemini/<device-id> after native discovery.";
         }
         return false;
     }
@@ -69,7 +69,7 @@ bool GeminiEafFocuser::ensureTransport(QString *error) {
     return true;
 #else
     if (error) {
-        *error = "Unknown GeminiAstro EAF endpoint. Use alpaca:<URL>. "
+        *error = "Unknown GeminiAstro compatibility endpoint. Use alpaca:<URL> or indi:<host:port/device>. "
                  "INDI endpoints require a build with -DOAS_ENABLE_INDI=ON.";
     }
     return false;

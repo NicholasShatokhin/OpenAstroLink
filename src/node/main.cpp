@@ -20,7 +20,11 @@ int main(int argc,char **argv){
     QCommandLineOption noAuto("no-autoconnect","Do not restore persisted main-camera/guide-camera/mount/focuser bindings.");
     QCommandLineOption stellariumOpt("stellarium-port","Enable Stellarium Telescope Control bridge on TCP port.","port");
     QCommandLineOption noStellarium("no-stellarium","Do not start the persisted Stellarium bridge.");
-    parser.addOption(httpOpt);parser.addOption(wsOpt);parser.addOption(noWs);parser.addOption(noAuto);parser.addOption(stellariumOpt);parser.addOption(noStellarium);parser.process(app);
+    QCommandLineOption geminiPortOpt("gemini-port","Pin native Gemini EAF discovery to one serial port (for example COM4 or /dev/ttyUSB0). Omit to use the saved setting or automatic scan.","port");
+    QCommandLineOption skywatcherPortOpt("skywatcher-port","Pin native Sky-Watcher discovery to one serial port.","port");
+    parser.addOption(httpOpt);parser.addOption(wsOpt);parser.addOption(noWs);parser.addOption(noAuto);parser.addOption(stellariumOpt);parser.addOption(noStellarium);parser.addOption(geminiPortOpt);parser.addOption(skywatcherPortOpt);parser.process(app);
+    if(parser.isSet(geminiPortOpt))qputenv("OAL_GEMINI_PORT",parser.value(geminiPortOpt).toUtf8());
+    if(parser.isSet(skywatcherPortOpt))qputenv("OAL_SKYWATCHER_PORT",parser.value(skywatcherPortOpt).toUtf8());
 
     oas::AppSettings settings;
     quint16 httpPort=parser.isSet(httpOpt)?parser.value(httpOpt).toUShort():settings.oalPort();

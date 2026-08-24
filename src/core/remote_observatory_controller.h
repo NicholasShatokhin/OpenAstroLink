@@ -90,6 +90,10 @@ public:
     void stopStellariumServer() override;
     bool stellariumRunning() const override{return stellariumRunning_;}
     quint16 stellariumPort() const override{return stellariumPort_;}
+    bool refreshNativeDiscovery(QString *error=nullptr) override;
+    QJsonArray availableSerialPorts() const override;
+    QString nativeSerialPortOverride(const QString &driverId) const override;
+    bool setNativeSerialPortOverride(const QString &driverId,const QString &port,QString *error=nullptr) override;
     void refreshState() override;
 
 private slots:

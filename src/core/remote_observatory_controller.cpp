@@ -38,6 +38,19 @@ bool RemoteObservatoryController::probe(QString*e){
     QJsonValue d;auto r=http_.get(api("node/info"),3000);if(!accepted(r,&d,e))return false;
     if(!refreshMetadata(e))return false;openEventStream(d.toObject());emit logMessage("Using remote OAL core at "+base_.toString());return true;
 }
+bool RemoteObservatoryController::refreshNativeDiscovery(QString*e){
+    QJsonValue d;if(!accepted(http_.postJson(api("drivers/refresh"),{},30000),&d,e))return false;
+    metadataLoaded_=false;return refreshMetadata(e);
+}
+QJsonArray RemoteObservatoryController::availableSerialPorts()const{
+    QJsonValue d;QString e;if(!accepted(http_.get(api("system/serial-ports"),3000),&d,&e))return {};return d.toObject().value("ports").toArray();
+}
+QString RemoteObservatoryController::nativeSerialPortOverride(const QString&driverId)const{
+    QJsonValue d;QString e;auto r=http_.get(api("drivers/serial-port"),3000);if(!accepted(r,&d,&e))return {};return d.toObject().value(driverId).toString();
+}
+bool RemoteObservatoryController::setNativeSerialPortOverride(const QString&driverId,const QString&port,QString*e){
+    QJsonValue d;if(!accepted(http_.postJson(api("drivers/serial-port"),{{"driverId",driverId},{"port",port}},30000),&d,e))return false;metadataLoaded_=false;return refreshMetadata(e);
+}
 void RemoteObservatoryController::refreshState(){QJsonValue d;QString e;if(accepted(http_.get(api("state"),3000),&d,&e)){auto state=d.toObject();auto st=state.value("stellarium").toObject();stellariumRunning_=st.value("running").toBool();stellariumPort_=quint16(st.value("port").toInt(10000));emit stateChanged(state);for(const auto&v:state.value("operations").toArray())emit operationChanged(v.toObject());const QString frameId=state.value("lastFrame").toObject().value("frameId").toString();if(!frameId.isEmpty()&&frameId!=lastFrame_.id){QString frameError;if(!fetchFramePreview(frameId,nullptr,&frameError))emit logMessage("Latest frame refresh failed: "+frameError);}}else emit logMessage("State refresh failed: "+e);}
 bool RemoteObservatoryController::refreshMetadata(QString*e)const{
     QJsonValue d;auto r=http_.get(api("node/backends"),3000);if(!accepted(r,&d,e))return false;auto o=d.toObject();

@@ -1,4 +1,4 @@
-# OpenAstroSuite / OpenAstroLink architecture — v0.2.10
+# OpenAstroSuite / OpenAstroLink architecture — v0.2.10.5
 
 ## Native OAL is the reference hardware architecture
 

@@ -1,4 +1,4 @@
-# Перший hardware запуск на Raspberry Pi — v0.2.10
+# Перший hardware запуск на Raspberry Pi — v0.2.10.5
 
 Канонічний документ: `../RPI_FIRST_HARDWARE.md`.
 

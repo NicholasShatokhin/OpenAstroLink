@@ -300,7 +300,8 @@ bool start(void *, const char *configJson) {
     gCommandTimeoutMs = std::clamp(object.value("commandTimeoutMs").toInt(gCommandTimeoutMs),
                                    250, 15000);
     gOpenSettleMs = std::clamp(object.value("openSettleMs").toInt(gOpenSettleMs), 0, 3000);
-    refreshDevices();
+    // Hardware discovery is owned by the OAL host refresh cycle.  Keep driver
+    // start side-effect-light so startup does not probe serial ports twice.
     return true;
 }
 
@@ -316,7 +317,7 @@ void stop(void *) {
 const char *manifest(void *) {
     return json(QJsonObject{{"driverId", "oal.skywatcher"},
                             {"name", "OpenAstroLink native Sky-Watcher/SynScan driver"},
-                            {"version", "0.2.10"},
+                            {"version", "0.2.10.10"},
                             {"abiVersion", 2},
                             {"threadModel", "per-device-serial"},
                             {"protocol", "SynScan Serial Communication Protocol 3.3"},
@@ -551,7 +552,7 @@ OalDriverV2 api{OAL_DRIVER_ABI_V2,
                     OAL_DRIVER_FEATURE_HEALTH,
                 "oal.skywatcher",
                 "OpenAstroLink native Sky-Watcher/SynScan driver",
-                "0.2.10",
+                "0.2.10.10",
                 nullptr,
                 &manifest,
                 &start,
