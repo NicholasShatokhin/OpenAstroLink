@@ -49,6 +49,7 @@ public:
     virtual QString startCapture(const ExposureRequest &request, QString *error = nullptr) = 0;
     virtual QString startGuideCapture(const ExposureRequest &request, QString *error = nullptr) = 0;
     virtual SolveResult solveLast(const SolveHint &hint = {}) = 0;
+    virtual QString startAdaptiveSolve(const AdaptiveSolveRequest &request, QString *error = nullptr) = 0;
     virtual AutofocusResult autofocus(const AutofocusRequest &request) = 0;
     virtual QString startAutofocus(const AutofocusRequest &request, QString *error = nullptr) = 0;
     virtual bool cancelOperation(const QString &operationId, QString *error = nullptr) = 0;

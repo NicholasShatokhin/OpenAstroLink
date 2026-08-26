@@ -63,9 +63,15 @@ int main(int argc,char **argv){
     QCommandLineOption noStellarium("no-stellarium","Do not start the persisted Stellarium bridge.");
     QCommandLineOption geminiPortOpt("gemini-port","Pin native Gemini EAF discovery to one serial port (for example COM4 or /dev/ttyUSB0). Omit to use the saved setting or automatic scan.","port");
     QCommandLineOption skywatcherPortOpt("skywatcher-port","Pin native Sky-Watcher discovery to one serial port.","port");
-    parser.addOption(httpOpt);parser.addOption(wsOpt);parser.addOption(noWs);parser.addOption(noAuto);parser.addOption(stellariumOpt);parser.addOption(noStellarium);parser.addOption(geminiPortOpt);parser.addOption(skywatcherPortOpt);parser.process(app);
+    QCommandLineOption astapExecutableOpt("astap-executable","Path to astap/astap_cli executable.","path");
+    QCommandLineOption astapDatabaseOpt("astap-database","Path to ASTAP star database directory/file accepted by ASTAP -d.","path");
+    QCommandLineOption astapTimeoutOpt("astap-timeout-ms","Maximum time for one ASTAP invocation.","ms");
+    parser.addOption(httpOpt);parser.addOption(wsOpt);parser.addOption(noWs);parser.addOption(noAuto);parser.addOption(stellariumOpt);parser.addOption(noStellarium);parser.addOption(geminiPortOpt);parser.addOption(skywatcherPortOpt);parser.addOption(astapExecutableOpt);parser.addOption(astapDatabaseOpt);parser.addOption(astapTimeoutOpt);parser.process(app);
     if(parser.isSet(geminiPortOpt))qputenv("OAL_GEMINI_PORT",parser.value(geminiPortOpt).toUtf8());
     if(parser.isSet(skywatcherPortOpt))qputenv("OAL_SKYWATCHER_PORT",parser.value(skywatcherPortOpt).toUtf8());
+    if(parser.isSet(astapExecutableOpt))qputenv("OAL_ASTAP_EXECUTABLE",parser.value(astapExecutableOpt).toUtf8());
+    if(parser.isSet(astapDatabaseOpt))qputenv("OAL_ASTAP_DATABASE",parser.value(astapDatabaseOpt).toUtf8());
+    if(parser.isSet(astapTimeoutOpt))qputenv("OAL_ASTAP_TIMEOUT_MS",parser.value(astapTimeoutOpt).toUtf8());
 
     oas::AppSettings settings;
     quint16 httpPort=parser.isSet(httpOpt)?parser.value(httpOpt).toUShort():settings.oalPort();

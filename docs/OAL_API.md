@@ -1,4 +1,4 @@
-# OpenAstroLink HTTP API — v0.2.10.5 reference implementation
+# OpenAstroLink HTTP API — v0.2.10.13 reference implementation
 
 The transitional envelope remains:
 
@@ -57,7 +57,8 @@ Active operations own resource locks. Current async vertical slices:
 
 - `autofocus.run` → `camera + focuser`;
 - `mount.slew` → `mount`;
-- `camera.exposure` → `camera`.
+- `camera.exposure` → `camera`;
+- `solver.adaptive` → `camera + solver`.
 
 ## Mount
 
@@ -83,7 +84,8 @@ Native mount drivers receive canonical OAL method calls; compatibility adapters 
 - `GET /api/v1/cameras/{id}/status`
 - `POST /api/v1/cameras/{id}/capture` — async 202 `camera.exposure`
 - `GET /api/v1/frames/{id}/preview`
-- `POST /api/v1/solve`
+- `POST /api/v1/solve` — synchronous solve of the last frame
+- `POST /api/v1/solve/adaptive` — async urban-resilient short-exposure capture/register/stack/solve operation
 - `POST /api/v1/autofocus/{id}/run`
 - `POST /api/v1/motion/estimate`
 
@@ -95,7 +97,7 @@ Existing guiding, polar-alignment and session endpoints remain node-local. Polar
 
 ## Pending P0 API work
 
-- async solve/park/session;
+- async park/session and closed-loop recenter orchestration;
 - idempotency keys;
 - durable operation persistence;
 - RFC 9457 Problem Details;

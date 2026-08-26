@@ -1,4 +1,4 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.5
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.13
 
 Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL or production qualification pending; 🧪 experimental; ⏳ not yet implemented.
 
@@ -71,6 +71,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Area | Status | Notes |
 |---|---|---|
 | ASTAP adapter | 🟡 | Adapter exists; real-sky qualification pending |
+| Adaptive urban solve | 🟡 | Short-exposure quality gate + background removal + star registration/stack + mount hint + retry operation implemented; real city-sky HIL pending |
 | Closed-loop GOTO/recenter | 🟡 | Groundwork exists; end-to-end HIL pending |
 | Autofocus | 🟡 | Algorithm/operation exists; real optics/backlash tuning pending |
 | Polar-axis math | ✅ | Sample/estimation API exists |

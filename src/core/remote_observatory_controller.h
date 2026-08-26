@@ -44,6 +44,7 @@ public:
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
     QString startGuideCapture(const ExposureRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
+    QString startAdaptiveSolve(const AdaptiveSolveRequest &request,QString *error=nullptr) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
     QString startAutofocus(const AutofocusRequest &request,QString *error=nullptr) override;
     bool cancelOperation(const QString &operationId,QString *error=nullptr) override;

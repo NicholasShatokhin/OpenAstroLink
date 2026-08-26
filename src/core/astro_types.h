@@ -81,6 +81,8 @@ struct CameraFrame {
     QDateTime capturedUtc;
     double exposureSec{0.0};
     int gain{0};
+    int binX{1};
+    int binY{1};
     QString source;
 };
 
@@ -96,6 +98,20 @@ struct SolveHint {
     std::optional<double> decDeg;
     std::optional<double> fovDeg;
     double searchRadiusDeg{20.0};
+};
+
+struct AdaptiveSolveRequest {
+    ExposureRequest exposure{};
+    int maxAttempts{3};
+    int stackFrames{3};
+    int finalStackFrames{5};
+    int minStarsForSolve{20};
+    double exposureGrowth{1.35};
+    double maxSingleExposureSec{3.0};
+    bool registerFrames{true};
+    bool equalizeBackground{true};
+    bool useMountHint{true};
+    SolveHint hint{};
 };
 
 struct SolveResult {

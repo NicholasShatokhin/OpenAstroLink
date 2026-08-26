@@ -2,7 +2,7 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.zwo.asi",
   "name": "OpenAstroLink native ZWO ASI camera driver",
-  "version": "0.2.10.11",
+  "version": "0.2.10.13",
   "abiVersion": 2,
   "library": "oal_driver_zwo_asi",
   "deviceClasses": [

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.11 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.13 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -73,6 +73,8 @@ set(OAS_CORE_SOURCES
     src/algorithms/pattern_plate_solver.cpp
     src/algorithms/astap_solver.cpp
     src/algorithms/astap_solver.h
+    src/algorithms/adaptive_plate_solve.cpp
+    src/algorithms/adaptive_plate_solve.h
     src/algorithms/motion_estimator.cpp
     src/algorithms/autofocus_engine.cpp
     src/algorithms/guiding_engine.cpp
@@ -434,4 +436,7 @@ if(OAS_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/drivers/gemini
         ${CMAKE_CURRENT_SOURCE_DIR}/drivers/skywatcher)
     add_test(NAME oal-native-protocol-smoke COMMAND oal-native-protocol-smoke)
+    add_executable(oal-adaptive-plate-solve-smoke tests/adaptive_plate_solve_smoke.cpp)
+    target_link_libraries(oal-adaptive-plate-solve-smoke PRIVATE oas_core)
+    add_test(NAME oal-adaptive-plate-solve-smoke COMMAND oal-adaptive-plate-solve-smoke)
 endif()

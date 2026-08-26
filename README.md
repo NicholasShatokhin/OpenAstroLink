@@ -1,6 +1,9 @@
 # OpenAstroSuite / OpenAstroLink
 
-**Current release: v0.2.10.11 — Gemini HIL + graceful node shutdown**
+
+**0.2.10.13 build fix:** restores MSVC/Qt 6.10 compilation of the urban adaptive solve changes by including OpenCV imgproc declarations and constructing mutable `QJsonObject` operation results before assigning them to `QJsonValue`.
+
+**Current release: v0.2.10.13 — urban-resilient adaptive plate solving**
 
 English is the canonical project language. Ukrainian mirrors are provided in `README_UA.md` and `docs/uk/`.
 
@@ -466,3 +469,12 @@ OpenAstroLink node shutdown complete
 ```
 
 Windows HIL status: native Gemini EAF discovery/connection, direct focuser motion and autofocus-driven motion have now been confirmed on real hardware. Autofocus convergence/repeatability on a real optical target remains a separate validation item.
+
+
+## v0.2.10.13 — urban-resilient adaptive plate solving
+
+For light-polluted sites and mounts that cannot support a single long solver exposure, the node now provides an adaptive solve operation instead of relying on `capture once -> ASTAP once`. The default policy starts with one short exposure, then escalates to registered stacks of short exposures. Large-scale sky gradients are removed before solving, solver-frame star count is measured before expensive retries, and the last attempt always invokes the selected solver even if the local quality gate is pessimistic.
+
+The GUI exposes **Adaptive urban capture + solve**. Its defaults are 2x2 solver binning, three registered frames for the middle attempt, five for the final attempt, a 3 s maximum single-frame exposure, and a 20-star local quality target. The base exposure and gain come from the normal Capture controls. When a mount is connected, its current RA/Dec is preferred as the ASTAP hint and the search radius expands 5° -> 10° -> configured maximum across retries.
+
+REST clients can start the same node-local operation with `POST /api/v1/solve/adaptive`. The operation returns per-attempt diagnostics (`detectedStars`, background/noise statistics, registered frame count, effective stacked exposure, search radius and solver message) plus the `solverFrameId` used by ASTAP. The solver frame remains available through the normal frame preview endpoint for diagnosis.

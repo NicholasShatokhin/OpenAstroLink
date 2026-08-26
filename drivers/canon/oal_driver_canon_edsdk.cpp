@@ -178,7 +178,7 @@ bool downloadOriginalFile(EdsDirectoryItemRef item, const EdsDirectoryItemInfo &
     return true;
 }
 
-const char *manifest(void*){return copyString(R"json({"driverId":"oal.canon","name":"OpenAstroLink native Canon EOS driver (EDSDK)","version":"0.2.10.11","abiVersion":2,"threadModel":"per-device-serial","transport":"Canon EDSDK"})json");}
+const char *manifest(void*){return copyString(R"json({"driverId":"oal.canon","name":"OpenAstroLink native Canon EOS driver (EDSDK)","version":"0.2.10.13","abiVersion":2,"threadModel":"per-device-serial","transport":"Canon EDSDK"})json");}
 bool start(void*,const char*cfg){
     if(EdsInitializeSDK()!=EDS_ERR_OK) return false;
     state.sdkInitialized=true;
@@ -248,6 +248,6 @@ const char *invoke(void*,const char*id,const char*method,const char*req,const Oa
 }
 bool cancel(void*,const char*id,const char*){std::lock_guard<std::mutex>lk(state.mutex);auto it=state.cameras.find(id?id:"");if(it==state.cameras.end())return false;it->second->abortRequested=true;if(it->second->camera)EdsSendCommand(it->second->camera,kEdsCameraCommand_BulbEnd,0);it->second->eventCv.notify_all();return true;}
 void releaseString(void*,const char*p){if(p)host.deallocate(host.hostContext,const_cast<char*>(p));}
-OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,"oal.canon","OpenAstroLink native Canon EOS driver (EDSDK)","0.2.10.11",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,"oal.canon","OpenAstroLink native Canon EOS driver (EDSDK)","0.2.10.13",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 }
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2*h){if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||!h->allocate||!h->deallocate)return nullptr;host=*h;return &api;}

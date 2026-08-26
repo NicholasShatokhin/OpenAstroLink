@@ -1,4 +1,4 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.11
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.13
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
@@ -7,7 +7,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
 - Protocol / native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.11-graceful-node-shutdown`
+- Version: `0.2.10.13-urban-adaptive-plate-solve`
 - Language: C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -40,11 +40,19 @@ INDI, ASCOM Alpaca, LX200, OpenCV/UVC and OAL remote-device adapters remain avai
 - Local/remote GUI with node-owned hardware.
 - Per-device disconnect and state snapshot/reconnect.
 - Operation manager with queue/run/success/fail/cancel, progress and resource locks.
-- Async mount slew, main/guide exposure and autofocus.
+- Async mount slew, main/guide exposure, autofocus and urban-resilient adaptive plate solving.
 - Main + guide camera roles and optical profiles.
 - Native OAL ABI-v2 registry/capabilities/events/cancellation/frame publication.
 - Stellarium mount position/GOTO TCP bridge.
 - Cross-platform presets/scripts for Windows/Linux/RPi.
+
+## v0.2.10.13 adaptive urban plate solving
+
+- Node-owned `solver.adaptive` operation captures short exposures, evaluates solver-frame quality, registers drift between frames, stacks accepted frames, removes large-scale sky gradients and retries the selected plate solver.
+- Camera-side binning is carried in `CameraFrame`; ASTAP FOV derivation is now binning-aware.
+- When available, current mount RA/Dec is used as the default solve hint and the search radius expands across attempts.
+- REST endpoint: `POST /api/v1/solve/adaptive`; remote GUI exposes **Adaptive urban capture + solve**.
+- The final prepared solver frame and per-attempt diagnostics are retained for troubleshooting.
 
 ## Current major gaps
 

@@ -40,6 +40,10 @@
 
 namespace oas {
 namespace {
+QJsonObject solveQualityJson(const SolveFrameQuality &q){
+    return {{"detectedStars",q.detectedStars},{"background",q.background},{"noiseSigma",q.noiseSigma},
+            {"p99",q.p99},{"saturationFraction",q.saturationFraction},{"medianHfrPx",q.medianHfrPx}};
+}
 QJsonObject nativeDescriptor(const std::shared_ptr<OalDriverPluginLoader> &loader,const QString &backend,const QString &type,QString *error){
     QString driverId,deviceId;if(!parseNativeBackendKey(backend,driverId,deviceId)){if(error)*error="Invalid native OAL backend key";return{};}
     if(!loader){if(error)*error="Native OAL driver registry unavailable";return{};}
@@ -214,6 +218,7 @@ QStringList ApplicationController::solverBackends()const{
     return x;
 }
 bool ApplicationController::selectSolver(const QString&name,QString*e){
+    if(!ensureResourcesAvailable({"solver"},e))return false;
     if(name=="catalog-pattern")solver_=catalogSolver_;
     else if(name=="astap"){
         QString why;
@@ -224,8 +229,8 @@ bool ApplicationController::selectSolver(const QString&name,QString*e){
     else{if(e)*e="Unknown solver backend";return false;}
     emit logMessage("Selected solver: "+solver_->name());return true;
 }
-bool ApplicationController::loadCatalog(const QString&p,QString*e){bool ok=catalog_->loadCsv(p,e);if(ok)emit logMessage(QString("Loaded %1 catalog stars").arg(catalog_->stars().size()));return ok;}
-bool ApplicationController::loadNeuralModel(const QString&p,QString*e){bool ok=neuralSolver_->loadModel(p,e);if(ok)emit logMessage("Neural model loaded: "+p);return ok;}
+bool ApplicationController::loadCatalog(const QString&p,QString*e){if(!ensureResourcesAvailable({"solver"},e))return false;bool ok=catalog_->loadCsv(p,e);if(ok)emit logMessage(QString("Loaded %1 catalog stars").arg(catalog_->stars().size()));return ok;}
+bool ApplicationController::loadNeuralModel(const QString&p,QString*e){if(!ensureResourcesAvailable({"solver"},e))return false;bool ok=neuralSolver_->loadModel(p,e);if(ok)emit logMessage("Neural model loaded: "+p);return ok;}
 bool ApplicationController::connectCamera(const QString&b,const QString&e,QString*err){
     if(!ensureResourcesAvailable({"camera"},err))return false;
     QString note;auto d=makeCameraDevice(driverLoader_,b,e,err,&note);if(!d)return false;
@@ -293,7 +298,7 @@ QString ApplicationController::startCapture(const ExposureRequest&r,QString*erro
         if(!cam->capture(r,frame,&err)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","CAPTURE_FAILED"},{"message",err}};return out;}
         if(ctx.isCancellationRequested()){out.cancelled=true;return out;}ctx.reportProgress(0.90,"readout",{{"frameId",frame.id}});
         QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame);},Qt::BlockingQueuedConnection);
-        out.success=true;out.result=QJsonObject{{"frameId",frame.id},{"capturedUtc",frame.capturedUtc.toString(Qt::ISODateWithMs)},{"width",frame.image.cols},{"height",frame.image.rows},{"exposureSec",frame.exposureSec},{"gain",frame.gain},{"previewResource",QString("/api/v1/frames/%1/preview").arg(frame.id)}};ctx.reportProgress(1.0,"completed");return out;
+        out.success=true;out.result=QJsonObject{{"frameId",frame.id},{"capturedUtc",frame.capturedUtc.toString(Qt::ISODateWithMs)},{"width",frame.image.cols},{"height",frame.image.rows},{"exposureSec",frame.exposureSec},{"gain",frame.gain},{"binX",frame.binX},{"binY",frame.binY},{"previewResource",QString("/api/v1/frames/%1/preview").arg(frame.id)}};ctx.reportProgress(1.0,"completed");return out;
     });
     emit logMessage(QString("Exposure operation accepted: %1 (%2 s)").arg(id).arg(r.exposureSec,0,'f',4));return id;
 }
@@ -310,6 +315,50 @@ QString ApplicationController::startGuideCapture(const ExposureRequest&r,QString
     emit logMessage(QString("Guide exposure operation accepted: %1 (%2 s)").arg(id).arg(r.exposureSec,0,'f',4));return id;
 }
 SolveResult ApplicationController::solveLast(const SolveHint&h){if(lastFrame_.image.empty()){lastSolve_.message="No captured frame";lastSolve_.success=false;}else lastSolve_=solver_->solve(lastFrame_,profile_,h);auto j=solveToJson(lastSolve_);QJsonArray stars;for(const auto&s:lastSolve_.imageStars)stars.append(QJsonObject{{"x",s.positionPx.x},{"y",s.positionPx.y},{"flux",s.flux},{"peak",s.peak},{"hfrPx",s.hfrPx}});j["imageStars"]=stars;emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();return lastSolve_;}
+QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&request,QString*error){
+    if(!camera_){if(error)*error="No camera connected";return{};}
+    if(!solver_){if(error)*error="No plate solver selected";return{};}
+    AdaptiveSolveRequest r=request;
+    r.exposure.exposureSec=std::clamp(r.exposure.exposureSec,0.001,std::max(0.001,r.maxSingleExposureSec));
+    r.exposure.binX=std::max(1,r.exposure.binX);r.exposure.binY=std::max(1,r.exposure.binY);
+    r.maxAttempts=std::clamp(r.maxAttempts,1,6);r.stackFrames=std::clamp(r.stackFrames,2,9);r.finalStackFrames=std::clamp(r.finalStackFrames,r.stackFrames,15);
+    r.minStarsForSolve=std::clamp(r.minStarsForSolve,4,200);r.exposureGrowth=std::clamp(r.exposureGrowth,1.0,3.0);r.maxSingleExposureSec=std::max(r.exposure.exposureSec,r.maxSingleExposureSec);
+    if(r.useMountHint&&mount_&&(!r.hint.raDeg||!r.hint.decDeg)){MountStatus ms;if(mount_->status(ms,nullptr)){r.hint.raDeg=ms.coordinate.raDeg;r.hint.decDeg=ms.coordinate.decDeg;emit logMessage(QString("Adaptive solve using mount hint RA=%1 DEC=%2").arg(ms.coordinate.raDeg,0,'f',6).arg(ms.coordinate.decDeg,0,'f',6));}}
+    auto cam=camera_;auto solver=solver_;const TelescopeProfile profile=profile_;
+    const QString id=operations_.submit("solver.adaptive",{"camera","solver"},true,[this,cam,solver,profile,r](OperationContext&ctx){
+        OperationOutcome out;ThreadMarshalledCamera cameraProxy(this,cam);QJsonArray attempts;AdaptivePreparedFrame lastPrepared;SolveResult lastResult;
+        const int totalFramesBudget=1+std::max(0,r.maxAttempts-2)*r.stackFrames+(r.maxAttempts>1?r.finalStackFrames:0);int capturedTotal=0;
+        for(int attempt=0;attempt<r.maxAttempts;++attempt){
+            if(ctx.isCancellationRequested()){out.cancelled=true;return out;}
+            const int frameCount=attempt==0?1:(attempt==r.maxAttempts-1?r.finalStackFrames:r.stackFrames);
+            ExposureRequest exposure=r.exposure;
+            const int growthIndex=std::max(0,attempt-1);
+            exposure.exposureSec=std::min(r.maxSingleExposureSec,r.exposure.exposureSec*std::pow(r.exposureGrowth,growthIndex));
+            std::vector<CameraFrame> frames;frames.reserve(frameCount);QString captureError;
+            for(int i=0;i<frameCount;++i){
+                if(ctx.isCancellationRequested()){out.cancelled=true;return out;}
+                const double progress=0.04+0.66*double(capturedTotal)/std::max(1,totalFramesBudget);
+                ctx.reportProgress(progress,"solve.capture",{{"attempt",attempt+1},{"attempts",r.maxAttempts},{"frame",i+1},{"frames",frameCount},{"exposureSec",exposure.exposureSec},{"gain",exposure.gain},{"binX",exposure.binX},{"binY",exposure.binY}});
+                CameraFrame f;if(!cameraProxy.capture(exposure,f,&captureError)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","ADAPTIVE_SOLVE_CAPTURE_FAILED"},{"message",captureError},{"attempt",attempt+1}};return out;}frames.push_back(std::move(f));++capturedTotal;
+            }
+            QString prepWarning;lastPrepared=adaptiveSolvePreprocessor_.prepare(frames,r.registerFrames,r.equalizeBackground,&prepWarning);
+            if(lastPrepared.frame.image.empty()){out.problem={{"code","ADAPTIVE_SOLVE_PREPROCESS_FAILED"},{"message",prepWarning.isEmpty()?"Could not prepare solver frame":prepWarning}};return out;}
+            QJsonObject diag{{"attempt",attempt+1},{"capturedFrames",frameCount},{"registeredFrames",lastPrepared.registeredFrames},{"singleExposureSec",exposure.exposureSec},{"effectiveExposureSec",lastPrepared.frame.exposureSec},{"quality",solveQualityJson(lastPrepared.quality)}};if(!prepWarning.isEmpty())diag["warning"]=prepWarning;
+            const bool finalAttempt=attempt==r.maxAttempts-1;const bool enoughStars=lastPrepared.quality.detectedStars>=r.minStarsForSolve;
+            if(!enoughStars&&!finalAttempt){diag["solverInvoked"]=false;diag["decision"]=QString("Only %1 stars detected; collect more short frames").arg(lastPrepared.quality.detectedStars);attempts.append(diag);ctx.reportProgress(0.72,"solve.quality",diag);continue;}
+            SolveHint hint=r.hint;if(hint.raDeg&&hint.decDeg){const double maxRadius=std::clamp(r.hint.searchRadiusDeg,0.1,180.0);hint.searchRadiusDeg=std::min(maxRadius,std::min(180.0,5.0*std::pow(2.0,attempt)));}
+            ctx.reportProgress(0.76+0.18*double(attempt)/std::max(1,r.maxAttempts),"solve.astap",{{"attempt",attempt+1},{"detectedStars",lastPrepared.quality.detectedStars},{"searchRadiusDeg",hint.searchRadiusDeg}});
+            lastResult=solver->solve(lastPrepared.frame,profile,hint);diag["solverInvoked"]=true;diag["solveSuccess"]=lastResult.success;diag["solverMessage"]=lastResult.message;diag["searchRadiusDeg"]=hint.searchRadiusDeg;attempts.append(diag);
+            if(lastResult.success){
+                QMetaObject::invokeMethod(this,[this,frame=lastPrepared.frame,result=lastResult](){commitCapturedFrame(frame);lastSolve_=result;auto j=solveToJson(lastSolve_);emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();},Qt::BlockingQueuedConnection);
+                QJsonObject resultJson=solveToJson(lastResult);resultJson["solverFrameId"]=lastPrepared.frame.id;resultJson["attempts"]=attempts;resultJson["quality"]=solveQualityJson(lastPrepared.quality);resultJson["registeredFrames"]=lastPrepared.registeredFrames;resultJson["effectiveExposureSec"]=lastPrepared.frame.exposureSec;out.success=true;out.result=resultJson;ctx.reportProgress(1.0,"completed",{{"attempt",attempt+1},{"solverFrameId",lastPrepared.frame.id}});return out;
+            }
+        }
+        if(!lastPrepared.frame.image.empty())QMetaObject::invokeMethod(this,[this,frame=lastPrepared.frame,result=lastResult](){commitCapturedFrame(frame);lastSolve_=result;auto j=solveToJson(lastSolve_);emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();},Qt::BlockingQueuedConnection);
+        QJsonObject resultJson=solveToJson(lastResult);resultJson["attempts"]=attempts;resultJson["quality"]=solveQualityJson(lastPrepared.quality);resultJson["solverFrameId"]=lastPrepared.frame.id;out.result=resultJson;out.problem={{"code","ADAPTIVE_SOLVE_FAILED"},{"message",lastResult.message.isEmpty()?"Adaptive plate solve exhausted all attempts":lastResult.message},{"attempts",attempts}};return out;
+    });
+    emit logMessage(QString("Adaptive plate-solve operation accepted: %1 — base %2 s, %3x%4 bin, max %5 s").arg(id).arg(r.exposure.exposureSec,0,'f',3).arg(r.exposure.binX).arg(r.exposure.binY).arg(r.maxSingleExposureSec,0,'f',3));return id;
+}
 AutofocusResult ApplicationController::autofocus(const AutofocusRequest&r){AutofocusResult x;QString busy;if(!ensureResourcesAvailable({"camera","focuser"},&busy)){x.message=busy;}else if(!camera_||!focuser_){x.message="Camera and focuser must be connected";}else x=autofocusEngine_.run(*camera_,*focuser_,r,[this](const FocusSample&s){QJsonObject j{{"position",s.position},{"score",s.score},{"spread",s.spread}};emit autofocusProgress(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusProgress",j);});auto j=autofocusToJson(x);emit autofocusCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusResult",j);emit logMessage(x.message);emitState();return x;}
 QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*error){
     if(!camera_||!focuser_){if(error)*error="Camera and focuser must be connected";return{};}
@@ -331,10 +380,12 @@ QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*e
     emit logMessage("Autofocus operation accepted: "+id);return id;
 }
 bool ApplicationController::cancelOperation(const QString&id,QString*error){
-    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";
+    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningAdaptiveSolve=kind=="solver.adaptive"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";
     if(!operations_.cancel(id,error))return false;
     if(runningExposure&&camera_&&camera_->canAbortExposure()){QString abortError;if(!camera_->abortExposure(&abortError)&&!abortError.isEmpty())emit logMessage("Exposure abort warning: "+abortError);}
     else if(runningExposure&&camera_)emit logMessage("Exposure cancellation requested; this camera backend cannot interrupt an in-progress capture, so the frame will be discarded when readout returns");
+    if(runningAdaptiveSolve&&camera_&&camera_->canAbortExposure()){QString abortError;if(!camera_->abortExposure(&abortError)&&!abortError.isEmpty())emit logMessage("Adaptive solve exposure abort warning: "+abortError);}
+    else if(runningAdaptiveSolve&&camera_)emit logMessage("Adaptive solve cancellation requested; current short exposure cannot be interrupted by this backend");
     if(runningGuideExposure&&guideCamera_&&guideCamera_->canAbortExposure())guideCamera_->abortExposure(nullptr);
     return true;
 }
@@ -403,7 +454,7 @@ void ApplicationController::refreshState(){emitState();}
 QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const QString&role,const DeviceBinding&binding){if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"role",role},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")}});}};add(camera_,"camera","main",settings_.cameraBinding());add(guideCamera_,"camera","guide",settings_.guideCameraBinding());add(mount_,"mount","main",settings_.mountBinding());add(focuser_,"focuser","main",settings_.focuserBinding());return a;}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();j["canAbortExposure"]=camera_->canAbortExposure();}return j;}
 bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
-QJsonObject ApplicationController::stateJson()const{QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide}};FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
+QJsonObject ApplicationController::stateJson()const{QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide}};FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
 QJsonObject ApplicationController::nodeInfoJson()const{
     return {{"nodeId",QCoreApplication::applicationName()+"@"+QSysInfo::machineHostName()},
             {"version",QString::fromLatin1(OAS_VERSION)},

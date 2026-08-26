@@ -11,7 +11,7 @@ public: explicit MainWindow(ObservatoryController *controller,QWidget *parent=nu
 private:
     QWidget *buildDevicesTab(); QWidget *buildCaptureTab(); QWidget *buildMountTab(); QWidget *buildFocusTab(); QWidget *buildPolarTab(); QWidget *buildSchedulerTab(); QWidget *buildOperationsTab(); QWidget *buildServerTab(); QWidget *buildProfileTab();
     void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap();
-    void refreshMountStatus(); void refreshFocuserStatus(); void setAutofocusBusy(bool busy); void setCaptureBusy(bool busy);
+    void refreshMountStatus(); void refreshFocuserStatus(); void setAutofocusBusy(bool busy); void setCaptureBusy(bool busy); void setAdaptiveSolveBusy(bool busy);
     void updateMountStatusFromState(const QJsonObject &state); void updateFocuserStatusFromState(const QJsonObject &state); void updateDeviceStatusFromState(const QJsonObject &state); void updateOperation(const QJsonObject &operation);
     ObservatoryController *c_{};
     QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QTextEdit *log_{};
@@ -22,7 +22,8 @@ private:
     QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{}; QLabel *focuserDeviceStatus_{};
     QComboBox *nativeSerialDriver_{}; QComboBox *nativeSerialPort_{};
     QDoubleSpinBox *exposure_{}; QComboBox *solverBackend_{}; QLineEdit *catalogPath_{}; QLineEdit *modelPath_{}; QSpinBox *gain_{}; QDoubleSpinBox *hintRa_{}; QDoubleSpinBox *hintDec_{}; QDoubleSpinBox *hintRadius_{};
-    QPushButton *captureButton_{}; QPushButton *captureSolveButton_{}; QPushButton *solveButton_{}; QPushButton *motionButton_{}; QTabWidget *tabs_{}; bool captureBusy_{false}; bool captureSolveRequested_{false}; QString captureOperationId_; QString pendingSolveFrameId_;
+    QSpinBox *solveBin_{}; QSpinBox *solveStackFrames_{}; QSpinBox *solveMinStars_{}; QDoubleSpinBox *solveBaseExposure_{}; QDoubleSpinBox *solveMaxExposure_{};
+    QPushButton *captureButton_{}; QPushButton *captureSolveButton_{}; QPushButton *solveButton_{}; QPushButton *adaptiveSolveButton_{}; QPushButton *motionButton_{}; QTabWidget *tabs_{}; bool captureBusy_{false}; bool captureSolveRequested_{false}; QString captureOperationId_; QString pendingSolveFrameId_; bool adaptiveSolveBusy_{false}; QString adaptiveSolveOperationId_;
     QDoubleSpinBox *mountRa_{}; QDoubleSpinBox *mountDec_{}; QLabel *mountStatus_{}; QCheckBox *mountTracking_{}; QCheckBox *mountParked_{};
     QSpinBox *focusPosition_{}; QComboBox *focusMode_{}; QSpinBox *focusRange_{}; QSpinBox *coarseStep_{}; QSpinBox *fineStep_{}; QSpinBox *focusFrames_{}; QLabel *focuserStatus_{};
     QPushButton *focusMoveButton_{}; QPushButton *focusHaltButton_{}; QPushButton *autofocusButton_{}; bool focusTargetDirty_{false}; bool focusTargetInitialized_{false}; bool autofocusBusy_{false}; QString autofocusOperationId_;

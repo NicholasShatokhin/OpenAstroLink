@@ -6,6 +6,8 @@
 #include <QJsonArray>
 #include <QUrl>
 #include <opencv2/core.hpp>
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace oas {
@@ -113,6 +115,27 @@ bool NativeOalCamera::capture(const ExposureRequest &r, CameraFrame &frame, QStr
         : QDateTime::currentDateTimeUtc();
     frame.exposureSec = native.exposureSec > 0.0 ? native.exposureSec : r.exposureSec;
     frame.gain = int(native.gain);
+    // ABI v2 does not yet return explicit actual-bin metadata. For full-frame
+    // captures infer it from returned geometry so a driver that ignores a
+    // requested bin (for example a DSLR) cannot silently corrupt plate scale.
+    int actualBinX = 1;
+    int actualBinY = 1;
+    const int requestedBinX = std::max(1, r.binX);
+    const int requestedBinY = std::max(1, r.binY);
+    const QSize fullSensor = sensorSize();
+    if (r.roi.width <= 0 && r.roi.height <= 0 && fullSensor.width() > 0 && fullSensor.height() > 0) {
+        const int expectedW = std::max(1, fullSensor.width() / requestedBinX);
+        const int expectedH = std::max(1, fullSensor.height() / requestedBinY);
+        if (std::abs(w - expectedW) <= 1) actualBinX = requestedBinX;
+        if (std::abs(h - expectedH) <= 1) actualBinY = requestedBinY;
+    } else {
+        // ROI semantics are driver-defined in ABI v2; preserve the request
+        // until the ABI exposes actual frame binning explicitly.
+        actualBinX = requestedBinX;
+        actualBinY = requestedBinY;
+    }
+    frame.binX = actualBinX;
+    frame.binY = actualBinY;
     frame.source = deviceId_;
     return true;
 }

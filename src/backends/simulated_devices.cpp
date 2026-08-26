@@ -45,11 +45,21 @@ bool SimulatedCamera::capture(const ExposureRequest &request, CameraFrame &frame
     cv::Mat noise(img.size(), CV_16SC1);
     cv::randn(noise, 0, 90);
     cv::add(img, noise, img, cv::noArray(), CV_16UC1);
+    const int binX = std::max(1, request.binX);
+    const int binY = std::max(1, request.binY);
+    if (binX > 1 || binY > 1) {
+        cv::Mat binned;
+        cv::resize(img, binned, cv::Size(std::max(1, img.cols / binX), std::max(1, img.rows / binY)),
+                   0.0, 0.0, cv::INTER_AREA);
+        img = std::move(binned);
+    }
     frame.id = QString("sim-%1-%2").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddTHHmmsszzz")).arg(frameNo_.fetch_add(1) + 1);
     frame.image = img;
     frame.capturedUtc = QDateTime::currentDateTimeUtc();
     frame.exposureSec = request.exposureSec;
     frame.gain = request.gain;
+    frame.binX = binX;
+    frame.binY = binY;
     frame.source = id();
     return true;
 }

@@ -1,4 +1,4 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.5
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.13
 
 Позначки: ✅ реалізовано; 🟡 реалізовано/частково реалізовано, але потрібен HIL або production qualification; 🧪 experimental; ⏳ ще не реалізовано.
 
@@ -55,6 +55,7 @@
 | Durable FITS/RAW store | ⏳ |
 | Planetary SER pipeline | ⏳ |
 | ASTAP | 🟡 adapter є, real-sky HIL pending |
+| Adaptive urban solve | 🟡 короткі експозиції + оцінка якості + background removal + registration/stack + mount hint + retry реалізовані; потрібен HIL у міському небі |
 | Closed-loop GOTO | 🟡 groundwork, HIL pending |
 | Autofocus | 🟡 algorithm є, real optics tuning pending |
 | Polar math | ✅ |

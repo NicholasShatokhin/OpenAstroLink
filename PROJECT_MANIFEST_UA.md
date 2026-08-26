@@ -1,4 +1,4 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.11
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.13
 
 Канонічна документація — англійська. `PROJECT_MANIFEST_UA.md` є українським дзеркалом.
 
@@ -7,7 +7,7 @@
 - Hardware diagnostics: `oal-hardware-probe`
 - Core: `oas_core`
 - Protocol/native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.11-graceful-node-shutdown`
+- Version: `0.2.10.13-urban-adaptive-plate-solve`
 - C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -54,3 +54,12 @@ Handoff: `docs/NEW_CHAT_HANDOFF.md` і `docs/uk/NEW_CHAT_HANDOFF.md`.
 - Node shutdown: `Ctrl+C` тепер проходить через main-thread graceful shutdown до руйнування Qt event dispatcher; другий `Ctrl+C` залишається force-terminate escape hatch.
 
 - Статус HIL: Gemini EAF пройшов базову Windows-перевірку discovery/connection/motion; інші physical native drivers ще потребують повної HIL-кваліфікації.
+
+
+## v0.2.10.13 — адаптивний plate solving для міського неба
+
+- `solver.adaptive` виконується на node та захоплює серію коротких експозицій замість одного довгого кадру.
+- Кадри оцінюються до запуску ASTAP, вирівнюються за зорями, складаються та очищаються від великомасштабного градієнта засвітки.
+- Binning тепер зберігається в `CameraFrame`, а ASTAP отримує правильне поле зору для 2x2/іншого binning.
+- За наявності реального монтування поточні RA/Dec автоматично використовуються як hint; radius пошуку адаптивно розширюється.
+- Додано `POST /api/v1/solve/adaptive` та кнопку **Adaptive urban capture + solve** у GUI.

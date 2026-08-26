@@ -8,6 +8,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtGlobal>
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <utility>
@@ -157,8 +158,11 @@ SolveResult AstapSolver::solve(const CameraFrame &frame, const TelescopeProfile 
     const QString outputBase = temp.filePath("solution");
     QStringList args{"-f", imagePath, "-o", outputBase, "-z", "0"};
 
+    // A camera-side bin changes the angular size of each returned pixel.
+    // Without this correction a 2x2 solver exposure reports roughly half the
+    // true FOV, which makes hinted ASTAP searches unnecessarily fragile.
     const double derivedFov = (frame.image.rows > 0 && profile.focalLengthMm > 0.0)
-                                  ? frame.image.rows * profile.arcsecPerPixel() / 3600.0
+                                  ? frame.image.rows * profile.arcsecPerPixel() * std::max(1, frame.binY) / 3600.0
                                   : 0.0;
     const double fovDeg = hint.fovDeg.value_or(derivedFov);
     if (fovDeg > 0.0) args << "-fov" << QString::number(fovDeg, 'g', 12);

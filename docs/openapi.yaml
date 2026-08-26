@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.5
+  version: 0.2.10.13
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -193,6 +193,33 @@ paths:
                 hintFovDeg: { type: number, exclusiveMinimum: 0 }
                 searchRadiusDeg: { type: number, exclusiveMinimum: 0 }
       responses: { '200': { $ref: '#/components/responses/Success' } }
+  /solve/adaptive:
+    post:
+      summary: Start node-local adaptive short-exposure plate solve
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                baseExposureSec: { type: number, exclusiveMinimum: 0, default: 1.5 }
+                gain: { type: integer, default: 0 }
+                binX: { type: integer, minimum: 1, default: 2 }
+                binY: { type: integer, minimum: 1, default: 2 }
+                maxAttempts: { type: integer, minimum: 1, maximum: 6, default: 3 }
+                stackFrames: { type: integer, minimum: 2, maximum: 9, default: 3 }
+                finalStackFrames: { type: integer, minimum: 2, maximum: 15, default: 5 }
+                minStarsForSolve: { type: integer, minimum: 4, default: 20 }
+                exposureGrowth: { type: number, minimum: 1, default: 1.35 }
+                maxSingleExposureSec: { type: number, exclusiveMinimum: 0, default: 3.0 }
+                registerFrames: { type: boolean, default: true }
+                equalizeBackground: { type: boolean, default: true }
+                useMountHint: { type: boolean, default: true }
+                hintRaDeg: { type: number, minimum: 0, maximum: 360 }
+                hintDecDeg: { type: number, minimum: -90, maximum: 90 }
+                hintFovDeg: { type: number, exclusiveMinimum: 0 }
+                searchRadiusDeg: { type: number, exclusiveMinimum: 0, default: 20 }
+      responses: { '202': { $ref: '#/components/responses/Success' } }
   /autofocus/{id}/run:
     post:
       parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
