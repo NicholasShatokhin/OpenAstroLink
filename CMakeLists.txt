@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.13 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.16 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,6 +23,8 @@ option(OAS_ENABLE_NATIVE_ZWO_EAF "Build native OAL ZWO EAF focuser driver (requi
 option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" ON)
 option(OAS_ENABLE_NATIVE_GEMINI "Build native OAL Gemini EAF driver" ON)
 option(OAS_ENABLE_NATIVE_SKYWATCHER "Build native OAL Sky-Watcher/SynScan mount driver" ON)
+option(OAS_ENABLE_NATIVE_EQDRIVE "Build native OAL EQDrive ASTEP mount driver" ON)
+option(OAS_ENABLE_ASCOM_CLASSIC "Build Windows Classic ASCOM compatibility helper/backend" ON)
 option(OAS_BUILD_TESTS "Build lightweight tests" OFF)
 option(OAS_BUILD_NATIVE_REFERENCE_DRIVERS "Build ABI-v2 native OAL reference simulator" ON)
 option(OAS_BUILD_EXAMPLE_DRIVER "Build legacy ABI-v1 example plug-in" ON)
@@ -64,6 +66,12 @@ set(OAS_CORE_SOURCES
     src/backends/serial_lx200_mount.cpp
     src/backends/http_json_client.cpp
     src/backends/alpaca_devices.cpp
+    src/backends/ascom_classic_mount.cpp
+    src/backends/ascom_classic_mount.h
+    src/backends/synscan_network_mount.cpp
+    src/backends/synscan_network_mount.h
+    src/backends/synscan_app_mount.cpp
+    src/backends/synscan_app_mount.h
     src/backends/gemini_eaf_focuser.cpp
     src/backends/gemini_eaf_focuser.h
     src/backends/oal_client_devices.cpp
@@ -125,12 +133,14 @@ add_library(oas_core STATIC ${OAS_CORE_SOURCES})
 target_include_directories(oas_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/drivers/skywatcher
     ${OpenCV_INCLUDE_DIRS}
 )
 target_compile_definitions(oas_core PUBLIC
     OAS_VERSION="${PROJECT_VERSION}"
     $<$<BOOL:${OAS_ENABLE_GPHOTO2}>:OAS_HAVE_GPHOTO2>
     $<$<BOOL:${OAS_ENABLE_INDI}>:OAS_HAVE_INDI>
+    $<$<AND:$<BOOL:${WIN32}>,$<BOOL:${OAS_ENABLE_ASCOM_CLASSIC}>>:OAS_HAVE_ASCOM_CLASSIC>
 )
 target_link_libraries(oas_core PUBLIC
     Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort Qt6::WebSockets Qt6::HttpServer Qt6::Concurrent
@@ -416,6 +426,32 @@ if(OAS_ENABLE_NATIVE_SKYWATCHER)
     install(FILES drivers/skywatcher/oal_driver_skywatcher.manifest.json DESTINATION lib/openastrolink/drivers)
 endif()
 
+if(OAS_ENABLE_NATIVE_EQDRIVE)
+    add_library(oal_driver_eqdrive SHARED
+        drivers/eqdrive/oal_driver_eqdrive.cpp
+        drivers/eqdrive/astep_protocol.h)
+    target_include_directories(oal_driver_eqdrive PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/drivers/eqdrive)
+    target_link_libraries(oal_driver_eqdrive PRIVATE Qt6::Core Qt6::SerialPort)
+    oal_set_driver_output(oal_driver_eqdrive)
+    configure_file(drivers/eqdrive/oal_driver_eqdrive.manifest.json
+                   ${OAL_DRIVER_BUILD_DIR}/oal_driver_eqdrive.manifest.json COPYONLY)
+    install(TARGETS oal_driver_eqdrive RUNTIME DESTINATION lib/openastrolink/drivers LIBRARY DESTINATION lib/openastrolink/drivers ARCHIVE DESTINATION lib/openastrolink/drivers)
+    install(FILES drivers/eqdrive/oal_driver_eqdrive.manifest.json DESTINATION lib/openastrolink/drivers)
+endif()
+
+if(WIN32 AND OAS_ENABLE_ASCOM_CLASSIC)
+    add_executable(oas-ascom-host tools/ascom_host/main.cpp)
+    target_link_libraries(oas-ascom-host PRIVATE Qt6::Core ole32 oleaut32)
+    set_target_properties(oas-ascom-host PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    if(TARGET OpenAstroSuite)
+        add_dependencies(OpenAstroSuite oas-ascom-host)
+    endif()
+    if(TARGET openastrolink-node)
+        add_dependencies(openastrolink-node oas-ascom-host)
+    endif()
+    install(TARGETS oas-ascom-host RUNTIME DESTINATION bin)
+endif()
+
 # Legacy ABI-v1 example retained only as a migration/conformance fixture.
 if(OAS_BUILD_EXAMPLE_DRIVER)
     add_library(oal_sim_driver SHARED examples/oal_sim_driver.cpp)
@@ -434,7 +470,9 @@ if(OAS_BUILD_TESTS)
     add_executable(oal-native-protocol-smoke tests/native_protocol_smoke.cpp)
     target_include_directories(oal-native-protocol-smoke PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/drivers/gemini
-        ${CMAKE_CURRENT_SOURCE_DIR}/drivers/skywatcher)
+        ${CMAKE_CURRENT_SOURCE_DIR}/drivers/skywatcher
+        ${CMAKE_CURRENT_SOURCE_DIR}/drivers/eqdrive)
+    target_link_libraries(oal-native-protocol-smoke PRIVATE Qt6::Core)
     add_test(NAME oal-native-protocol-smoke COMMAND oal-native-protocol-smoke)
     add_executable(oal-adaptive-plate-solve-smoke tests/adaptive_plate_solve_smoke.cpp)
     target_link_libraries(oal-adaptive-plate-solve-smoke PRIVATE oas_core)

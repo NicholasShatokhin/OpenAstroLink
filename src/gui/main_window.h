@@ -1,4 +1,5 @@
 #pragma once
+class QTimer;
 #include "core/observatory_controller.h"
 #include <QMainWindow>
 
@@ -26,7 +27,7 @@ private:
     QPushButton *captureButton_{}; QPushButton *captureSolveButton_{}; QPushButton *solveButton_{}; QPushButton *adaptiveSolveButton_{}; QPushButton *motionButton_{}; QTabWidget *tabs_{}; bool captureBusy_{false}; bool captureSolveRequested_{false}; QString captureOperationId_; QString pendingSolveFrameId_; bool adaptiveSolveBusy_{false}; QString adaptiveSolveOperationId_;
     QDoubleSpinBox *mountRa_{}; QDoubleSpinBox *mountDec_{}; QLabel *mountStatus_{}; QCheckBox *mountTracking_{}; QCheckBox *mountParked_{};
     QSpinBox *focusPosition_{}; QComboBox *focusMode_{}; QSpinBox *focusRange_{}; QSpinBox *coarseStep_{}; QSpinBox *fineStep_{}; QSpinBox *focusFrames_{}; QLabel *focuserStatus_{};
-    QPushButton *focusMoveButton_{}; QPushButton *focusHaltButton_{}; QPushButton *autofocusButton_{}; bool focusTargetDirty_{false}; bool focusTargetInitialized_{false}; bool autofocusBusy_{false}; QString autofocusOperationId_;
+    QPushButton *focusMoveButton_{}; QPushButton *focusHaltButton_{}; QPushButton *autofocusButton_{}; QTimer *focusMotionPollTimer_{}; bool focusTargetDirty_{false}; bool focusTargetInitialized_{false}; bool autofocusBusy_{false}; QString autofocusOperationId_;
     QDoubleSpinBox *polarStep_{}; QLabel *polarSamples_{}; QLabel *polarResult_{};
     QListWidget *operationsList_{}; QPushButton *cancelOperationButton_{};
     QLineEdit *targetName_{}; QDoubleSpinBox *targetRa_{}; QDoubleSpinBox *targetDec_{}; QDoubleSpinBox *targetExposure_{}; QSpinBox *targetRepeats_{}; QListWidget *targetList_{}; std::vector<SessionTarget> targets_;

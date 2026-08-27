@@ -1,0 +1,22 @@
+{
+  "schema": "org.openastrolink.driver-manifest/v2",
+  "abiVersion": 2,
+  "driverId": "oal.eqdrive",
+  "name": "OpenAstroLink native EQDrive",
+  "version": "0.2.10.16",
+  "library": "oal_driver_eqdrive",
+  "deviceClasses": ["mount"],
+  "threadModel": "per-device-serial",
+  "isolation": "in-process",
+  "permissions": ["serial"],
+  "config": {
+    "ports": [],
+    "baudRates": [115200, 921600, 9600, 19200, 38400, 57600, 230400, 460800],
+    "probeTimeoutMs": 900,
+    "commandTimeoutMs": 2500,
+    "openSettleMs": 350,
+    "raSkyPerAxis": -1.0,
+    "decSkyPerAxis": 1.0,
+    "guideRateDegPerHour": 7.5205336
+  }
+}

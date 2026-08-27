@@ -37,6 +37,7 @@ int main(int argc, char **argv) {
     parser.addOption({"require-zwo", "Require at least one native ZWO ASI camera and one native ZWO EAF focuser"});
     parser.addOption({"gemini-port", "Probe only this serial port for native Gemini EAF (for example COM5 or /dev/ttyUSB0)", "port"});
     parser.addOption({"skywatcher-port", "Probe only this serial port for native Sky-Watcher", "port"});
+    parser.addOption({"eqdrive-port", "Probe only this serial port for native EQDrive ASTEP", "port"});
     parser.addOption({"no-astap", "Skip ASTAP probe"});
     parser.process(app);
 
@@ -44,6 +45,7 @@ int main(int argc, char **argv) {
     bool allOk = true;
     if (parser.isSet("gemini-port")) qputenv("OAL_GEMINI_PORT", parser.value("gemini-port").toUtf8());
     if (parser.isSet("skywatcher-port")) qputenv("OAL_SKYWATCHER_PORT", parser.value("skywatcher-port").toUtf8());
+    if (parser.isSet("eqdrive-port")) qputenv("OAL_EQDRIVE_PORT", parser.value("eqdrive-port").toUtf8());
 
     if (!parser.isSet("no-astap")) {
         AstapSolver astap;
@@ -69,7 +71,7 @@ int main(int argc, char **argv) {
             out << "  driver " << d.value("driverId").toString() << "  ABI " << d.value("abiVersion").toInt()
                 << "  " << d.value("version").toString() << "  isolation=" << d.value("isolation").toString("unspecified") << "\n";
         }
-        bool qhyFound = false, canonFound = false, geminiFound = false, skywatcherFound = false, zwoAsiFound = false, zwoEafFound = false;
+        bool qhyFound = false, canonFound = false, geminiFound = false, skywatcherFound = false, eqdriveFound = false, zwoAsiFound = false, zwoEafFound = false;
         for (const auto &v : devices) {
             const auto d = v.toObject();
             const QString key = nativeBackendKey(d.value("driverId").toString(), d.value("id").toString());
@@ -80,6 +82,7 @@ int main(int argc, char **argv) {
             canonFound |= driver == "oal.canon";
             geminiFound |= driver == "oal.gemini";
             skywatcherFound |= driver == "oal.skywatcher";
+            eqdriveFound |= driver == "oal.eqdrive";
             zwoAsiFound |= driver == "oal.zwo.asi";
             zwoEafFound |= driver == "oal.zwo.eaf";
         }
@@ -108,6 +111,27 @@ int main(int argc, char **argv) {
             out << "  Hint: rerun with --gemini-port COMx (or set OAL_GEMINI_PORT=COMx) for focused handshake diagnostics.\n";
         }
         out << "Native Sky-Watcher: " << (skywatcherFound ? "OK" : "not discovered") << "\n";
+        if (!skywatcherFound) {
+            out << "  Sky-Watcher native RA/DEC driver currently probes the SynScan hand-controller serial protocol (KO -> O#) at 9600 baud.\n";
+            out << "  Serial ports visible to Qt:\n";
+            const auto ports = QSerialPortInfo::availablePorts();
+            if (ports.isEmpty()) out << "    (none)\n";
+            for (const auto &pi : ports) {
+                out << "    " << pi.portName();
+                if (!pi.description().isEmpty()) out << "  " << pi.description();
+                if (!pi.serialNumber().isEmpty()) out << "  serial=" << pi.serialNumber();
+                if (pi.hasVendorIdentifier()) out << "  VID=0x" << QString::number(pi.vendorIdentifier(),16);
+                if (pi.hasProductIdentifier()) out << " PID=0x" << QString::number(pi.productIdentifier(),16);
+                out << "\n";
+            }
+            out << "  Hint: rerun with --skywatcher-port COMx (or choose Sky-Watcher mount in Native serial discovery) for focused handshake diagnostics.\n";
+            out << "  Direct USB/EQDIR motor-controller transport is not yet exposed as a native RA/DEC mount device.\n";
+        }
+        out << "Native EQDrive: " << (eqdriveFound ? "OK" : "not discovered") << "\n";
+        if (!eqdriveFound) {
+            out << "  Native EQDrive is a separate ASTEP driver; the existing Sky-Watcher/EqMount backend remains unchanged.\n";
+            out << "  Hint: rerun with --eqdrive-port COMx (or choose EQDrive in Native serial discovery) for focused ASTEP diagnostics.\n";
+        }
         if (parser.isSet("require-native-telescope") && (!qhyFound || !geminiFound || !skywatcherFound)) {
             out << "Native telescope pack: NOT READY (QHY=" << qhyFound << ", Gemini=" << geminiFound << ", SkyWatcher=" << skywatcherFound << ")\n";
             allOk = false;

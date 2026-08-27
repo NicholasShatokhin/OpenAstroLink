@@ -1,4 +1,4 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.13
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.16
 
 Канонічна документація — англійська. `PROJECT_MANIFEST_UA.md` є українським дзеркалом.
 
@@ -7,7 +7,7 @@
 - Hardware diagnostics: `oal-hardware-probe`
 - Core: `oas_core`
 - Protocol/native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.13-urban-adaptive-plate-solve`
+- Version: `0.2.10.16-eqdrive-ascom-synscan-wifi`
 - C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -56,10 +56,30 @@ Handoff: `docs/NEW_CHAT_HANDOFF.md` і `docs/uk/NEW_CHAT_HANDOFF.md`.
 - Статус HIL: Gemini EAF пройшов базову Windows-перевірку discovery/connection/motion; інші physical native drivers ще потребують повної HIL-кваліфікації.
 
 
-## v0.2.10.13 — адаптивний plate solving для міського неба
+## v0.2.10.16 — адаптивний plate solving для міського неба
 
 - `solver.adaptive` виконується на node та захоплює серію коротких експозицій замість одного довгого кадру.
 - Кадри оцінюються до запуску ASTAP, вирівнюються за зорями, складаються та очищаються від великомасштабного градієнта засвітки.
 - Binning тепер зберігається в `CameraFrame`, а ASTAP отримує правильне поле зору для 2x2/іншого binning.
 - За наявності реального монтування поточні RA/Dec автоматично використовуються як hint; radius пошуку адаптивно розширюється.
 - Додано `POST /api/v1/solve/adaptive` та кнопку **Adaptive urban capture + solve** у GUI.
+
+## v0.2.10.16 HIL status/recovery
+- підтверджено graceful Ctrl+C shutdown;
+- Stellarium bridge приймає GOTO та передає RA/Dec у node;
+- QHY auto-connect retry тепер виконує повторний native discovery;
+- Gemini move не блокує status до завершення руху; autofocus чекає фізичний idle;
+- додано live GUI polling position/moving;
+- Sky-Watcher native discovery має детальний SynScan serial handshake log і same-session retry.
+- Важливо: native RA/DEC Sky-Watcher device наразі підтримує SynScan hand-controller protocol. Direct USB/EQDIR motor-controller path ще не експонується як повний mount backend.
+
+
+## v0.2.10.16 — сумісність mount
+
+- Додано native ABI-v2 driver `oal.eqdrive` на публічному ASTEP serial motor-control; наявний `oal.skywatcher` збережено.
+- Native EQDrive використовує `sync-anchor-v1`: перед RA/Dec GOTO потрібен один Sync на відому позицію; `coordinateValid=false` не дозволяє використовувати несинхронізовані координати як ASTAP hint або публікувати їх у Stellarium.
+- Windows backend `ascom-classic` виконує COM automation в окремому native `oas-ascom-host.exe`; локальний GUI має ASCOM Chooser та setup dialog.
+- `synscan-app` реалізує SynScan App Protocol через UDP 11881; `synscan-wifi` — SynScan Communication Protocol compatibility через TCP 11882.
+- Native serial discovery включає EQDrive та міграцію persisted port binding; новий вибір Gemini COM оновлює збережений native backend після успішного rediscovery.
+- Документація: `docs/uk/EQDRIVE.md`, `docs/uk/ASCOM_CLASSIC.md`, `docs/uk/SYNSCAN_NETWORK.md`.
+

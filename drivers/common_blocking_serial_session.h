@@ -49,12 +49,13 @@ public:
     OalBlockingSerialSession &operator=(const OalBlockingSerialSession &) = delete;
 
     bool open(const QString &portName, qint32 baudRate, int settleMs,
-              QString *error = nullptr) {
+              QString *error = nullptr, bool dtr = false, bool rts = false) {
         bool result = false;
         QString localError;
         run([&] {
             if (port_ && port_->isOpen()) {
-                if (port_->portName() == portName && port_->baudRate() == baudRate) {
+                if (port_->portName() == portName && port_->baudRate() == baudRate &&
+                    port_->isDataTerminalReady() == dtr && port_->isRequestToSend() == rts) {
                     result = true;
                     return;
                 }
@@ -73,11 +74,12 @@ public:
                 port_.reset();
                 return;
             }
-            // Do not intentionally assert modem-control lines. Many astronomy
-            // controllers ignore them; some Arduino-derived devices reset on
-            // DTR transitions. Keeping the port open avoids repeated toggles.
-            port_->setDataTerminalReady(false);
-            port_->setRequestToSend(false);
+            // Modem-control lines default to deasserted because several
+            // microcontroller astronomy devices reset on DTR. Drivers that
+            // explicitly require DTR/RTS (for example some USB-UART controller
+            // bridges) can opt in per open attempt.
+            port_->setDataTerminalReady(dtr);
+            port_->setRequestToSend(rts);
             if (settleMs > 0) QThread::msleep(unsigned(settleMs));
             result = true;
         });

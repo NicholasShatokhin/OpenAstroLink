@@ -1,9 +1,9 @@
 # OpenAstroSuite / OpenAstroLink
 
 
-**0.2.10.13 build fix:** restores MSVC/Qt 6.10 compilation of the urban adaptive solve changes by including OpenCV imgproc declarations and constructing mutable `QJsonObject` operation results before assigning them to `QJsonValue`.
+**0.2.10.16 mount interoperability release:** adds an experimental native `oal.eqdrive` ASTEP driver while keeping the existing Sky-Watcher/EqMount driver, a Windows Classic ASCOM backend with ASCOM Chooser/isolated helper process, SynScan/SynScan Pro network backends (UDP 11881 and TCP 11882 compatibility), and persistent native serial-port selection/migration for Gemini/EQDrive/Sky-Watcher.
 
-**Current release: v0.2.10.13 — urban-resilient adaptive plate solving**
+**Current release: v0.2.10.16 — EQDrive + Classic ASCOM + SynScan network**
 
 English is the canonical project language. Ukrainian mirrors are provided in `README_UA.md` and `docs/uk/`.
 
@@ -18,14 +18,23 @@ Native OAL driver code exists for:
 - ZWO ASI cameras (`oal.zwo.asi`, ASI SDK);
 - ZWO EAF focusers (`oal.zwo.eaf`, EAF SDK);
 - Gemini EAF (`oal.gemini`, direct serial protocol);
-- Sky-Watcher/SynScan mounts (`oal.skywatcher`, direct serial protocol).
+- Sky-Watcher/SynScan mounts (`oal.skywatcher`, existing direct serial/EqMount path);
+- EQDrive controllers (`oal.eqdrive`, experimental direct ASTEP serial path).
 
 These drivers are implemented but still require hardware-in-the-loop qualification on the actual host OS, CPU architecture and device/firmware before being labelled production-ready.
+
+
+## Mount interoperability added in v0.2.10.16
+
+- **Native EQDrive:** `oal.eqdrive` is separate from and does not replace `oal.skywatcher`. Discovery is read-only; the initial RA/Dec model is a conservative sync-anchor model and requires one Sync before native celestial GOTO. See `docs/EQDRIVE.md`.
+- **Classic ASCOM (Windows):** backend `ascom-classic` uses `oas-ascom-host.exe` and the installed ASCOM Platform/registered Telescope driver, with GUI **ASCOM Chooser...** and **ASCOM Properties...** controls. This is the compatibility path for EQMOD-style use. See `docs/ASCOM_CLASSIC.md`.
+- **SynScan network:** `synscan-app` uses the richer SynScan App Protocol on UDP 11881; `synscan-wifi` reuses the serial-protocol compatibility server on TCP 11882. The host is the phone/PC running SynScan Pro. See `docs/SYNSCAN_NETWORK.md`.
+- **Gemini serial selection:** choosing a COM port in **Native serial discovery** now persists the override and migrates an old native Gemini backend binding to the newly discovered device on that port. CLI `--gemini-port` still wins for the current process.
 
 ## Runtime model
 
 ```text
-QHY / Canon / ZWO / Gemini / Sky-Watcher
+QHY / Canon / ZWO / Gemini / Sky-Watcher / EQDrive
                     │ USB / serial
                     ▼
              openastrolink-node
@@ -35,7 +44,7 @@ QHY / Canon / ZWO / Gemini / Sky-Watcher
                      Stellarium
 
 Optional compatibility path:
-INDI / ASCOM Alpaca / LX200
+INDI / Classic ASCOM / ASCOM Alpaca / SynScan network / LX200
 ```
 
 The node owns hardware and long-running operations. Closing a GUI does not stop the node or disconnect devices.
@@ -471,10 +480,17 @@ OpenAstroLink node shutdown complete
 Windows HIL status: native Gemini EAF discovery/connection, direct focuser motion and autofocus-driven motion have now been confirmed on real hardware. Autofocus convergence/repeatability on a real optical target remains a separate validation item.
 
 
-## v0.2.10.13 — urban-resilient adaptive plate solving
+## v0.2.10.16 — urban-resilient adaptive plate solving
 
 For light-polluted sites and mounts that cannot support a single long solver exposure, the node now provides an adaptive solve operation instead of relying on `capture once -> ASTAP once`. The default policy starts with one short exposure, then escalates to registered stacks of short exposures. Large-scale sky gradients are removed before solving, solver-frame star count is measured before expensive retries, and the last attempt always invokes the selected solver even if the local quality gate is pessimistic.
 
 The GUI exposes **Adaptive urban capture + solve**. Its defaults are 2x2 solver binning, three registered frames for the middle attempt, five for the final attempt, a 3 s maximum single-frame exposure, and a 20-star local quality target. The base exposure and gain come from the normal Capture controls. When a mount is connected, its current RA/Dec is preferred as the ASTAP hint and the search radius expands 5° -> 10° -> configured maximum across retries.
 
 REST clients can start the same node-local operation with `POST /api/v1/solve/adaptive`. The operation returns per-attempt diagnostics (`detectedStars`, background/noise statistics, registered frame count, effective stacked exposure, search radius and solver message) plus the `solverFrameId` used by ASTAP. The solver frame remains available through the normal frame preview endpoint for diagnosis.
+
+### v0.2.10.16 HIL discovery/state fixes
+
+- Persisted native USB devices are re-discovered before each auto-connect retry, so a QHY camera that appears after node startup can recover without restarting the node.
+- Native Gemini moves are asynchronous at the driver boundary; `focuser.status` remains callable during motion and reports live position/`moving`. Autofocus now explicitly waits for the focuser to become idle before each exposure.
+- The GUI polls focuser status during manual moves.
+- Native Sky-Watcher discovery now logs each serial probe and the exact SynScan `KO -> O#` handshake failure/success, with a same-session retry for slow USB hand controllers. The current RA/DEC native mount device still targets the SynScan hand-controller protocol; direct USB/EQDIR motor-controller transport remains a separate incomplete path.

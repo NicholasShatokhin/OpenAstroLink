@@ -1,6 +1,7 @@
 #include "myfocuserpro2_protocol.h"
 #include "synscan_protocol.h"
 #include "motor_controller_protocol.h"
+#include "astep_protocol.h"
 
 #include <cassert>
 #include <cmath>
@@ -35,6 +36,18 @@ int main() {
     assert(synscan::gotoRaDec(180.0, -5.0).rfind("r80000000,", 0) == 0);
     assert(synscan::syncRaDec(180.0, -5.0).rfind("s80000000,", 0) == 0);
     assert(synscan::echoProbe('O') == "KO");
+
+
+    const auto eqst = eqdrive::parseStatus("St 1111 144.567494 352.327494 15.000000 0.000000 1423170002.598\r");
+    assert(eqst);
+    assert(eqst->gotoActive1 && eqst->gotoActive2);
+    assert(eqst->driverEnabled1 && eqst->driverEnabled2);
+    assert(near(eqst->axis1Deg, 144.567494));
+    const auto eqpos = eqdrive::parsePosition("Pos 23.56 2.345 OK\r");
+    assert(eqpos && near(eqpos->first, 23.56) && near(eqpos->second, 2.345));
+    const auto eqspeed = eqdrive::parseSpeed("Speed 15.1 0.17 OK\r");
+    assert(eqspeed && near(eqspeed->first, 15.1) && near(eqspeed->second, 0.17));
+    assert(eqdrive::responseOk("Slew OK\r", "Slew"));
 
     assert(skywatcher_mc::instantStop(1) == ":L1\r");
     assert(skywatcher_mc::initDone(2) == ":F2\r");

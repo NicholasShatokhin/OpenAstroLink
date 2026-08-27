@@ -130,6 +130,9 @@ struct SolveResult {
 struct MountStatus {
     ConnectionState connection{ConnectionState::Disconnected};
     EquatorialCoord coordinate{};
+    // False when a backend is connected but has not yet established a valid
+    // sky-coordinate model (for example native EQDrive before the first Sync).
+    bool coordinateValid{true};
     bool tracking{false};
     bool slewing{false};
     bool parked{false};

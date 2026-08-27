@@ -4,6 +4,9 @@
 #include "algorithms/neural_solver.h"
 #include "algorithms/star_catalog.h"
 #include "backends/alpaca_devices.h"
+#include "backends/ascom_classic_mount.h"
+#include "backends/synscan_network_mount.h"
+#include "backends/synscan_app_mount.h"
 #include "backends/gemini_eaf_focuser.h"
 #include "backends/oal_client_devices.h"
 #include "backends/oal_native_devices.h"
@@ -53,6 +56,39 @@ QJsonObject nativeDescriptor(const std::shared_ptr<OalDriverPluginLoader> &loade
 QStringList nativeBackendsFor(const std::shared_ptr<OalDriverPluginLoader> &loader,const QString &type){
     QStringList out;if(!loader)return out;for(const auto &v:loader->devices()){const auto o=v.toObject();if(o.value("type").toString()!=type||!o.value("native").toBool())continue;out<<nativeBackendKey(o.value("driverId").toString(),o.value("id").toString());}out.removeDuplicates();return out;
 }
+
+QString inferPersistedSerialPort(const DeviceBinding &binding,const QString &expectedDriverId){
+    QString driverId,deviceId;
+    if(!binding.backend.startsWith("native:")||!parseNativeBackendKey(binding.backend,driverId,deviceId)||driverId!=expectedDriverId)return {};
+    QString token;
+    if(driverId=="oal.gemini"&&deviceId.startsWith("gemini-eaf:")) token=deviceId.mid(QStringLiteral("gemini-eaf:").size());
+    else if(driverId=="oal.skywatcher"&&deviceId.startsWith("skywatcher-synscan:")) token=deviceId.mid(QStringLiteral("skywatcher-synscan:").size());
+    else if(driverId=="oal.eqdrive"&&deviceId.startsWith("eqdrive:")) token=deviceId.mid(QStringLiteral("eqdrive:").size());
+    else return {};
+    token=token.trimmed();if(token.isEmpty())return {};
+    for(const auto &info:QSerialPortInfo::availablePorts()){
+        if(info.portName().compare(token,Qt::CaseInsensitive)==0||
+           info.systemLocation().compare(token,Qt::CaseInsensitive)==0||
+           (!info.serialNumber().trimmed().isEmpty()&&info.serialNumber().trimmed()==token))
+            return info.portName();
+    }
+    // Preserve a COMx/tty-style persisted identity even if QSerialPortInfo has
+    // not populated metadata yet; the focused probe will produce the real open
+    // error and the following retry can fall back to general discovery.
+    if(token.startsWith("COM",Qt::CaseInsensitive)||token.startsWith("/dev/"))return token;
+    return {};
+}
+
+class ScopedEnvOverride {
+public:
+    ScopedEnvOverride(const char *name,const QString &value):name_(name),old_(qgetenv(name)),hadOld_(qEnvironmentVariableIsSet(name)){
+        if(!value.isEmpty())qputenv(name_,value.toUtf8());
+    }
+    ~ScopedEnvOverride(){if(hadOld_)qputenv(name_,old_);else qunsetenv(name_);}
+private:
+    const char *name_{};QByteArray old_;bool hadOld_{false};
+};
+
 QJsonObject migrateQhyDescriptor(const std::shared_ptr<OalDriverPluginLoader> &loader,const QString &selector){
     if(!loader)return{};QJsonArray matches;for(const auto&v:loader->devices()){auto o=v.toObject();if(o.value("driverId").toString()=="oal.qhy"&&o.value("type").toString()=="camera")matches.append(o);}
     bool numeric=false;int index=selector.trimmed().toInt(&numeric);if(selector.trimmed().isEmpty()){numeric=true;index=0;}
@@ -148,10 +184,22 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
     // --gemini-port on the node) always win over saved GUI settings.
     if(qEnvironmentVariable("OAL_GEMINI_PORT").trimmed().isEmpty()){const QString p=settings_.nativeSerialPort("oal.gemini");if(!p.isEmpty())qputenv("OAL_GEMINI_PORT",p.toUtf8());}
     if(qEnvironmentVariable("OAL_SKYWATCHER_PORT").trimmed().isEmpty()){const QString p=settings_.nativeSerialPort("oal.skywatcher");if(!p.isEmpty())qputenv("OAL_SKYWATCHER_PORT",p.toUtf8());}
+    if(qEnvironmentVariable("OAL_EQDRIVE_PORT").trimmed().isEmpty()){const QString p=settings_.nativeSerialPort("oal.eqdrive");if(!p.isEmpty())qputenv("OAL_EQDRIVE_PORT",p.toUtf8());}
     catalog_=std::make_shared<StarCatalog>();QString err;QString catalogPath=QDir(QCoreApplication::applicationDirPath()).filePath("config/stars_example.csv");if(!catalog_->loadCsv(catalogPath,&err)){catalogPath=QDir::current().filePath("config/stars_example.csv");catalog_->loadCsv(catalogPath,&err);}catalogSolver_=std::make_shared<PatternPlateSolver>(catalog_);astapSolver_=std::make_shared<AstapSolver>();neuralSolver_=std::make_shared<NeuralSolver>();solver_=astapSolver_->available(nullptr)?astapSolver_:catalogSolver_;
     driverLoader_=std::make_shared<OalDriverPluginLoader>();QStringList driverErrors;const int nativeCount=driverLoader_->scanDefaultPaths(&driverErrors);
     connect(driverLoader_.get(),&OalDriverPluginLoader::driverLog,this,[this](const QString&driver,int,const QString&message){emit logMessage(QString("[%1] %2").arg(driver,message));});
-    connect(driverLoader_.get(),&OalDriverPluginLoader::driverEvent,this,[this](const QString&driver,const QString&device,const QJsonObject&event){QJsonObject p=event;p["driverId"]=driver;p["deviceId"]=device;if(oalWsServer_)oalWsServer_->broadcast("driverEvent",p);});
+    connect(driverLoader_.get(),&OalDriverPluginLoader::driverEvent,this,[this](const QString&driver,const QString&device,const QJsonObject&event){
+        QJsonObject p=event;p["driverId"]=driver;p["deviceId"]=device;
+        if(oalWsServer_)oalWsServer_->broadcast("driverEvent",p);
+        // Driver events are a state-change hint. In particular, native focusers
+        // emit moveStarted/position events while the GUI may otherwise have no
+        // reason to request a fresh state snapshot. Queue a normal state refresh
+        // after the driver invocation has released its per-device serial lock.
+        const QString type=event.value("type").toString();
+        if(type=="focuser.moveStarted"||type=="focuser.position"||
+           type=="device.connected"||type=="device.disconnected")
+            QTimer::singleShot(0,this,[this](){if(!shuttingDown_)emitState();});
+    });
     QTimer::singleShot(0,this,[this,nativeCount,driverErrors](){emit logMessage(QString("Native OAL driver registry: %1 driver(s)").arg(nativeCount));for(const auto&e:driverErrors)emit logMessage("Native driver load warning: "+e);});
     #ifdef OAS_HAVE_POSITIONING
     if(profile_.observer.latitudeDeg==0.0&&profile_.observer.longitudeDeg==0.0)QTimer::singleShot(0,this,&ApplicationController::requestSystemLocation);
@@ -201,7 +249,11 @@ QStringList ApplicationController::cameraBackends()const{QStringList x=nativeBac
 x<<"canon-gphoto2";
 #endif
 return x;}
-QStringList ApplicationController::mountBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"mount");x<<"simulated"<<"serial-lx200"<<"ascom-alpaca"<<"oal";
+QStringList ApplicationController::mountBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"mount");x<<"simulated"<<"serial-lx200"<<"synscan-app"<<"synscan-wifi";
+#ifdef OAS_HAVE_ASCOM_CLASSIC
+x<<"ascom-classic";
+#endif
+x<<"ascom-alpaca"<<"oal";
 #ifdef OAS_HAVE_INDI
 x<<"indi";
 #endif
@@ -244,7 +296,11 @@ bool ApplicationController::connectGuideCamera(const QString&b,const QString&e,Q
     if(!note.isEmpty())emit logMessage(note);emit logMessage("Guide camera connected: "+guideCamera_->displayName());emitState();return true;
 }
 bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"mount"},err))return false;std::shared_ptr<IMount>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"mount",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalMount>(driverLoader_,desc);}
-else if(b=="simulated")d=std::make_shared<SimulatedMount>();else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);else if(b=="ascom-alpaca")d=std::make_shared<AlpacaMount>(QUrl(e));else if(b=="oal")d=std::make_shared<OalMountClient>(QUrl(e));
+else if(b=="simulated")d=std::make_shared<SimulatedMount>();else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);else if(b=="synscan-app")d=std::make_shared<SynScanAppMount>(e);else if(b=="synscan-wifi")d=std::make_shared<SynScanNetworkMount>(e);
+#ifdef OAS_HAVE_ASCOM_CLASSIC
+else if(b=="ascom-classic")d=std::make_shared<AscomClassicMount>(e);
+#endif
+else if(b=="ascom-alpaca")d=std::make_shared<AlpacaMount>(QUrl(e));else if(b=="oal")d=std::make_shared<OalMountClient>(QUrl(e));
 #ifdef OAS_HAVE_INDI
 else if(b=="indi")d=std::make_shared<IndiMount>(e);
 #endif
@@ -271,6 +327,52 @@ void ApplicationController::disconnectDevices(bool clearAutoConnect){
 }
 bool ApplicationController::restoreConfiguredDevices(QStringList *errors){
     bool allOk=true;
+    // Persisted native bindings can legitimately be absent from the startup
+    // cache when a USB camera is still enumerating or is hot-plugged after the
+    // node starts. Refresh the native registry before each reconnect attempt if
+    // an auto-connect native device is still missing. Without this, retrying a
+    // saved native:oal.qhy/... key only re-queries the stale cache forever.
+    const auto needsNativeRefresh=[&](const std::shared_ptr<IDevice>&current,const DeviceBinding&b){
+        return !current&&b.autoConnect&&b.backend.startsWith("native:");
+    };
+    if(driverLoader_&&(needsNativeRefresh(camera_,settings_.cameraBinding())||
+                       needsNativeRefresh(guideCamera_,settings_.guideCameraBinding())||
+                       needsNativeRefresh(mount_,settings_.mountBinding())||
+                       needsNativeRefresh(focuser_,settings_.focuserBinding()))){
+        // Auto mode should still exploit the exact serial identity from a saved
+        // native binding.  In the common Gemini case the persisted device id is
+        // gemini-eaf:COM4.  Probe that port first for this reconnect cycle, but
+        // do not mutate the user's saved "Auto" discovery preference.
+        QString geminiHint,skywatcherHint,eqdriveHint;
+        if(qEnvironmentVariable("OAL_GEMINI_PORT").trimmed().isEmpty()&&needsNativeRefresh(focuser_,settings_.focuserBinding()))
+            geminiHint=inferPersistedSerialPort(settings_.focuserBinding(),"oal.gemini");
+        if(qEnvironmentVariable("OAL_SKYWATCHER_PORT").trimmed().isEmpty()&&needsNativeRefresh(mount_,settings_.mountBinding()))
+            skywatcherHint=inferPersistedSerialPort(settings_.mountBinding(),"oal.skywatcher");
+        if(qEnvironmentVariable("OAL_EQDRIVE_PORT").trimmed().isEmpty()&&needsNativeRefresh(mount_,settings_.mountBinding()))
+            eqdriveHint=inferPersistedSerialPort(settings_.mountBinding(),"oal.eqdrive");
+        if(!geminiHint.isEmpty())emit logMessage("Focused reconnect discovery: oal.gemini -> "+geminiHint+" (from persisted binding)");
+        if(!skywatcherHint.isEmpty())emit logMessage("Focused reconnect discovery: oal.skywatcher -> "+skywatcherHint+" (from persisted binding)");
+        if(!eqdriveHint.isEmpty())emit logMessage("Focused reconnect discovery: oal.eqdrive -> "+eqdriveHint+" (from persisted binding)");
+        ScopedEnvOverride geminiEnv("OAL_GEMINI_PORT",geminiHint);
+        ScopedEnvOverride skywatcherEnv("OAL_SKYWATCHER_PORT",skywatcherHint);
+        ScopedEnvOverride eqdriveEnv("OAL_EQDRIVE_PORT",eqdriveHint);
+        QStringList discoveryErrors;const auto nativeDevices=driverLoader_->refreshDevices(&discoveryErrors);
+        QHash<QString,int> counts;for(const auto &v:nativeDevices)counts[v.toObject().value("driverId").toString()]++;
+        // A serial override is an explicit identity choice. If the physical
+        // device moved from COM4 to COM6, migrate the persisted native binding
+        // to the newly discovered device instead of repeatedly reconnecting the
+        // stale COM4 device id. This is especially important for Gemini.
+        const auto rebind=[&](const QString&driverId,const QString&type,const QString&port,DeviceBinding binding,auto saver){
+            if(port.trimmed().isEmpty())return;QString oldDriver,oldDevice;if(!parseNativeBackendKey(binding.backend,oldDriver,oldDevice)||oldDriver!=driverId)return;
+            for(const auto&v:nativeDevices){const auto o=v.toObject();if(o.value("driverId").toString()!=driverId||o.value("type").toString()!=type)continue;const QString discoveredPort=o.value("transport").toObject().value("port").toString();if(discoveredPort.compare(port,Qt::CaseInsensitive)!=0)continue;const QString next=nativeBackendKey(driverId,o.value("id").toString());if(next!=binding.backend){emit logMessage(QString("Persisted %1 binding migrated from %2 to %3 after explicit serial selection %4").arg(type,binding.backend,next,port));binding.backend=next;binding.endpoint.clear();(settings_.*saver)(binding);}break;}
+        };
+        rebind("oal.gemini","focuser",qEnvironmentVariable("OAL_GEMINI_PORT"),settings_.focuserBinding(),&AppSettings::saveFocuserBinding);
+        rebind("oal.skywatcher","mount",qEnvironmentVariable("OAL_SKYWATCHER_PORT"),settings_.mountBinding(),&AppSettings::saveMountBinding);
+        rebind("oal.eqdrive","mount",qEnvironmentVariable("OAL_EQDRIVE_PORT"),settings_.mountBinding(),&AppSettings::saveMountBinding);
+        emit logMessage(QString("Native OAL reconnect discovery refreshed: %1 device(s); qhy=%2 gemini=%3 skywatcher=%4 eqdrive=%5")
+                            .arg(nativeDevices.size()).arg(counts.value("oal.qhy")).arg(counts.value("oal.gemini")).arg(counts.value("oal.skywatcher")).arg(counts.value("oal.eqdrive")));
+        for(const auto&e:discoveryErrors){emit logMessage("Native reconnect discovery warning: "+e);if(errors)errors->append("native discovery: "+e);}
+    }
     auto restore=[&](const QString &kind,const DeviceBinding &b,auto fn){
         if(!b.autoConnect||b.backend.isEmpty())return;
         QString e;if(!(this->*fn)(b.backend,b.endpoint,&e)){allOk=false;if(errors)errors->append(kind+": "+e);emit logMessage("Auto-connect "+kind+" failed: "+e);}
@@ -323,7 +425,7 @@ QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&req
     r.exposure.binX=std::max(1,r.exposure.binX);r.exposure.binY=std::max(1,r.exposure.binY);
     r.maxAttempts=std::clamp(r.maxAttempts,1,6);r.stackFrames=std::clamp(r.stackFrames,2,9);r.finalStackFrames=std::clamp(r.finalStackFrames,r.stackFrames,15);
     r.minStarsForSolve=std::clamp(r.minStarsForSolve,4,200);r.exposureGrowth=std::clamp(r.exposureGrowth,1.0,3.0);r.maxSingleExposureSec=std::max(r.exposure.exposureSec,r.maxSingleExposureSec);
-    if(r.useMountHint&&mount_&&(!r.hint.raDeg||!r.hint.decDeg)){MountStatus ms;if(mount_->status(ms,nullptr)){r.hint.raDeg=ms.coordinate.raDeg;r.hint.decDeg=ms.coordinate.decDeg;emit logMessage(QString("Adaptive solve using mount hint RA=%1 DEC=%2").arg(ms.coordinate.raDeg,0,'f',6).arg(ms.coordinate.decDeg,0,'f',6));}}
+    if(r.useMountHint&&mount_&&(!r.hint.raDeg||!r.hint.decDeg)){MountStatus ms;if(mount_->status(ms,nullptr)&&ms.coordinateValid){r.hint.raDeg=ms.coordinate.raDeg;r.hint.decDeg=ms.coordinate.decDeg;emit logMessage(QString("Adaptive solve using mount hint RA=%1 DEC=%2").arg(ms.coordinate.raDeg,0,'f',6).arg(ms.coordinate.decDeg,0,'f',6));}else emit logMessage("Adaptive solve: mount coordinate is not valid yet; continuing without a mount hint");}
     auto cam=camera_;auto solver=solver_;const TelescopeProfile profile=profile_;
     const QString id=operations_.submit("solver.adaptive",{"camera","solver"},true,[this,cam,solver,profile,r](OperationContext&ctx){
         OperationOutcome out;ThreadMarshalledCamera cameraProxy(this,cam);QJsonArray attempts;AdaptivePreparedFrame lastPrepared;SolveResult lastResult;
@@ -454,7 +556,7 @@ void ApplicationController::refreshState(){emitState();}
 QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const QString&role,const DeviceBinding&binding){if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"role",role},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")}});}};add(camera_,"camera","main",settings_.cameraBinding());add(guideCamera_,"camera","guide",settings_.guideCameraBinding());add(mount_,"mount","main",settings_.mountBinding());add(focuser_,"focuser","main",settings_.focuserBinding());return a;}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();j["canAbortExposure"]=camera_->canAbortExposure();}return j;}
 bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
-QJsonObject ApplicationController::stateJson()const{QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide}};FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
+QJsonObject ApplicationController::stateJson()const{QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide}};FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
 QJsonObject ApplicationController::nodeInfoJson()const{
     return {{"nodeId",QCoreApplication::applicationName()+"@"+QSysInfo::machineHostName()},
             {"version",QString::fromLatin1(OAS_VERSION)},
@@ -486,18 +588,29 @@ QJsonArray ApplicationController::availableSerialPorts()const{
 QString ApplicationController::nativeSerialPortOverride(const QString&driverId)const{
     if(driverId=="oal.gemini")return qEnvironmentVariable("OAL_GEMINI_PORT").trimmed();
     if(driverId=="oal.skywatcher")return qEnvironmentVariable("OAL_SKYWATCHER_PORT").trimmed();
+    if(driverId=="oal.eqdrive")return qEnvironmentVariable("OAL_EQDRIVE_PORT").trimmed();
     return {};
 }
 bool ApplicationController::setNativeSerialPortOverride(const QString&driverId,const QString&port,QString*error){
     const QString value=port.trimmed();QString envName;
     if(driverId=="oal.gemini")envName="OAL_GEMINI_PORT";
     else if(driverId=="oal.skywatcher")envName="OAL_SKYWATCHER_PORT";
-    else{if(error)*error="Serial-port override is supported only for oal.gemini and oal.skywatcher";return false;}
+    else if(driverId=="oal.eqdrive")envName="OAL_EQDRIVE_PORT";
+    else{if(error)*error="Serial-port override is supported only for oal.gemini, oal.skywatcher and oal.eqdrive";return false;}
     const QByteArray env=envName.toUtf8();
     if(value.isEmpty())qunsetenv(env.constData());else qputenv(env.constData(),value.toUtf8());
     settings_.saveNativeSerialPort(driverId,value);
     emit logMessage(value.isEmpty()?QString("%1 serial discovery set to automatic scan").arg(driverId):QString("%1 serial discovery pinned to %2").arg(driverId,value));
-    return refreshNativeDiscovery(error);
+    if(!refreshNativeDiscovery(error))return false;
+    if(!value.isEmpty()&&driverLoader_){
+        const QString type=driverId=="oal.gemini"?"focuser":"mount";
+        for(const auto&v:driverLoader_->devices()){const auto o=v.toObject();if(o.value("driverId").toString()!=driverId||o.value("type").toString()!=type)continue;if(o.value("transport").toObject().value("port").toString().compare(value,Qt::CaseInsensitive)!=0)continue;const QString key=nativeBackendKey(driverId,o.value("id").toString());
+            if(type=="focuser"){auto b=settings_.focuserBinding();QString oldDriver,oldId;if(parseNativeBackendKey(b.backend,oldDriver,oldId)&&oldDriver==driverId){b.backend=key;b.endpoint.clear();settings_.saveFocuserBinding(b);emit logMessage("Gemini persisted binding updated to "+key);}}
+            else{auto b=settings_.mountBinding();QString oldDriver,oldId;if(parseNativeBackendKey(b.backend,oldDriver,oldId)&&oldDriver==driverId){b.backend=key;b.endpoint.clear();settings_.saveMountBinding(b);emit logMessage("Mount persisted binding updated to "+key);}}
+            break;
+        }
+    }
+    return true;
 }
 QJsonArray ApplicationController::nativeDriversJson()const{return driverLoader_?driverLoader_->drivers():QJsonArray{};}
 QJsonArray ApplicationController::nativeDevicesJson()const{return driverLoader_?driverLoader_->devices():QJsonArray{};}

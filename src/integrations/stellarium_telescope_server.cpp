@@ -145,7 +145,7 @@ bool StellariumTelescopeServer::parseGotoPacket(const QByteArray &packet, Equato
 void StellariumTelescopeServer::broadcastPosition() {
     if (buffers_.isEmpty()) return;
     MountStatus status;
-    if (!controller_->mountStatus(status, nullptr)) return;
+    if (!controller_->mountStatus(status, nullptr) || !status.coordinateValid) return;
     const QByteArray packet = makePositionPacket(status);
     for (auto *socket : buffers_.keys()) {
         if (socket && socket->state() == QAbstractSocket::ConnectedState)

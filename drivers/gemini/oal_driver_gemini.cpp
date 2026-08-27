@@ -201,7 +201,7 @@ bool probePort(const QString &port, Device &device, bool keepOpen) {
 
     // Windows HIL established that this CH340/Gemini controller needs a quiet
     // boot window after Open() before the first :02# byte.  The driver manifest
-    // is the authoritative runtime configuration, so v0.2.10.13 keeps its
+    // is the authoritative runtime configuration, so v0.2.10.16 keeps its
     // openSettleMs in lock-step with the C++ default (2200 ms).  If the first
     // post-settle exchange still fails, keep the same port open and retry only
     // after an additional recovery delay.  Reopening would restart the device.
@@ -330,7 +330,7 @@ void stop(void *) {
 const char *manifest(void *) {
     return json(QJsonObject{{"driverId", "oal.gemini"},
                             {"name", "OpenAstroLink native Gemini EAF driver"},
-                            {"version", "0.2.10.13"},
+                            {"version", "0.2.10.16"},
                             {"abiVersion", 2},
                             {"threadModel", "per-device-serial"},
                             {"protocol", "MyFocuserPro2 serial"},
@@ -448,21 +448,12 @@ const char *invoke(void *, const char *deviceId, const char *method,
         if (!rawExchange(device.session, command, nullptr, gCommandTimeoutMs, false))
             return fail("TRANSPORT_ERROR", "Failed to send Gemini EAF move command");
         emitEvent(device, "focuser.moveStarted", QJsonObject{{"targetPosition", target}});
-
-        QElapsedTimer timer;
-        timer.start();
-        while (timer.elapsed() < gMoveTimeoutMs) {
-            if (auto moving = queryMoving(device); moving && !*moving) {
-                const auto position = queryInt(
-                    device, QByteArray::fromStdString(oal::gemini::positionCommand()), 'P');
-                const int finalPosition = position.value_or(target);
-                emitEvent(device, "focuser.position",
-                          QJsonObject{{"position", finalPosition}, {"moving", false}});
-                return ok(QJsonObject{{"position", finalPosition}});
-            }
-            QThread::msleep(100);
-        }
-        return fail("TIMEOUT", "Gemini EAF did not report move completion before timeout");
+        // Move commands are asynchronous at the OAL driver boundary. Returning
+        // immediately keeps the node responsive and allows focuser.status to
+        // report controller position + Moving=YES during the physical motion.
+        // Higher-level workflows (autofocus) explicitly wait for idle before
+        // taking an image at the requested focus position.
+        return ok(QJsonObject{{"accepted", true}, {"targetPosition", target}});
     }
 
     if (methodName == "focuser.halt")
@@ -487,7 +478,7 @@ OalDriverV2 api{OAL_DRIVER_ABI_V2,
                 OAL_DRIVER_FEATURE_EVENTS | OAL_DRIVER_FEATURE_HEALTH,
                 "oal.gemini",
                 "OpenAstroLink native Gemini EAF driver",
-                "0.2.10.13",
+                "0.2.10.16",
                 nullptr,
                 &manifest,
                 &start,

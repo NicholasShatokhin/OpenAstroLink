@@ -11,5 +11,8 @@
   "nativeZwoEaf": "@OAS_ENABLE_NATIVE_ZWO_EAF@",
   "nativeGemini": "@OAS_ENABLE_NATIVE_GEMINI@",
   "nativeSkyWatcher": "@OAS_ENABLE_NATIVE_SKYWATCHER@",
+  "nativeEqDrive": "@OAS_ENABLE_NATIVE_EQDRIVE@",
+  "classicAscom": "@OAS_ENABLE_ASCOM_CLASSIC@",
+  "synScanNetwork": "ON",
   "indiCompatibility": "@OAS_ENABLE_INDI@"
 }

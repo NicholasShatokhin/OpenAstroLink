@@ -1,4 +1,4 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.13
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.16
 
 Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL or production qualification pending; 🧪 experimental; ⏳ not yet implemented.
 

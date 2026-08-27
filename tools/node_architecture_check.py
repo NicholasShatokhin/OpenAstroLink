@@ -23,7 +23,7 @@ for name,(file,needle) in checks.items():
 # All project-local quoted includes must resolve.
 for f in list(root.glob('src/**/*.cpp'))+list(root.glob('src/**/*.h')):
     for inc in re.findall(r'#include\s+"([^"]+)"', f.read_text(encoding='utf-8')):
-        if not (root/'src'/inc).exists() and not (root/'include'/inc).exists():
+        if not (f.parent/inc).resolve().exists() and not (root/'src'/inc).exists() and not (root/'include'/inc).exists():
             failed.append(f'{f.relative_to(root)}: unresolved include {inc}')
 if failed:
     print('\n'.join(failed));sys.exit(1)

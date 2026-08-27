@@ -64,6 +64,9 @@ const char *fail(const QString &code, const QString &message) {
                             {"error", QJsonObject{{"code", code},
                                                   {"message", message}}}});
 }
+void logMessage(int level,const QString&message){
+    if(!gHost.log)return;const QByteArray m=message.toUtf8();gHost.log(gHost.hostContext,level,"oal.skywatcher",m.constData());
+}
 
 void emitEvent(const Device &device, const QString &type,
                const QJsonObject &payload = {}) {
@@ -191,9 +194,18 @@ void fillPortMetadata(Device &device) {
 bool populateIdentity(Device &device) {
     QByteArray response;
     const QByteArray echo = QByteArray::fromStdString(oal::synscan::echoProbe('O'));
-    if (!exchange(device, echo, &response, gProbeTimeoutMs) ||
-        response != QByteArrayLiteral("O#"))
-        return false;
+    if (!exchange(device, echo, &response, gProbeTimeoutMs) || response != QByteArrayLiteral("O#")) {
+        logMessage(2,QString("%1: first SynScan echo KO failed: %2; reply='%3' hex=%4")
+                       .arg(device.port,device.session?device.session->lastExchangeDiagnostic():QStringLiteral("no session"),QString::fromLatin1(response),QString::fromLatin1(response.toHex(' '))));
+        // Some USB hand controllers are not ready immediately after opening the
+        // virtual COM port. Retry on the same open session; do not reopen it.
+        QThread::msleep(750);response.clear();
+        if (!exchange(device, echo, &response, gProbeTimeoutMs) || response != QByteArrayLiteral("O#")) {
+            logMessage(2,QString("%1: SynScan hand-controller handshake failed after retry: %2; reply='%3' hex=%4")
+                           .arg(device.port,device.session?device.session->lastExchangeDiagnostic():QStringLiteral("no session"),QString::fromLatin1(response),QString::fromLatin1(response.toHex(' '))));
+            return false;
+        }
+    }
 
     if (const auto model = queryByte(device, QByteArrayLiteral("m"))) device.model = *model;
     if (const auto aligned = alignment(device)) device.aligned = *aligned;
@@ -211,11 +223,33 @@ bool probePort(const QString &port, Device &device, bool keepOpen) {
     fillPortMetadata(result);
     result.session = std::make_shared<OalBlockingSerialSession>();
     QString error;
-    if (!result.session->open(result.port, 9600, gOpenSettleMs, &error)) return false;
+    logMessage(1,QString("probing %1 for SynScan hand-controller protocol at 9600 baud (settle %2 ms)").arg(result.port).arg(gOpenSettleMs));
+    if (!result.session->open(result.port, 9600, gOpenSettleMs, &error)) {logMessage(2,QString("%1: open failed: %2").arg(result.port,error));return false;}
     if (!populateIdentity(result)) {
+        const QString explicitPort=qEnvironmentVariable("OAL_SKYWATCHER_PORT").trimmed();
+        const bool focused=!explicitPort.isEmpty()||gConfiguredPorts.contains(result.port);
+        if(focused){
+            // A direct EQDIR / built-in USB connection speaks the lower-level
+            // Sky-Watcher Motor Controller Command Set, not the SynScan hand-
+            // controller protocol.  Perform one read-only version inquiry so a
+            // failed focused probe tells the user which transport is actually
+            // present instead of merely reporting "not discovered".
+            QByteArray motorReply;
+            const QByteArray motorQuery=QByteArrayLiteral(":e1\r");
+            const bool motorOk=result.session->exchange(motorQuery,&motorReply,gCommandTimeoutMs,true,'\r');
+            const QByteArray trimmed=motorReply.trimmed();
+            if(motorOk&&trimmed.startsWith('=')&&trimmed.size()>=2){
+                logMessage(1,QString("%1: direct Sky-Watcher Motor Controller protocol detected; :e1 -> '%2' (hex %3). This is an EQDIR/built-in-USB style transport, not SynScan hand-controller protocol. Native direct-axis RA/DEC control requires the OAL alignment/coordinate layer and is not exposed as a mount backend yet.")
+                               .arg(result.port,QString::fromLatin1(trimmed),QString::fromLatin1(motorReply.toHex(' '))));
+            }else{
+                logMessage(2,QString("%1: direct Motor Controller diagnostic :e1 also failed: %2; reply='%3' hex=%4")
+                               .arg(result.port,result.session->lastExchangeDiagnostic(),QString::fromLatin1(trimmed),QString::fromLatin1(motorReply.toHex(' '))));
+            }
+        }
         result.session->close();
         return false;
     }
+    logMessage(1,QString("%1: Sky-Watcher/SynScan discovered (model %2, firmware %3)").arg(result.port,modelName(result.model),result.firmware));
     if (!keepOpen) {
         result.session->close();
         result.session.reset();
@@ -300,6 +334,7 @@ bool start(void *, const char *configJson) {
     gCommandTimeoutMs = std::clamp(object.value("commandTimeoutMs").toInt(gCommandTimeoutMs),
                                    250, 15000);
     gOpenSettleMs = std::clamp(object.value("openSettleMs").toInt(gOpenSettleMs), 0, 3000);
+    logMessage(1,QString("serial config: probeTimeoutMs=%1 commandTimeoutMs=%2 openSettleMs=%3").arg(gProbeTimeoutMs).arg(gCommandTimeoutMs).arg(gOpenSettleMs));
     // Hardware discovery is owned by the OAL host refresh cycle.  Keep driver
     // start side-effect-light so startup does not probe serial ports twice.
     return true;
@@ -317,7 +352,7 @@ void stop(void *) {
 const char *manifest(void *) {
     return json(QJsonObject{{"driverId", "oal.skywatcher"},
                             {"name", "OpenAstroLink native Sky-Watcher/SynScan driver"},
-                            {"version", "0.2.10.13"},
+                            {"version", "0.2.10.16"},
                             {"abiVersion", 2},
                             {"threadModel", "per-device-serial"},
                             {"protocol", "SynScan Serial Communication Protocol 3.3"},
@@ -552,7 +587,7 @@ OalDriverV2 api{OAL_DRIVER_ABI_V2,
                     OAL_DRIVER_FEATURE_HEALTH,
                 "oal.skywatcher",
                 "OpenAstroLink native Sky-Watcher/SynScan driver",
-                "0.2.10.13",
+                "0.2.10.16",
                 nullptr,
                 &manifest,
                 &start,

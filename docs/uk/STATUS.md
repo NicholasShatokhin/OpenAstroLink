@@ -1,4 +1,4 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.13
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.16
 
 Позначки: ✅ реалізовано; 🟡 реалізовано/частково реалізовано, але потрібен HIL або production qualification; 🧪 experimental; ⏳ ще не реалізовано.
 

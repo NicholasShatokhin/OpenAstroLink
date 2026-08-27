@@ -1,4 +1,4 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.13
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.16
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
@@ -7,7 +7,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
 - Protocol / native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.13-urban-adaptive-plate-solve`
+- Version: `0.2.10.16-eqdrive-ascom-synscan-wifi`
 - Language: C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -26,14 +26,15 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - `oal.zwo.asi` — ZWO ASI cameras through ZWO ASI SDK.
 - `oal.zwo.eaf` — ZWO EAF focusers through ZWO EAF SDK.
 - `oal.gemini` — Gemini EAF native serial path.
-- `oal.skywatcher` — Sky-Watcher SynScan native mount path.
+- `oal.skywatcher` — existing Sky-Watcher SynScan / EqMount native mount path.
+- `oal.eqdrive` — experimental direct EQDrive ASTEP serial mount path; sync-anchor celestial model in this release.
 - `oal.simulated` — reference ABI-v2 simulated devices.
 
 Gemini EAF has passed basic Windows HIL for discovery, connection and motion; the other physical native drivers remain HIL-pending or only partially qualified on their actual device/firmware/host combinations.
 
 ## Compatibility adapters
 
-INDI, ASCOM Alpaca, LX200, OpenCV/UVC and OAL remote-device adapters remain available. Native OAL is preferred; INDI remains intentionally easy to enable for equipment not yet covered natively.
+Classic ASCOM (Windows helper/Chooser), SynScan App network, SynScan serial-protocol-over-TCP, INDI, ASCOM Alpaca, LX200, OpenCV/UVC and OAL remote-device adapters remain available. Native OAL is preferred; INDI remains intentionally easy to enable for equipment not yet covered natively.
 
 ## Current implemented foundations
 
@@ -46,13 +47,23 @@ INDI, ASCOM Alpaca, LX200, OpenCV/UVC and OAL remote-device adapters remain avai
 - Stellarium mount position/GOTO TCP bridge.
 - Cross-platform presets/scripts for Windows/Linux/RPi.
 
-## v0.2.10.13 adaptive urban plate solving
+## v0.2.10.16 adaptive urban plate solving
 
 - Node-owned `solver.adaptive` operation captures short exposures, evaluates solver-frame quality, registers drift between frames, stacks accepted frames, removes large-scale sky gradients and retries the selected plate solver.
 - Camera-side binning is carried in `CameraFrame`; ASTAP FOV derivation is now binning-aware.
 - When available, current mount RA/Dec is used as the default solve hint and the search radius expands across attempts.
 - REST endpoint: `POST /api/v1/solve/adaptive`; remote GUI exposes **Adaptive urban capture + solve**.
 - The final prepared solver frame and per-attempt diagnostics are retained for troubleshooting.
+
+
+## v0.2.10.16 mount interoperability
+
+- New native ABI-v2 driver `oal.eqdrive` uses the published EQDrive ASTEP serial motor-control section and keeps `oal.skywatcher` intact.
+- Native EQDrive celestial coordinates use `sync-anchor-v1`; one known-position Sync is required before RA/Dec GOTO. `coordinateValid=false` prevents unsynced coordinates from being used as ASTAP hints or published to Stellarium.
+- Windows `ascom-classic` backend runs COM automation in the separate native `oas-ascom-host.exe`, with ASCOM Chooser and driver setup UI available in the local GUI.
+- `synscan-app` implements the SynScan App Protocol over UDP 11881; `synscan-wifi` provides SynScan Communication Protocol compatibility over TCP 11882.
+- Native serial discovery includes EQDrive and persisted serial-port migration; selecting a new Gemini COM port updates the persisted native backend binding after successful rediscovery.
+- Documentation: `docs/EQDRIVE.md`, `docs/ASCOM_CLASSIC.md`, `docs/SYNSCAN_NETWORK.md` and Ukrainian mirrors.
 
 ## Current major gaps
 
@@ -78,3 +89,12 @@ New-chat handoff: `docs/NEW_CHAT_HANDOFF.md` and `docs/uk/NEW_CHAT_HANDOFF.md`.
 
 - Gemini EAF: native discovery, connection, direct motion and autofocus-driven motion are confirmed on real Windows/USB-serial hardware.
 - Node shutdown: `Ctrl+C` is converted into a main-thread graceful shutdown before the Qt event dispatcher is destroyed; a second `Ctrl+C` remains a force-termination escape hatch.
+
+## v0.2.10.16 HIL status/recovery
+- graceful Ctrl+C shutdown is HIL-confirmed;
+- Stellarium bridge accepts GOTO and forwards RA/Dec into the node;
+- QHY auto-connect retries now refresh native discovery first;
+- Gemini moves no longer block status until physical completion; autofocus explicitly waits for idle;
+- GUI polls live focuser position/moving during manual motion;
+- Sky-Watcher native discovery now emits detailed SynScan serial handshake diagnostics and same-session retry.
+- Important: the native RA/DEC Sky-Watcher device currently targets the SynScan hand-controller protocol. Direct USB/EQDIR motor-controller transport is not yet exposed as a full mount backend.

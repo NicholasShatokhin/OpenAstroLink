@@ -1,5 +1,6 @@
 #include "algorithms/autofocus_engine.h"
 #include <QThread>
+#include <QElapsedTimer>
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
 #include <cmath>
@@ -14,11 +15,25 @@ bool AutofocusEngine::interruptibleSleep(int milliseconds,const Cancellation&can
     while(remaining>0){if(cancel&&cancel())return false;const int slice=std::min(remaining,25);QThread::msleep(slice);remaining-=slice;}
     return !(cancel&&cancel());
 }
+static bool waitForFocuserIdle(IFocuser&foc,const AutofocusEngine::Cancellation&cancel,QString&error,int timeoutMs=120000){
+    QElapsedTimer timer;timer.start();
+    while(timer.elapsed()<timeoutMs){
+        if(cancel&&cancel()){error="Autofocus cancelled";return false;}
+        FocuserStatus status;
+        if(!foc.status(status,&error))return false;
+        if(!status.moving)return true;
+        int remaining=200;
+        while(remaining>0){if(cancel&&cancel()){error="Autofocus cancelled";return false;}const int slice=std::min(remaining,25);QThread::msleep(slice);remaining-=slice;}
+    }
+    error=QString("Focuser motion did not complete within %1 ms").arg(timeoutMs);
+    return false;
+}
 std::vector<FocusSample> AutofocusEngine::scan(ICamera&cam,IFocuser&foc,AutofocusMode mode,int start,int end,int step,int frames,int settle,bool autoRoi,const Progress&cb,const Cancellation&cancel){
     std::vector<FocusSample> out;if(step<=0)return out;
     for(int p=start;p<=end;p+=step){
         if(cancel&&cancel())break;
         QString err;if(!foc.moveAbsolute(std::max(0,p),&err))continue;
+        if(!waitForFocuserIdle(foc,cancel,err))break;
         if(!interruptibleSleep(std::max(0,settle),cancel))break;
         std::vector<double> vals;
         for(int i=0;i<std::max(1,frames);++i){
@@ -46,6 +61,7 @@ AutofocusResult AutofocusEngine::run(ICamera&cam,IFocuser&foc,const AutofocusReq
     if(cancel&&cancel()){foc.halt(nullptr);out.message="Autofocus cancelled";return out;}
     if(!fine.empty())best=std::max_element(fine.begin(),fine.end(),[](auto&a,auto&b){return a.score<b.score;});
     if(!foc.moveAbsolute(best->position,&err)){out.message=err;return out;}
+    if(!waitForFocuserIdle(foc,cancel,err)){out.message=err;return out;}
     out.success=true;out.bestPosition=best->position;out.bestScore=best->score;out.message="Autofocus completed";return out;
 }
 

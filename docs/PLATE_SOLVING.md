@@ -1,6 +1,6 @@
 # Plate solving — adaptive urban workflow
 
-This document describes the v0.2.10.13 node-local plate-solving path intended for light-polluted sites, small sensors and mounts where a single 10–15 s exposure produces elongated stars.
+This document describes the v0.2.10.16 node-local plate-solving path intended for light-polluted sites, small sensors and mounts where a single 10–15 s exposure produces elongated stars.
 
 ## Why the adaptive path exists
 
