@@ -1,5 +1,6 @@
 #pragma once
 #include "core/interfaces.h"
+#include "core/mount_geometry.h"
 #include <QHostAddress>
 #include <QUdpSocket>
 #include <utility>
@@ -14,7 +15,7 @@ namespace oas {
 // separately by the synscan-app backend on UDP/11881.
 class SynScanNetworkMount final : public IMount {
 public:
-    explicit SynScanNetworkMount(QString endpoint);
+    explicit SynScanNetworkMount(QString endpoint, MountGeometryConfig geometry = {}, ObserverLocation observer = {});
     QString id() const override{return "synscan-wifi:"+endpoint_;}
     QString displayName() const override{return "Direct SynScan/EQDrive Wi-Fi mount";}
     QString backendName() const override{return "synscan-wifi";}
@@ -28,6 +29,7 @@ public:
     bool setTracking(bool enabled,QString *error=nullptr) override;
     bool park(bool enabled,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
+    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; }
 private:
     bool resolveEndpoint(QHostAddress &host,quint16 &port,QString *error);
     bool exchange(const QByteArray &command,QByteArray &reply,int timeoutMs=1800,QString *error=nullptr);
@@ -38,7 +40,7 @@ private:
     bool waitStopped(int axis,int timeoutMs,QString *error=nullptr);
     bool gotoAxisDelta(int axis,double deltaDeg,QString *error=nullptr);
     double axisDeltaDeg(int axis,qint32 from,qint32 to) const;
-    std::pair<double,double> skyFromEncoder(qint32 p1,qint32 p2,qint64 nowMs) const;
+    MechanicalAxes axesFromEncoder(qint32 p1,qint32 p2) const;
 
     QString endpoint_;
     ConnectionState state_{ConnectionState::Disconnected};
@@ -48,14 +50,9 @@ private:
     quint32 countsPerRev1_{0},countsPerRev2_{0};
     quint32 timerFreq_{0};
     QString firmware1_,firmware2_;
-    bool coordinateSynced_{false};
-    qint32 syncPos1_{0},syncPos2_{0};
-    double syncRaDeg_{0.0},syncDecDeg_{0.0};
-    qint64 syncUtcMs_{0};
+    MountGeometryModel geometry_{};
     bool trackingRequested_{false};
     bool parked_{false};
-    double raSkyPerAxis_{-1.0};
-    double decSkyPerAxis_{1.0};
     double safetyGotoLimitDeg_{15.0};
 };
 }

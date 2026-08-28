@@ -83,15 +83,11 @@ int main(int argc,char **argv){
     oas::ApplicationController controller;
     QObject::connect(&controller,&oas::ObservatoryController::logMessage,[](const QString&m){qInfo().noquote()<<m;});
 
-    QTimer reconnectTimer;
-    reconnectTimer.setInterval(10000);
-
     QTimer consoleSignalTimer;
     consoleSignalTimer.setInterval(50);
     QObject::connect(&consoleSignalTimer,&QTimer::timeout,&app,[&](){
         if(!consoleShutdownRequested())return;
         consoleSignalTimer.stop();
-        reconnectTimer.stop();
         qInfo()<<"Console interrupt received; starting graceful shutdown. Press Ctrl+C again to force termination.";
         QCoreApplication::quit();
     });
@@ -99,7 +95,6 @@ int main(int argc,char **argv){
 
     QObject::connect(&app,&QCoreApplication::aboutToQuit,&controller,[&](){
         consoleSignalTimer.stop();
-        reconnectTimer.stop();
         controller.shutdown();
     });
 
@@ -117,37 +112,32 @@ int main(int argc,char **argv){
         if(parser.isSet(noAuto))return true;
         QStringList errors;const bool ok=controller.restoreConfiguredDevices(&errors,false);
         for(const auto&e:errors)qWarning().noquote()<<e;
-        if(ok&&reconnectTimer.isActive()){
-            reconnectTimer.stop();
-            qInfo()<<"Persisted devices restored.";
-        }
+        if(ok)qInfo()<<"Persisted devices restored.";
         return ok;
     };
 
+    // One vendor-neutral native enumeration is performed after the HTTP/WS
+    // control plane is already online. There is intentionally NO periodic
+    // rediscovery loop. Drivers with reliable vendor hot-plug callbacks (Canon
+    // EDSDK) may request a bounded driver-scoped rediscovery; other hardware is
+    // enumerated by the explicit GUI/API Refresh action. This avoids repeatedly
+    // initializing QHY or probing serial drivers on installations without them.
+    bool initialDiscoveryCompleted=false;
     QObject::connect(&controller,&oas::ApplicationController::nativeDiscoveryCompleted,&app,[&](const QStringList&){
-        const bool ok=tryRestoreFromCache();
-        if(!ok&&!reconnectTimer.isActive())reconnectTimer.start();
-    });
-
-    QObject::connect(&reconnectTimer,&QTimer::timeout,&app,[&](){
-        if(controller.nativeDiscoveryRunning())return;
-        const QStringList missing=controller.missingAutoConnectNativeDrivers();
-        if(missing.isEmpty()){
-            tryRestoreFromCache();
-            return;
+        tryRestoreFromCache();
+        if(!initialDiscoveryCompleted){
+            initialDiscoveryCompleted=true;
+            const QStringList missing=controller.missingAutoConnectNativeDrivers();
+            if(!missing.isEmpty())
+                qWarning().noquote()<<"Some persisted native devices are unavailable. Canon EDSDK hot-plug can rediscover automatically; other native hardware may require Refresh native device discovery. Automatic periodic probing is disabled.";
         }
-        controller.refreshNativeDiscoveryAsync(missing);
     });
 
-    // Compatibility backends such as Classic ASCOM can reconnect immediately
-    // from persisted settings. Native bindings will reconnect as soon as the
-    // asynchronous discovery cache is populated.
-    const bool restoredImmediately=tryRestoreFromCache();
-    controller.refreshNativeDiscoveryAsync(); // initial all-driver scan, off the main event loop
-    if(!restoredImmediately&&!reconnectTimer.isActive()){
-        reconnectTimer.start();
-        qWarning()<<"One or more persisted devices are unavailable; native discovery continues in the background while the node stays remotely configurable.";
-    }
+    // Compatibility backends such as Classic ASCOM can reconnect immediately.
+    // Native bindings reconnect after this one initial scan or after an
+    // explicit user refresh.
+    tryRestoreFromCache();
+    controller.refreshNativeDiscoveryAsync();
 
     if(!parser.isSet(noStellarium)){
         const bool enableStellarium=parser.isSet(stellariumOpt)||settings.stellariumEnabled();

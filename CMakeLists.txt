@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.19 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.30 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -59,6 +59,9 @@ set(OAS_CORE_SOURCES
     src/integrations/stellarium_telescope_server.h
     src/backends/oal_native_devices.h
     src/core/settings.cpp
+    src/core/equatorial_frames.cpp
+    src/core/mount_geometry.cpp
+    src/core/equatorial_frames.h
     src/core/application_controller.cpp
     src/core/operation_manager.cpp
     src/backends/simulated_devices.cpp
@@ -185,6 +188,10 @@ endif()
 # Native OpenAstroLink drivers (ABI v2)
 # ---------------------------------------------------------------------------
 set(OAL_DRIVER_BUILD_DIR "${CMAKE_BINARY_DIR}/drivers")
+# The build-tree driver directory is a generated catalogue for the *current*
+# configure.  Remove it on reconfigure so a driver disabled in CMake cannot
+# survive as a stale DLL/manifest and be loaded by the next node run.
+file(REMOVE_RECURSE "${OAL_DRIVER_BUILD_DIR}")
 file(MAKE_DIRECTORY "${OAL_DRIVER_BUILD_DIR}")
 
 function(oal_set_driver_output target)
@@ -477,4 +484,10 @@ if(OAS_BUILD_TESTS)
     add_executable(oal-adaptive-plate-solve-smoke tests/adaptive_plate_solve_smoke.cpp)
     target_link_libraries(oal-adaptive-plate-solve-smoke PRIVATE oas_core)
     add_test(NAME oal-adaptive-plate-solve-smoke COMMAND oal-adaptive-plate-solve-smoke)
+    add_executable(oal-equatorial-frames-smoke tests/equatorial_frames_smoke.cpp)
+    target_link_libraries(oal-equatorial-frames-smoke PRIVATE oas_core)
+    add_test(NAME oal-equatorial-frames-smoke COMMAND oal-equatorial-frames-smoke)
+    add_executable(oal-mount-geometry-smoke tests/mount_geometry_smoke.cpp)
+    target_link_libraries(oal-mount-geometry-smoke PRIVATE oas_core)
+    add_test(NAME oal-mount-geometry-smoke COMMAND oal-mount-geometry-smoke)
 endif()

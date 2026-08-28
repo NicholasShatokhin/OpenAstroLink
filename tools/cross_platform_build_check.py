@@ -12,12 +12,12 @@ def need(path,*tokens):
             raise SystemExit(f'FAIL {path}: missing {t}')
 
 need(Path('CMakeLists.txt'),
-     'VERSION 0.2.10.19','OAS_CANON_TRANSPORT','CANON_EDSDK_INCLUDE_DIR','CANON_EDSDK_LIBRARY',
+     'VERSION 0.2.10.30','OAS_CANON_TRANSPORT','CANON_EDSDK_INCLUDE_DIR','CANON_EDSDK_LIBRARY',
      'oal_driver_canon_edsdk.cpp','QHYCCD_RUNTIME_DIR','ZWO_ASI_RUNTIME_DIR','ZWO_EAF_RUNTIME_DIR',
      'build_features.json')
 need(Path('drivers/canon/oal_driver_canon_edsdk.cpp'),
      'EdsInitializeSDK','EdsGetCameraList','EdsOpenSession','EdsDownload','EdsDownloadThumbnail',
-     'kEdsCameraCommand_BulbStart','host.publishFrame','0.2.10.19')
+     'kEdsCameraCommand_BulbStart','host.publishFrame','0.2.10.30')
 need(Path('CMakeUserPresets.example.json'),
      'my-windows-observatory','my-windows-observatory-edsdk','my-linux-observatory','CANON_EDSDK_RUNTIME_DIR','QHYCCD_RUNTIME_DIR')
 need(Path('scripts/package_windows.ps1'),'windeployqt','VendorRuntimeDirs','cmake --install')

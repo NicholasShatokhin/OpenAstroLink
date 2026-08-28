@@ -53,6 +53,10 @@ public:
     // Rescan only the requested driver IDs and merge their results into the cached device list.
     // This avoids touching unrelated vendor SDKs/serial ports during reconnect of one missing device.
     QJsonArray refreshDevices(const QStringList &driverIds, QStringList *errors=nullptr);
+    // Explicit user-triggered hard driver reload. ABI-v2 reload unloads the
+    // driver DLL so vendor SDK dependencies get a fresh process-local enumeration boundary.
+    // Used only when no device from that driver is active.
+    bool restartDriver(const QString &driverId, QString *error=nullptr);
     QJsonObject capabilities(const QString &driverId, const QString &deviceId,
                              QString *error=nullptr) const;
     QJsonObject health(const QString &driverId, const QString &deviceId,

@@ -40,6 +40,7 @@ public:
     virtual bool setTracking(bool enabled, QString *error = nullptr) = 0;
     virtual bool park(bool enabled, QString *error = nullptr) = 0;
     virtual bool pulseGuide(GuideDirection direction, int durationMs, QString *error = nullptr) = 0;
+    virtual void configureGeometry(const MountGeometryConfig &, const ObserverLocation &) {}
     // Optional predictive pier-side query. Classic ASCOM drivers can expose
     // DestinationSideOfPier; other backends may leave this unknown.
     virtual QString destinationPierSide(const EquatorialCoord &, QString *error = nullptr) {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.19
+  version: 0.2.10.30
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -41,6 +41,11 @@ paths:
     get:
       responses: { '200': { $ref: '#/components/responses/Success' } }
     post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelescopeProfile' }
       responses: { '200': { $ref: '#/components/responses/Success' } }
   /devices/connect:
     post:
@@ -212,6 +217,7 @@ paths:
                 minStarsForSolve: { type: integer, minimum: 4, default: 20 }
                 exposureGrowth: { type: number, minimum: 1, default: 1.35 }
                 maxSingleExposureSec: { type: number, exclusiveMinimum: 0, default: 3.0 }
+                maxCapturePhaseSec: { type: number, minimum: 15, maximum: 600, default: 120.0 }
                 registerFrames: { type: boolean, default: true }
                 equalizeBackground: { type: boolean, default: true }
                 useMountHint: { type: boolean, default: true }
@@ -286,6 +292,45 @@ components:
       properties:
         raDeg: { type: number, minimum: 0, maximum: 360 }
         decDeg: { type: number, minimum: -90, maximum: 90 }
+        coordinateFrame:
+          type: string
+          enum: [J2000, JNOW]
+          default: J2000
+          description: Equatorial coordinate frame. J2000 is the canonical OAL interchange frame; JNOW is converted to J2000 by the node.
+    MountGeometry:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [german-equatorial, fork-equatorial, alt-azimuth, alt-azimuth-derotator, equatorial-platform, custom-two-axis]
+          default: german-equatorial
+        axis1Sign: { type: integer, enum: [-1, 1], default: 1 }
+        axis2Sign: { type: integer, enum: [-1, 1], default: 1 }
+        preferredPierSide: { type: string, enum: [east, west], default: east }
+        homeAxis1Deg: { type: number, default: 90 }
+        homeAxis2Deg: { type: number, default: 0 }
+        parkAxis1Deg: { type: number, default: 90 }
+        parkAxis2Deg: { type: number, default: 0 }
+        customPark: { type: boolean, default: false }
+        allowAutomaticPierFlip: { type: boolean, default: false }
+    TelescopeProfile:
+      type: object
+      properties:
+        name: { type: string }
+        opticalDesign: { type: string }
+        apertureMm: { type: number }
+        centralObstructionMm: { type: number }
+        focalLengthMm: { type: number }
+        pixelSizeUm: { type: number }
+        sensorWidthPx: { type: integer }
+        sensorHeightPx: { type: integer }
+        observer:
+          type: object
+          properties:
+            latitudeDeg: { type: number, minimum: -90, maximum: 90 }
+            longitudeDeg: { type: number, minimum: -180, maximum: 180 }
+            elevationM: { type: number }
+        mountGeometry: { $ref: '#/components/schemas/MountGeometry' }
     ExposureRequest:
       type: object
       properties:
@@ -319,6 +364,7 @@ components:
               name: { type: string }
               raDeg: { type: number }
               decDeg: { type: number }
+              coordinateFrame: { type: string, enum: [J2000, JNOW], default: J2000 }
               exposureSec: { type: number, default: 30 }
               repeats: { type: integer, default: 1 }
               filter: { type: string }

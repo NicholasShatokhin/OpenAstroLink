@@ -8,7 +8,6 @@
 #include <QList>
 #include <QUuid>
 #include <QThread>
-#include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
 #include <exception>
 
@@ -172,7 +171,7 @@ void OperationManager::tryStartQueued() {
     }
     for (const auto &x : launches) {
         emit operationChanged(x.json);
-        QtConcurrent::run(&pool_, [this,id=x.id,task=x.task,cancel=x.cancel](){ runOperation(id, task, cancel); });
+        pool_.start([this,id=x.id,task=x.task,cancel=x.cancel](){ runOperation(id, task, cancel); });
     }
 }
 

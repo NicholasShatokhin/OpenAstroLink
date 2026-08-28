@@ -71,6 +71,12 @@ int main(int argc, char **argv) {
             out << "  driver " << d.value("driverId").toString() << "  ABI " << d.value("abiVersion").toInt()
                 << "  " << d.value("version").toString() << "  isolation=" << d.value("isolation").toString("unspecified") << "\n";
         }
+        bool qhyDriverLoaded = false, canonDriverLoaded = false;
+        for (const auto &v : drivers) {
+            const QString id = v.toObject().value("driverId").toString();
+            qhyDriverLoaded |= id == "oal.qhy";
+            canonDriverLoaded |= id == "oal.canon";
+        }
         bool qhyFound = false, canonFound = false, geminiFound = false, skywatcherFound = false, eqdriveFound = false, zwoAsiFound = false, zwoEafFound = false;
         for (const auto &v : devices) {
             const auto d = v.toObject();
@@ -88,11 +94,13 @@ int main(int argc, char **argv) {
         }
         for (const auto &e : errors) out << "  warning: " << e << "\n";
         if (!parser.isSet("no-qhy") && !qhyFound) {
-            out << "Native QHY: NOT READY  oal.qhy driver loaded no camera (or driver not built)\n";
+            out << (qhyDriverLoaded ? "Native QHY: NOT READY  oal.qhy loaded, but QHY SDK enumerated no camera\n"
+                                    : "Native QHY: DISABLED/NOT LOADED  oal.qhy is not in the current build\n");
             allOk = false;
         } else if (!parser.isSet("no-qhy")) out << "Native QHY: OK\n";
         if (!parser.isSet("no-canon") && !canonFound) {
-            out << "Native Canon EOS: NOT READY  oal.canon driver loaded no camera (or driver not built)\n";
+            out << (canonDriverLoaded ? "Native Canon EOS: NOT READY  oal.canon loaded, but Canon EDSDK enumerated no camera\n"
+                                      : "Native Canon EOS: DISABLED/NOT LOADED  oal.canon is not in the current build\n");
             allOk = false;
         } else if (!parser.isSet("no-canon")) out << "Native Canon EOS: OK\n";
         out << "Native Gemini EAF: " << (geminiFound ? "OK" : "not discovered") << "\n";

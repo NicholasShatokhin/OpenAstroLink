@@ -11,7 +11,7 @@ need("src/core/settings.cpp","nativeSerialPort","saveNativeSerialPort")
 need("src/core/application_controller.cpp","availableSerialPorts()","setNativeSerialPortOverride","OAL_GEMINI_PORT","OAL_SKYWATCHER_PORT")
 need("src/core/remote_observatory_controller.cpp","system/serial-ports","drivers/serial-port")
 need("src/oal/oal_server.cpp","/api/v1/system/serial-ports","/api/v1/drivers/serial-port")
-need("src/gui/main_window.cpp","Native serial discovery","Auto — scan all serial ports","Apply & rediscover native devices")
+need("src/gui/main_window.cpp","Native serial discovery","Auto — scan all serial ports","Apply port & rediscover selected serial driver")
 failed=[m for ok,m in checks if not ok]
 if failed:
     print("Serial-port discovery/UI check: FAIL")

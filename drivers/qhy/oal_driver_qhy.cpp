@@ -42,14 +42,12 @@ struct CameraState {
 
 struct DriverState {
     std::mutex mutex;
-    // Serializes SDK resource lifetime (Init/Release/Scan/Open/Close).  QHY's
-    // Windows SDK can keep a stale USB snapshot when the process starts before
-    // the camera is plugged in, so hot-plug recovery may recycle the global SDK
-    // resource only when no camera is open.
+    // Serializes SDK resource lifetime (Init/Release/Scan/Open/Close). Explicit
+    // user Refresh may hard-reload the inactive OAL driver DLL when Windows QHY
+    // SDK enumeration remains stale; ordinary devices() never retries on a timer.
     std::mutex sdkLifecycleMutex;
     bool sdkReady{false};
     int lastScanCount{-1};
-    std::chrono::steady_clock::time_point lastDiscoveryRecovery{};
     std::unordered_map<std::string, std::unique_ptr<CameraState>> cameras;
 } state;
 
@@ -70,15 +68,24 @@ std::string rcError(const char*what,std::uint32_t rc){return std::string(what)+"
 bool qok(std::uint32_t rc){return rc==QHYCCD_SUCCESS;}
 
 bool start(void*,const char*){
-    std::lock_guard<std::mutex> lock(state.mutex);if(state.sdkReady)return true;const auto rc=InitQHYCCDResource();state.sdkReady=rc==QHYCCD_SUCCESS;if(!state.sdkReady)log(3,rcError("InitQHYCCDResource",rc));return state.sdkReady;
+    std::lock_guard<std::mutex> sdkLock(state.sdkLifecycleMutex);
+    std::lock_guard<std::mutex> lock(state.mutex);
+    if(state.sdkReady)return true;
+    const auto rc=InitQHYCCDResource();state.sdkReady=rc==QHYCCD_SUCCESS;state.lastScanCount=-1;
+    if(!state.sdkReady)log(3,rcError("InitQHYCCDResource",rc));
+    return state.sdkReady;
 }
 void closeCamera(CameraState &c){
     c.abortRequested=true;if(c.handle){CancelQHYCCDExposingAndReadout(c.handle);CloseQHYCCD(c.handle);c.handle=nullptr;}c.connected=false;c.sensorW=c.sensorH=c.nativeBpp=0;c.lastExposureUs=c.lastGain=c.lastOffset=-1.0;
 }
 void stop(void*){
-    std::lock_guard<std::mutex> lock(state.mutex);for(auto &x:state.cameras){std::lock_guard<std::mutex> op(x.second->operationMutex);closeCamera(*x.second);}if(state.sdkReady){ReleaseQHYCCDResource();state.sdkReady=false;}
+    std::lock_guard<std::mutex> sdkLock(state.sdkLifecycleMutex);
+    std::lock_guard<std::mutex> lock(state.mutex);
+    for(auto &x:state.cameras){std::lock_guard<std::mutex> op(x.second->operationMutex);closeCamera(*x.second);}
+    if(state.sdkReady){ReleaseQHYCCDResource();state.sdkReady=false;}
+    state.cameras.clear();state.lastScanCount=-1;
 }
-const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.19","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
+const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.25","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
 bool anyCameraConnected(){
     std::lock_guard<std::mutex> lock(state.mutex);
     for(const auto &entry:state.cameras) if(entry.second && entry.second->connected.load()) return true;
@@ -107,35 +114,11 @@ const char *devices(void*){
         state.lastScanCount=count;
     }
 
-    // HIL on Windows showed that some QHY SDK builds keep returning the USB
-    // snapshot from InitQHYCCDResource() after a camera is hot-plugged.  The
-    // vendor API explicitly pairs InitQHYCCDResource with ReleaseQHYCCDResource.
-    // Recycle that global resource only after two consecutive zero-device scans,
-    // only when no camera is open, and at most once every eight seconds.  This
-    // avoids repeatedly calling Init without Release and never disrupts an
-    // active exposure/camera connection.
-    const auto now=std::chrono::steady_clock::now();
-    const bool recoveryDue=state.lastDiscoveryRecovery.time_since_epoch().count()==0 ||
-        std::chrono::duration_cast<std::chrono::seconds>(now-state.lastDiscoveryRecovery).count()>=8;
-    if(count==0 && previousCount==0 && !anyCameraConnected() && recoveryDue){
-        state.lastDiscoveryRecovery=now;
-        log(1,"QHY hot-plug recovery: recycling SDK resource after repeated zero-device scans");
-        const auto releaseRc=ReleaseQHYCCDResource();
-        state.sdkReady=false;
-        if(releaseRc!=QHYCCD_SUCCESS) log(2,rcError("ReleaseQHYCCDResource",releaseRc));
-        std::this_thread::sleep_for(std::chrono::milliseconds(150));
-        const auto initRc=InitQHYCCDResource();
-        state.sdkReady=initRc==QHYCCD_SUCCESS;
-        if(!state.sdkReady){
-            log(3,rcError("InitQHYCCDResource(hot-plug recovery)",initRc));
-            state.lastScanCount=0;
-            return copyString("[]");
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(150));
-        count=int(ScanQHYCCD());
-        state.lastScanCount=count;
-        log(count>0?1:2,"QHY hot-plug recovery scan discovered "+std::to_string(count)+" camera(s)");
-    }
+    // Do not attempt hidden timer/count based vendor recovery here. Runtime
+    // discovery is user-driven after the one startup scan. If an explicit
+    // all-driver Refresh sees QHY=0, ApplicationController hard-reloads the
+    // inactive oal.qhy DLL (thereby unloading/reloading QHYCCD) and scans once
+    // more. This keeps discovery deterministic and vendor-neutral.
 
     std::ostringstream o;o<<'[';bool first=true;for(int i=0;i<count;++i){char id[128]{};if(GetQHYCCDId(i,id)!=QHYCCD_SUCCESS)continue;if(!first)o<<',';first=false;const std::string raw=id,dev="qhy:"+raw;o<<"{\"id\":"<<quote(dev)<<",\"type\":\"camera\",\"name\":"<<quote(raw)<<",\"vendor\":\"QHYCCD\",\"transport\":{\"kind\":\"vendor-sdk\",\"hardwareId\":"<<quote(raw)<<"}}";camera(dev);}o<<']';return copyString(o.str());
 }
@@ -227,7 +210,7 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
 bool cancel(void*,const char *device,const char*){auto*c=camera(device?device:"");if(!c||!c->handle)return false;c->abortRequested=true;return CancelQHYCCDExposingAndReadout(c->handle)==QHYCCD_SUCCESS;}
 void releaseString(void*,const char*p){if(p)host.deallocate(host.hostContext,const_cast<char*>(p));}
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.19",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.25",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 } // namespace
 
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h){if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||h->structSize<sizeof(OalDriverHostV2))return nullptr;host=*h;return &api;}

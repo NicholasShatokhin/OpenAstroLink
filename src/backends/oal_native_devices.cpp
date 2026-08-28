@@ -1,4 +1,5 @@
 #include "backends/oal_native_devices.h"
+#include "core/equatorial_frames.h"
 #include "oal/driver_api.h"
 #include "oal/driver_plugin_loader.h"
 
@@ -137,6 +138,9 @@ bool NativeOalCamera::capture(const ExposureRequest &r, CameraFrame &frame, QStr
     frame.binX = actualBinX;
     frame.binY = actualBinY;
     frame.source = deviceId_;
+    frame.scienceFilePath = data.value("savedPath").toString();
+    if(frame.scienceFilePath.isEmpty()) frame.scienceFilePath = native.metadata.value("scienceFilePath").toString();
+    if(frame.scienceFilePath.isEmpty()) frame.scienceFilePath = native.metadata.value("originalPath").toString();
     return true;
 }
 
@@ -152,16 +156,57 @@ QSize NativeOalCamera::sensorSize() const {
     return {sensor.value("widthPx").toInt(), sensor.value("heightPx").toInt()};
 }
 
-NativeOalMount::NativeOalMount(std::shared_ptr<OalDriverPluginLoader> l, const QJsonObject &d)
-    : NativeOalDeviceBase(std::move(l), d) {}
+NativeOalMount::NativeOalMount(std::shared_ptr<OalDriverPluginLoader> l, const QJsonObject &d,
+                                   MountGeometryConfig geometry, ObserverLocation observer)
+    : NativeOalDeviceBase(std::move(l), d), geometry_(std::move(geometry), observer) {
+    const auto mountCaps=capabilities(nullptr).value("mount").toObject();
+    geometryAware_=mountCaps.value("rawAxes").toObject().value("supported").toBool(false);
+}
 bool NativeOalMount::connectDevice(QString *error) { state_=ConnectionState::Connecting;if(!invokeOk("device.connect",{},nullptr,error)){state_=ConnectionState::Error;return false;}state_=ConnectionState::Connected;return true; }
 void NativeOalMount::disconnectDevice(){if(state_==ConnectionState::Disconnected)return;invokeOk("device.disconnect",{},nullptr,nullptr);state_=ConnectionState::Disconnected;}
-bool NativeOalMount::status(MountStatus &s, QString *error){QJsonObject d;if(!invokeOk("mount.status",{},&d,error))return false;s.connection=state_;s.coordinate={d.value("raDeg").toDouble(),d.value("decDeg").toDouble()};s.coordinateValid=d.contains("coordinateValid")?d.value("coordinateValid").toBool():true;s.tracking=d.value("tracking").toBool();s.slewing=d.value("slewing").toBool();s.parked=d.value("parked").toBool();s.pierSide=d.value("pierSide").toString("unknown");return true;}
-bool NativeOalMount::slewTo(const EquatorialCoord&t,QString*e){return invokeOk("mount.slew",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);}
+bool NativeOalMount::rawAxisStatus(MechanicalAxes &axes,bool *slewing,QString *error) const {
+    QJsonObject d;if(!invokeOk("mount.axisStatus",{},&d,error))return false;
+    axes={d.value("axis1Deg").toDouble(),d.value("axis2Deg").toDouble(),true};
+    if(slewing)*slewing=d.value("running1").toBool()||d.value("running2").toBool()||d.value("goto1").toBool()||d.value("goto2").toBool();
+    return true;
+}
+bool NativeOalMount::rawAxisGoto(const MechanicalAxes &axes,double limit,QString *error){
+    return invokeOk("mount.gotoAxes",{{"axis1Deg",axes.axis1Deg},{"axis2Deg",axes.axis2Deg},{"maxAxisDeltaDeg",limit}},nullptr,error);
+}
+bool NativeOalMount::status(MountStatus &s, QString *error){
+    if(geometryAware_){
+        MechanicalAxes axes;bool moving=false;if(!rawAxisStatus(axes,&moving,error))return false;
+        s.connection=state_;s.axes=axes;s.geometryType=mountGeometryTypeName(geometry_.config().type);s.slewing=moving;s.parked=parked_;s.pierSide=geometry_.pierSide();
+        EquatorialCoord sky;if(geometry_.skyFromAxes(axes,sky,QDateTime::currentDateTimeUtc(),nullptr)){s.coordinate=sky;s.coordinateValid=true;}else{s.coordinate={0,0,EquatorialFrame::J2000};s.coordinateValid=false;}
+        // Tracking state is still owned by the driver. Query compatibility status
+        // for this flag only; axis/sky coordinates come exclusively from Core geometry.
+        QJsonObject d;if(invokeOk("mount.status",{},&d,nullptr))s.tracking=d.value("tracking").toBool();
+        return true;
+    }
+    QJsonObject d;if(!invokeOk("mount.status",{},&d,error))return false;s.connection=state_;s.coordinate={d.value("raDeg").toDouble(),d.value("decDeg").toDouble(),equatorialFrameFromString(d.value("coordinateFrame").toString("J2000"))};s.coordinateValid=d.contains("coordinateValid")?d.value("coordinateValid").toBool():true;s.tracking=d.value("tracking").toBool();s.slewing=d.value("slewing").toBool();s.parked=d.value("parked").toBool();s.pierSide=d.value("pierSide").toString("unknown");s.geometryType="backend-native";return true;
+}
+bool NativeOalMount::slewTo(const EquatorialCoord&t,QString*e){
+    if(!geometryAware_)return invokeOk("mount.slew",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);
+    if(parked_){if(e)*e="Mount is parked; unpark before GOTO";return false;}
+    MechanicalAxes current,target;if(!rawAxisStatus(current,nullptr,e))return false;if(!geometry_.axesForSky(t,current,target,QDateTime::currentDateTimeUtc(),e))return false;
+    // Keep the existing supervised HIL safety envelope until the GEM geometry
+    // is qualified on long slews. Mechanical Park is a separate explicit path.
+    return rawAxisGoto(target,15.0,e);
+}
 bool NativeOalMount::abortMotion(QString*e){return invokeOk("mount.abort",{},nullptr,e);}
-bool NativeOalMount::syncTo(const EquatorialCoord&t,QString*e){return invokeOk("mount.sync",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);}
-bool NativeOalMount::setTracking(bool v,QString*e){return invokeOk("mount.setTracking",{{"enabled",v}},nullptr,e);}
-bool NativeOalMount::park(bool v,QString*e){return invokeOk("mount.park",{{"parked",v}},nullptr,e);}
+bool NativeOalMount::syncTo(const EquatorialCoord&t,QString*e){
+    if(!geometryAware_)return invokeOk("mount.sync",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);
+    MechanicalAxes axes;if(!rawAxisStatus(axes,nullptr,e))return false;return geometry_.sync(t,axes,QDateTime::currentDateTimeUtc(),e);
+}
+bool NativeOalMount::setTracking(bool v,QString*e){
+    if(geometryAware_){const int direction=geometry_.trackingAxis1Direction();if(direction==0&&v){if(e)*e="This mount geometry requires two-axis tracking; raw native rate-vector tracking is not implemented yet";return false;}return invokeOk("mount.setTracking",{{"enabled",v},{"axis1Direction",direction}},nullptr,e);}
+    return invokeOk("mount.setTracking",{{"enabled",v}},nullptr,e);
+}
+bool NativeOalMount::park(bool v,QString*e){
+    if(!geometryAware_)return invokeOk("mount.park",{{"parked",v}},nullptr,e);
+    if(!v){parked_=false;return true;}
+    const auto target=geometry_.parkAxes();if(!rawAxisGoto(target,180.0,e))return false;parked_=true;return true;
+}
 bool NativeOalMount::pulseGuide(GuideDirection dir,int ms,QString*e){QString d;switch(dir){case GuideDirection::North:d="north";break;case GuideDirection::South:d="south";break;case GuideDirection::East:d="east";break;case GuideDirection::West:d="west";break;}return invokeOk("mount.pulseGuide",{{"direction",d},{"durationMs",ms}},nullptr,e);}
 
 NativeOalFocuser::NativeOalFocuser(std::shared_ptr<OalDriverPluginLoader> l, const QJsonObject &d)

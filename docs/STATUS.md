@@ -1,4 +1,4 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.19
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.25
 
 Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL or production qualification pending; 🧪 experimental; ⏳ not yet implemented.
 
@@ -42,14 +42,14 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 
 | Driver | Status | Notes |
 |---|---|---|
-| QHY | 🟡 HIL active | QHY5III462C discovery/connect/capture confirmed; post-frame readout termination, watchdog/control read-back and server-first live-catalogue propagation are under repeated-capture HIL qualification |
+| QHY | 🟡 HIL active | QHY5III462C discovery/connect/capture confirmed; explicit Refresh now hard-reloads the inactive QHY driver DLL/SDK after a zero-device scan. Windows hot-plug and repeated-capture stability still require HIL |
 | Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
 | ZWO ASI | 🟡 | Native ASI SDK, multi-camera discovery; HIL pending |
 | ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
 | Gemini EAF | ✅ basic HIL | Windows native discovery/connection, direct motion and autofocus-driven motion confirmed; long-run/reconnect/limits qualification remains |
-| Sky-Watcher/SynScan | 🟡 | Serial SynScan path retained; `synscan-wifi` is direct Motor Controller UDP/11880 and `synscan-app` is SynScan Pro/App UDP/11881; direct Wi-Fi movement semantics corrected, HIL pending |
+| Sky-Watcher/SynScan | ✅ direct Wi-Fi basic HIL | Serial SynScan path retained; `synscan-wifi` direct Motor Controller UDP/11880 has connected and physically moved the mount; `synscan-app` remains the SynScan Pro/App UDP/11881 compatibility path |
 | Sky-Watcher direct motor-controller | 🧪 | Shared Motor Controller codec now follows EQMOD/INDI status/direction semantics and is used by direct Wi-Fi plus the EQDrive native fallback |
-| EQDrive native | 🧪 | Separate `oal.eqdrive` dual-protocol driver: EQMOD-compatible Motor Controller first, ASTEP fallback; direct Standard5N HIL still pending while Classic ASCOM/EQMOD is confirmed |
+| EQDrive native | ✅ basic HIL / 🟡 geometry | Separate `oal.eqdrive` discovered and moved the real controller; v0.2.10.25 routes raw axes through the Core GEM/fork/Alt-Az geometry layer and mechanical Park model; long-slew/pier-flip HIL remains pending |
 | INDI compatibility | ✅ | Optional compatibility client; independent of native drivers |
 | Classic ASCOM | ✅ basic HIL | Windows out-of-process COM bridge; EQMOD HEQ5/6 connect, park/unpark and Stellarium-driven GOTO confirmed |
 | ASCOM Alpaca | ✅ | Compatibility backend |
@@ -73,6 +73,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Area | Status | Notes |
 |---|---|---|
 | ASTAP adapter | 🟡 | Adapter exists; real-sky qualification pending |
+| Coordinate frames | ✅ foundation | J2000 canonical API/GUI/session frame; optional JNow/of-date input via precession; full apparent/topocentric corrections not yet implemented |
 | Adaptive urban solve | 🟡 | Short-exposure quality gate + background removal + star registration/stack + mount hint + retry operation implemented; real city-sky HIL pending |
 | Closed-loop GOTO/recenter | 🟡 | Groundwork exists; end-to-end HIL pending |
 | Autofocus | 🟡 | Algorithm/operation exists; real optics/backlash tuning pending |
@@ -81,6 +82,18 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Guiding | 🟡 | Basic state/API and pulse-guide primitives; production loop pending |
 | Session/scheduler | 🟡 | Scaffolding exists; durable recovery/flip/dither/refocus pending |
 | Target resolver/ephemerides | 🟡 | Not yet a complete normative production service |
+
+## Mount geometry foundation — v0.2.10.25
+
+- J2000/JNow sky coordinates are separate from raw mechanical axes.
+- Geometry profiles: German equatorial, fork equatorial, Alt-Az, Alt-Az+derotator, equatorial platform, custom two-axis.
+- Native EQDrive and direct SynScan/EQDrive Wi-Fi use `MountGeometryModel` in OAL Core; drivers expose raw axes/motion.
+- GEM conversion uses UTC/site longitude → local sidereal time → hour angle → selected pier branch → mechanical axes. One Sync establishes installation encoder offset/signs.
+- Mechanical Park defaults to Axis1=90°, Axis2=0° and is configurable; GUI can save current axes as Park.
+- Automatic meridian flips remain disabled by default; native/direct GOTO keeps the supervised 15° axis limit until long-slew HIL completes.
+- Alt-Az coordinate conversion exists; production two-axis tracking/derotator control remains future work.
+- Classic ASCOM slews emit periodic RA/DEC/pier/tracking diagnostics.
+- Explicit Refresh can hard-reload an inactive QHY OAL driver DLL/SDK after a zero-device scan; periodic vendor polling remains disabled.
 
 ## P0 protocol hardening
 
@@ -118,4 +131,4 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 
 ## Release posture
 
-v0.2.10.19 is a **supervised HIL qualification release**, not yet an unattended observatory release. Windows HIL has confirmed graceful shutdown, QHY connection/capture, Gemini motion/autofocus motion, Classic ASCOM through EQMOD, and Stellarium-driven GOTO. Current qualification focus is QHY repeated-capture stability/control read-back, mount GOTO direction/pier-side diagnostics, SynScan App network transport, and native EQDrive discovery.
+v0.2.10.25 is a **supervised HIL qualification release**, not yet an unattended observatory release. Windows HIL has confirmed graceful shutdown, Gemini native motion/autofocus motion, native EQDrive discovery/motion, direct SynScan/EQDrive Wi-Fi motion, Classic ASCOM through EQMOD, and Stellarium-driven GOTO. QHY connection/capture has worked, but runtime hot-plug/repeated-capture stability remains under qualification. Coordinate handling is now explicitly J2000-canonical with optional JNow input; full GEM sky↔axis/pier geometry and configurable mechanical park remain major mount tasks.

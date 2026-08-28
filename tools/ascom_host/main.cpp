@@ -144,7 +144,8 @@ public:
         if(id.trimmed().isEmpty())return errorJson("INVALID_PROGID","ASCOM Telescope ProgID is empty");
         disconnect(); QString e; if(!telescope_.create(id,&e))return errorJson("DRIVER_NOT_FOUND",e);
         if(!telescope_.put(L"Connected",vBool(true),&e)){telescope_.reset();return errorJson("CONNECT_FAILED",e);} progId_=id;
-        return ok({{"progId",id},{"name",getString(L"Name",id)},{"description",getString(L"Description",id)}});
+        return ok({{"progId",id},{"name",getString(L"Name",id)},{"description",getString(L"Description",id)},
+                   {"equatorialSystem",getInt(L"EquatorialSystem",-1)}});
     }
     QJsonObject disconnect() { if(telescope_.valid()){QString e;telescope_.put(L"Connected",vBool(false),&e);telescope_.reset();}progId_.clear();return ok(); }
     QJsonObject setup(const QString &id) { Dispatch d;QString e;if(!d.create(id,&e))return errorJson("DRIVER_NOT_FOUND",e);if(!d.call(L"SetupDialog",{},nullptr,&e))return errorJson("SETUP_FAILED",e);return ok(); }
@@ -152,7 +153,8 @@ public:
         if(!telescope_.valid())return errorJson("NOT_CONNECTED","ASCOM telescope is not connected");
         return ok({{"raHours",getDouble(L"RightAscension",0.0)},{"decDeg",getDouble(L"Declination",0.0)},
                    {"tracking",getBool(L"Tracking",false)},{"slewing",getBool(L"Slewing",false)},
-                   {"parked",getBool(L"AtPark",false)},{"sideOfPier",getInt(L"SideOfPier",-1)},{"progId",progId_}});
+                   {"parked",getBool(L"AtPark",false)},{"sideOfPier",getInt(L"SideOfPier",-1)},
+                   {"equatorialSystem",getInt(L"EquatorialSystem",-1)},{"progId",progId_}});
     }
     QJsonObject slew(double ra,double dec){if(!telescope_.valid())return notConnected();QString e;const bool async=getBool(L"CanSlewAsync",false);const wchar_t*name=async?L"SlewToCoordinatesAsync":L"SlewToCoordinates";if(!telescope_.call(name,{vDouble(ra),vDouble(dec)},nullptr,&e))return errorJson("SLEW_FAILED",e);return ok({{"async",async}});}
     QJsonObject sync(double ra,double dec){return method2(L"SyncToCoordinates",vDouble(ra),vDouble(dec),"SYNC_FAILED");}

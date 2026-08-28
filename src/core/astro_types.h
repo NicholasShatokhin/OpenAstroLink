@@ -14,10 +14,36 @@ enum class ConnectionState { Disconnected, Connecting, Connected, Error };
 enum class DeviceKind { Camera, Mount, Focuser, Guider, Solver, Unknown };
 enum class AutofocusMode { Stars, Planet, Bahtinov };
 enum class GuideDirection { North, South, East, West };
+enum class EquatorialFrame { J2000, JNow };
+enum class MountGeometryType { GermanEquatorial, ForkEquatorial, AltAzimuth, AltAzimuthDerotator, EquatorialPlatform, CustomTwoAxis };
+
+struct MountGeometryConfig {
+    MountGeometryType type{MountGeometryType::GermanEquatorial};
+    // Mechanical axis orientation. +1 means increasing canonical axis angle
+    // increases the controller-reported axis coordinate. These defaults match
+    // the HIL-qualified EQDrive installation used during v0.2.10.25 tests:
+    // RA+ => decreasing hour-axis coordinate; DEC+ => increasing DEC axis.
+    int axis1Sign{1};
+    int axis2Sign{1};
+    QString preferredPierSide{"east"};
+    double homeAxis1Deg{90.0};
+    double homeAxis2Deg{0.0};
+    double parkAxis1Deg{90.0};
+    double parkAxis2Deg{0.0};
+    bool customPark{false};
+    bool allowAutomaticPierFlip{false};
+};
+
+struct MechanicalAxes {
+    double axis1Deg{0.0};
+    double axis2Deg{0.0};
+    bool valid{false};
+};
 
 struct EquatorialCoord {
     double raDeg{0.0};
     double decDeg{0.0};
+    EquatorialFrame frame{EquatorialFrame::J2000};
 };
 
 struct ObserverLocation {
@@ -49,6 +75,7 @@ struct TelescopeProfile {
     int guideSensorHeightPx{960};
 
     ObserverLocation observer{};
+    MountGeometryConfig mount{};
 
     double focalRatio() const {
         return apertureMm > 0.0 ? focalLengthMm / apertureMm : 0.0;
@@ -84,6 +111,10 @@ struct CameraFrame {
     int binX{1};
     int binY{1};
     QString source;
+    // Durable camera artifact stored by the node/driver. For DSLR RAW capture
+    // this points at the original CR2/CR3; it is distinct from image, which may
+    // be an operational preview used by UI/autofocus/plate solving.
+    QString scienceFilePath;
 };
 
 struct DetectedStar {
@@ -108,6 +139,7 @@ struct AdaptiveSolveRequest {
     int minStarsForSolve{20};
     double exposureGrowth{1.35};
     double maxSingleExposureSec{3.0};
+    double maxCapturePhaseSec{120.0};
     bool registerFrames{true};
     bool equalizeBackground{true};
     bool useMountHint{true};
@@ -118,6 +150,7 @@ struct SolveResult {
     bool success{false};
     double raDeg{0.0};
     double decDeg{0.0};
+    EquatorialFrame frame{EquatorialFrame::J2000};
     double rotationDeg{0.0};
     double scaleArcsecPerPx{0.0};
     int matchedStars{0};
@@ -137,6 +170,8 @@ struct MountStatus {
     bool slewing{false};
     bool parked{false};
     QString pierSide{"unknown"};
+    MechanicalAxes axes{};
+    QString geometryType{"unknown"};
 };
 
 struct FocuserStatus {
@@ -212,12 +247,12 @@ struct SessionStatus {
 };
 
 inline QJsonObject coordToJson(const EquatorialCoord &c) {
-    return {{"raDeg", c.raDeg}, {"decDeg", c.decDeg}};
+    return {{"raDeg", c.raDeg}, {"decDeg", c.decDeg}, {"coordinateFrame", c.frame == EquatorialFrame::JNow ? "JNOW" : "J2000"}};
 }
 
 inline QJsonObject solveToJson(const SolveResult &s) {
     return {{"success", s.success}, {"raDeg", s.raDeg}, {"decDeg", s.decDeg},
-            {"rotationDeg", s.rotationDeg}, {"scaleArcsecPerPx", s.scaleArcsecPerPx},
+            {"coordinateFrame", s.frame == EquatorialFrame::JNow ? "JNOW" : "J2000"}, {"rotationDeg", s.rotationDeg}, {"scaleArcsecPerPx", s.scaleArcsecPerPx},
             {"matchedStars", s.matchedStars}, {"rmsArcsec", s.rmsArcsec},
             {"catalog", s.catalog}, {"message", s.message}};
 }

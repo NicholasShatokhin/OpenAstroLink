@@ -10,18 +10,18 @@ def need(path,*tokens):
         checks.append((path,token))
     return text
 
-cmake=need('CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.19','OAS_ENABLE_NATIVE_EQDRIVE','OAS_ENABLE_ASCOM_CLASSIC','oal_driver_eqdrive','oas-ascom-host','src/backends/synscan_app_mount.cpp','src/backends/synscan_network_mount.cpp')
+cmake=need('CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.30','OAS_ENABLE_NATIVE_EQDRIVE','OAS_ENABLE_ASCOM_CLASSIC','oal_driver_eqdrive','oas-ascom-host','src/backends/synscan_app_mount.cpp','src/backends/synscan_network_mount.cpp')
 assert 'RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"' in cmake
 manifest=json.loads((root/'drivers/eqdrive/oal_driver_eqdrive.manifest.json').read_text())
-assert manifest['driverId']=='oal.eqdrive' and manifest['version']=='0.2.10.19' and 'mount' in manifest['deviceClasses']
+assert manifest['driverId']=='oal.eqdrive' and manifest['version']=='0.2.10.25' and 'mount' in manifest['deviceClasses']
 checks += [('eqdrive manifest','driver/version/mount')]
 
 need('drivers/skywatcher/motor_controller_protocol.h','decodeU24','decodePosition','parseStatus','getVersion','getCountsPerRev','setMotionMode','setGotoIncrement','setStepPeriod')
-need('drivers/eqdrive/oal_driver_eqdrive.cpp','official EQDrive ASTEP','read("St"','read("Pos"','read("Cg"','Goto %1 %2','Access is denied','if(m=="mount.status")','if(m=="mount.sync")','if(m=="mount.slew")','HIL_SAFETY_LIMIT','sync-anchor-v3')
+need('drivers/eqdrive/oal_driver_eqdrive.cpp','official EQDrive ASTEP','read("St"','read("Pos"','read("Cg"','Goto %1 %2','Access is denied','if(m=="mount.status")','if(m=="mount.sync")','if(m=="mount.slew")','HIL_SAFETY_LIMIT','"rawAxes"','mount.gotoAxes')
 need('tools/ascom_host/main.cpp','ASCOM.Utilities.Chooser','CoCreateInstance','SlewToCoordinatesAsync','AbortSlew','SyncToCoordinates','PulseGuide','COINIT_APARTMENTTHREADED')
 need('src/backends/ascom_classic_mount.cpp','ASCOM helper','chooseTelescope','setupTelescope')
 need('src/backends/synscan_app_mount.cpp','RightAscensionDeclinationGet','SlewToCoordinatesAsync','ServerVersion','11881','PulseGuide')
-need('src/backends/synscan_network_mount.cpp','11880','Motor Controller','getVersion(1)',"axisQuery('a'",'coordinateSynced_','safetyGotoLimitDeg_')
+need('src/backends/synscan_network_mount.cpp','11880','Motor Controller','getVersion(1)',"axisQuery('a'",'geometry_.axesForSky','geometry_.sync','safetyGotoLimitDeg_')
 assert '11882' not in (root/'src/backends/synscan_network_mount.cpp').read_text(encoding='utf-8')
 checks.append(('synscan-wifi','direct UDP 11880, no 11882'))
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "core/interfaces.h"
+#include "core/equatorial_frames.h"
 #include <QMutex>
 #include <QProcess>
 
@@ -28,7 +29,12 @@ public:
 private:
     bool ensureHost(QString *error);
     bool request(const QJsonObject &request,QJsonObject *data,QString *error,int timeoutMs=10000);
+    EquatorialCoord toAscomFrame(const EquatorialCoord &coord) const;
+    EquatorialCoord fromAscomFrame(const EquatorialCoord &coord) const;
+    void updateEquatorialSystem(int value);
     QString progId_,name_;
+    int equatorialSystem_{-1};
+    EquatorialFrame nativeFrame_{EquatorialFrame::J2000};
     ConnectionState state_{ConnectionState::Disconnected};
     QProcess host_;
     mutable QMutex ioMutex_;

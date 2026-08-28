@@ -95,3 +95,35 @@ This transport is source/API-shape implemented but remains **hardware-HIL pendin
 ### Linux path
 
 The existing libgphoto2/PTP implementation remains the default Linux transport. It is still a native OAL driver: libgphoto2 is only the hardware access layer, not an INDI/ASCOM backend.
+
+## v0.2.10.26 — automatic EDSDK hot-plug and ISO gain
+
+- The EDSDK `camera-added` callback now emits an OAL `device.discoveryHint`; the application converts it into a driver-scoped asynchronous `oal.canon` rediscovery. On the node, the existing `nativeDiscoveryCompleted` restore path reconnects a persisted auto-connect Canon binding without requiring the global Refresh button.
+- OAL camera `gain` on the Windows EDSDK transport now means **ISO**, matching the Linux/libgphoto2 Canon transport. `gain=0` preserves the body's current ISO; positive values are mapped to the nearest ISO advertised by `kEdsPropID_ISOSpeed`. A requested positive ISO that cannot be applied fails explicitly instead of silently capturing at the old ISO.
+- Canon RAW capture still preserves the original CR2/CR3 as the science artifact. The in-memory operational frame is the EDSDK/embedded JPEG preview and is the current input to UI preview, autofocus and plate solving. For the tested 550D CR2 path the embedded JPEG is 5184×3456, i.e. full spatial resolution but not 14-bit RAW science pixels.
+- Windows default original-file spool remains `%USERPROFILE%\Pictures\OpenAstroLink\Canon`; each capture log includes `original=...`.
+
+## v0.2.10.25 — EOS 550D hot-plug, RAW preview and Bulb compatibility
+
+Follow-up Windows HIL on a Canon EOS 550D established three additional facts:
+
+- The body can emit the EDSDK camera-added callback before `EdsGetCameraList()` exposes it. An explicit **Refresh all native devices** now gives a pending camera-added edge a bounded ~1.2 s settle/retry window, and the edge is not cleared until a camera is actually enumerable. If enumeration still returns zero, the existing explicit-refresh hard driver/EDSDK reload remains the final fallback. There is still no periodic Canon scan.
+- Captures from 1–30 s were physically taken and the original files were transferred successfully, but this EOS/RAW combination returned no `EdsDownloadThumbnail()` data. Missing thumbnail data no longer converts a successful exposure into a failed exposure. OAL first tries the EDSDK thumbnail, then a directly decodable JPEG original, then extracts the largest decodable embedded JPEG preview from CR2 while preserving the RAW file untouched. The selected preview source is logged and recorded in frame metadata.
+- `EdsSendCommand(BulbStart)` returned EDSDK `0x60` (`EDS_ERR_INVALID_PARAMETER`) on the EOS 550D. Long exposure now prefers the more compatible `Tv=Bulb` + held `PressShutterButton(Completely_NonAF)` + `ShutterButton_OFF` sequence. `BulbStart/BulbEnd` remains only a compatibility fallback for bodies that reject the shutter-hold path.
+
+The normal short-exposure policy remains non-AF: requested exposures up to 30 s are mapped to the nearest supported `kEdsPropID_Tv` value and released with `Completely_NonAF`. Requested and actual exposure times are included in metadata.
+
+The Devices UI now deliberately distinguishes:
+
+- **Apply port & rediscover selected serial driver** — Gemini/Sky-Watcher/EQDrive only.
+- **Refresh all native devices (USB / serial)** — vendor-neutral discovery for Canon, QHY, ZWO, serial devices, etc.
+
+Recommended EOS 550D HIL sequence:
+
+1. Start the node without the EOS, attach it, wait for the `camera-added event received` line, then click **Refresh all native devices (USB / serial)** once.
+2. Confirm `Canon EDSDK discovery scan sees 1 camera(s)` and that `native:oal.canon/...` appears without restarting the node.
+3. Capture 1 s and 10 s. Confirm an original CR2/JPEG is stored and the GUI receives a preview. The node should log `Canon preview source=...`.
+4. Capture 45 s. With the body in a Bulb-capable Manual mode, the node should log `Canon Bulb transport=held-non-af-shutter` on EOS 550D.
+5. Cancel one long exposure and verify the shutter is released immediately.
+6. Run a 20-frame short-exposure sequence to qualify repeated transfer/event stability.
+

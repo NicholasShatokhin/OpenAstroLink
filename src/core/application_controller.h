@@ -58,7 +58,7 @@ public:
     bool restoreConfiguredDevices(QStringList *errors=nullptr, bool refreshNative=true);
     QStringList missingAutoConnectNativeDrivers() const;
     bool nativeDiscoveryRunning() const;
-    void refreshNativeDiscoveryAsync(const QStringList &driverIds={});
+    void refreshNativeDiscoveryAsync(const QStringList &driverIds={}, bool hardVendorRecovery=false);
 
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
@@ -137,6 +137,8 @@ private:
     void disconnectDevices(bool clearAutoConnect);
     bool ensureResourcesAvailable(const QStringList &resources,QString *error=nullptr) const;
     void commitCapturedFrame(const CameraFrame &frame);
+    void scheduleCanonHotplugRediscovery(quint64 generation);
+    bool nativeDriverHasCachedDevice(const QString &driverId) const;
     static QImage toQImage(const cv::Mat &image);
     void emitState();
     std::shared_ptr<OalDriverPluginLoader> driverLoader_;
@@ -173,6 +175,8 @@ private:
     QThread *nativeDiscoveryThread_{};
     QStringList pendingNativeDiscoveryDrivers_;
     bool pendingNativeDiscoveryAll_{false};
+    bool pendingNativeDiscoveryHardRecovery_{false};
+    quint64 canonHotplugGeneration_{0};
     bool shuttingDown_{false};
 };
 }

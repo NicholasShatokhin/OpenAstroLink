@@ -3,7 +3,7 @@
   "abiVersion": 2,
   "driverId": "oal.eqdrive",
   "name": "OpenAstroLink native EQDrive (EQMOD Motor Controller + ASTEP)",
-  "version": "0.2.10.19",
+  "version": "0.2.10.25",
   "library": "oal_driver_eqdrive",
   "deviceClasses": [
     "mount"

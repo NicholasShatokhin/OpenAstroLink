@@ -431,6 +431,53 @@ QJsonArray OalDriverPluginLoader::refreshDevices(const QStringList &driverIds, Q
     return deviceCache_;
 }
 
+
+bool OalDriverPluginLoader::restartDriver(const QString &driverId, QString *error) {
+    auto *x=find(driverId);
+    if(!x){if(error)*error="Native driver is not loaded: "+driverId;return false;}
+    OptionalMutexLocker callLock(callMutex(x,QString()));
+
+    // ABI-v2 explicit Refresh recovery is deliberately stronger than an
+    // ordinary stop/start. On Windows some vendor SDKs (notably QHYCCD) keep a
+    // process-local USB snapshot for as long as the importing driver DLL stays
+    // loaded. Unloading the OAL driver also releases its vendor DLL dependency,
+    // giving the next load the same clean enumeration boundary as a fresh node.
+    if(x->api2 && x->library){
+        const QString libraryPath=x->library->fileName();
+        const QJsonObject manifest=x->manifest;
+        const QString expectedId=x->id;
+        if(x->api2->stop)x->api2->stop(x->api2->context);
+        const auto *oldApi=x->api2;
+        if(!x->library->unload()){
+            const QString unloadError=x->library->errorString();
+            if(oldApi&&oldApi->start){const QByteArray cfg=QJsonDocument(manifest.value("config").toObject()).toJson(QJsonDocument::Compact);oldApi->start(oldApi->context,cfg.constData());}
+            if(error)*error="Native driver DLL unload failed for "+driverId+": "+unloadError;
+            return false;
+        }
+        x->api2=nullptr;x->library.reset();
+        QThread::msleep(120);
+
+        auto lib=std::make_unique<QLibrary>(libraryPath);
+        if(!lib->load()){if(error)*error="Native driver DLL reload failed for "+driverId+": "+lib->errorString();return false;}
+        auto factory2=reinterpret_cast<const OalDriverV2 *(*)(const OalDriverHostV2 *)>(lib->resolve("oalCreateDriverV2"));
+        if(!factory2){if(error)*error="Reloaded native driver has no oalCreateDriverV2: "+driverId;lib->unload();return false;}
+        OalDriverHostV2 host{};host.abiVersion=OAL_DRIVER_ABI_V2;host.structSize=sizeof(host);host.hostContext=this;host.log=&v2HostLog;host.allocate=&v2HostAlloc;host.deallocate=&v2HostFree;host.emitEvent=&v2HostEvent;host.publishFrame=&v2HostFrame;host.monotonicTimeNs=&v2HostMonotonic;host.isCancellationRequested=&v2HostCancelled;
+        const auto *api=factory2(&host);
+        if(!api||api->abiVersion!=OAL_DRIVER_ABI_V2||api->structSize<sizeof(OalDriverV2)||!api->driverId||QString::fromUtf8(api->driverId)!=expectedId){if(error)*error="Reloaded native driver ABI/identity mismatch: "+driverId;lib->unload();return false;}
+        const QByteArray cfg=QJsonDocument(manifest.value("config").toObject()).toJson(QJsonDocument::Compact);
+        if(api->start&&!api->start(api->context,cfg.constData())){if(error)*error="Reloaded native driver start failed: "+driverId;lib->unload();return false;}
+        x->api2=api;x->library=std::move(lib);x->version=QString::fromUtf8(api->driverVersion?api->driverVersion:"");
+    } else if(x->api1) {
+        if(x->api1->stop)x->api1->stop(x->api1->context);
+        if(x->api1->start&&!x->api1->start(x->api1->context,"{}")){if(error)*error="Native ABI-v1 driver restart failed: "+driverId;return false;}
+    } else {
+        if(error)*error="Native driver is not in a reloadable state: "+driverId;
+        return false;
+    }
+    {QMutexLocker cacheLock(&deviceCacheMutex_);QJsonArray keep;for(const auto&v:deviceCache_)if(v.toObject().value("driverId").toString()!=driverId)keep.append(v);deviceCache_=keep;}
+    return true;
+}
+
 QJsonObject OalDriverPluginLoader::capabilities(const QString &driverId, const QString &deviceId,
                                                  QString *error) const {
     const auto *x = find(driverId);

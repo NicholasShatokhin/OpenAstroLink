@@ -10,12 +10,14 @@ def need(path, *tokens):
         checks.append((path, token))
 
 need('drivers/qhy/oal_driver_qhy.cpp',
-     'QHY hot-plug recovery: recycling SDK resource',
+     'ordinary devices() never retries on a timer',
      'ReleaseQHYCCDResource()',
      'InitQHYCCDResource()',
-     'previousCount==0',
-     '!anyCameraConnected()',
+     'ApplicationController hard-reloads',
      'sdkLifecycleMutex')
+need('src/oal/driver_plugin_loader.cpp',
+     'x->library->unload()',
+     'oalCreateDriverV2')
 need('src/core/application_controller.cpp',
      'inferPersistedSerialPort',
      'Focused reconnect discovery: oal.gemini',
@@ -25,8 +27,8 @@ need('drivers/skywatcher/oal_driver_skywatcher.cpp',
      'QByteArrayLiteral(":e1\\r")',
      "true,'\\r'",
      'direct Sky-Watcher Motor Controller protocol detected')
-need('drivers/qhy/oal_driver_qhy.manifest.json', '0.2.10.19')
-need('drivers/gemini/oal_driver_gemini.manifest.json', '0.2.10.19')
-need('drivers/skywatcher/oal_driver_skywatcher.manifest.json', '0.2.10.19')
+need('drivers/qhy/oal_driver_qhy.manifest.json', '0.2.10.25')
+need('drivers/gemini/oal_driver_gemini.manifest.json', '0.2.10.25')
+need('drivers/skywatcher/oal_driver_skywatcher.manifest.json', '0.2.10.25')
 
 print(f'hotplug/focused discovery check: PASS ({len(checks)} assertions)')

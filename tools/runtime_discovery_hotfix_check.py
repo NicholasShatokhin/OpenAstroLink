@@ -11,7 +11,7 @@ cmake = (root/'CMakeLists.txt').read_text(encoding='utf-8')
 assert 'QJsonArray refreshDevices(QStringList *errors=nullptr);' in loader_h
 assert 'return deviceCache_;' in loader_cpp
 assert 'refreshDevices(errors);' in loader_cpp
-assert 'Native OAL discovery refreshed' in app_cpp
+assert 'Native OAL async discovery refreshed' in app_cpp
 assert '/api/v1/drivers/refresh' in server_cpp
 assert 'oal_stage_windows_runtime' in cmake
 for var in ['QHYCCD_RUNTIME_DIR','ZWO_ASI_RUNTIME_DIR','ZWO_EAF_RUNTIME_DIR','CANON_EDSDK_RUNTIME_DIR']:

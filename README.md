@@ -1,14 +1,59 @@
 # OpenAstroSuite / OpenAstroLink
 
 
-**Current release: v0.2.10.19 — server-first startup + live native catalogue + corrected direct mount control**
+**Current release: v0.2.10.30 — adaptive-solve stability + preview histogram assistant**
 
-This release brings HTTP/WebSocket control up before slow hardware enumeration, fixes the native-device combobox catalogue, keeps `synscan-wifi` as direct UDP/11880 mount control, and makes `oal.eqdrive` a dual-protocol native driver: EQMOD-compatible Sky-Watcher Motor Controller transport first, official EQDrive ASTEP as a fallback. Classic ASCOM remains available and the existing `oal.skywatcher` / EqMount driver is retained.
+The EOS 550D HIL showed that EDSDK can emit `camera-added` before `EdsGetCameraList()` exposes the body. v0.2.10.29 therefore turns the callback into a bounded, debounced Canon-only settle/retry sequence instead of an immediate one-shot scan. If normal retries still see zero devices, the final fallback hard-reloads only the idle `oal.canon` EDSDK driver and rescans it. There is still no periodic vendor polling. ISO/gain, Bulb capture, full-resolution operational preview, and CR2/CR3 science-file preservation remain unchanged.
+
+## v0.2.10.30 Adaptive solve stability + histogram assistant
+
+- Adaptive plate solving now enforces the requested solver bin in software when a camera (notably Canon DSLR/EDSDK) cannot bin in hardware. A 5184×3456 Canon preview requested as 2×2 is reduced immediately to about 2592×1728 before gradient removal, star registration, and stacking, sharply reducing transient RAM/CPU pressure.
+- The adaptive capture phase has a bounded wall-clock budget (`maxCapturePhaseSec`, default 120 s) and a small Canon inter-frame settle interval.
+- Adaptive exposure growth is now quality-aware: background level, p99, saturation fraction, and detected-star count influence the next short exposure. ISO/gain is not changed automatically.
+- Operation progress no longer rebuilds/broadcasts the complete hardware state on every progress tick; full state snapshots are emitted at start/final transitions, keeping HTTP/WebSocket control responsive during CPU-heavy preprocessing.
+- The Capture & Solve tab has an optional log-scale preview histogram. It reports P1/median/P99 and clipping fractions, suggests the next exposure for a configurable background target, and can auto-apply that exposure to the next capture while leaving ISO/gain unchanged. For Canon this is derived from the embedded JPEG preview, so it is an operational guide rather than a linear-RAW photometric histogram.
+
+## v0.2.10.29 Canon hot-plug settle/retry recovery
+
+- Canon `device.discoveryHint` starts debounced driver-scoped retries at approximately 0.7, 2.2, 4.5 and 8 seconds after the most recent hot-plug edge.
+- A newer Canon hot-plug edge supersedes the previous retry series; once a Canon device is cached, remaining retries become no-ops.
+- The final retry may hard-reload only an idle `oal.canon` driver after a zero-device scan, reproducing the successful explicit-Refresh recovery without probing QHY or serial drivers.
+- Focused hard-recovery requests now preserve both their selected driver scope and the hard-recovery flag even when another native discovery pass is already running.
+- Retains the v0.2.10.27 Qt 6.10/MSVC `QJsonValue` capture-result build fix and all v0.2.10.26 ISO/science-file behavior.
+
+## v0.2.10.26 Canon automatic rediscovery and ISO gain
+
+- Canon EDSDK `camera-added` emits `device.discoveryHint`; the core starts a non-blocking `oal.canon`-only rediscovery and the node reuses its normal persisted auto-connect restore path.
+- OAL `gain` on Windows Canon now means ISO. `0` preserves the camera's current ISO; positive values map to the nearest body-advertised EDSDK ISO and a failed ISO write fails the exposure explicitly.
+- Canon capture results carry `scienceFilePath`; the GUI logs `Science/original file: ...` after a successful capture.
+- Plate solving still uses the operational `CameraFrame.image` (for the tested 550D RAW path: a 5184×3456 embedded JPEG). The CR2 is preserved separately for calibration/stacking/photometry.
+
+## v0.2.10.22 Windows GUI link fix
+
+- Restores the missing `MainWindow::refreshFocuserStatus()` implementation that caused MSVC `LNK2019/LNK1120` while linking `OpenAstroSuite.exe`.
+- Adds `tools/gui_link_contract_check.py`, which verifies that ordinary `MainWindow` methods declared in the header have matching out-of-class definitions.
+- Replaces the discarded `QtConcurrent::run()` future in `OperationManager` with `QThreadPool::start()`, removing MSVC/Qt warning C4858 without changing operation scheduling semantics.
 
 English is the canonical project language. Ukrainian mirrors are provided in `README_UA.md` and `docs/uk/`.
 
 OpenAstroLink (OAL) is a local-first observatory control stack. The reference path is **native OAL drivers**; INDI, ASCOM Alpaca and LX200 remain optional compatibility layers for equipment that does not yet have a native OAL driver.
 
+
+
+## v0.2.10.21 mount geometry, mechanical Park, and explicit QHY recovery
+
+- Native hardware is enumerated once after node startup. There is **no periodic vendor polling**. Hardware connected later is discovered when the user presses **Refresh native device discovery** (or calls `POST /api/v1/drivers/refresh`).
+- Refresh is asynchronous on a remote node, so QHY/serial/vendor discovery does not freeze the GUI or HTTP control plane.
+- The refresh is vendor-neutral: it asks the native registry to enumerate all enabled drivers rather than assuming a QHY camera is present.
+- **J2000 is the canonical OAL equatorial frame.** Mount GOTO/Sync API bodies accept `coordinateFrame: J2000|JNOW`; omitted frame means J2000.
+- The Mount GUI can enter/display `J2000 / catalog` or `JNow / of-date`. The node converts JNow input to J2000.
+- Stellarium bridge coordinates are treated as J2000. Classic ASCOM reads `EquatorialSystem`; J2000 is passed through, while an ASCOM topocentric/of-date driver is currently approximated as JNow using precession at the compatibility boundary (full apparent/topocentric correction is not yet implemented).
+- `MountGeometry` profiles now cover GEM, fork-equatorial, Alt-Az, Alt-Az+derotator, equatorial platform and custom two-axis. Native raw-axis drivers no longer own sky geometry.
+- Mechanical Home/Park is stored separately from celestial coordinates; default Park is Axis1=90°, Axis2=0°, and the GUI can set the current mechanical axes as Park.
+- Native EQDrive and direct SynScan/EQDrive Wi-Fi use the same Core geometry model. A known-position Sync establishes installation encoder offsets/signs.
+- Explicit **Refresh native device discovery** may hard-reload the QHY OAL driver DLL (and therefore its QHYCCD dependency) after a zero-device scan, but only when no QHY camera is active. There is still no periodic vendor polling.
+- Classic ASCOM slews now emit periodic RA/DEC/pier/tracking diagnostics while moving, useful for distinguishing EQMOD geometry from OAL coordinate conversion.
+- See `docs/COORDINATE_FRAMES.md` and `docs/MOUNT_GEOMETRY.md`.
 
 ## v0.2.10.19 HIL startup/catalogue/mount correction
 
@@ -45,7 +90,7 @@ These drivers are implemented but still require hardware-in-the-loop qualificati
 ## HIL reliability fixes in this package
 
 - **QHY single-frame lifecycle:** every successful/failed single-frame cycle is explicitly terminated with `CancelQHYCCDExposingAndReadout`; a readout watchdog cancels a stuck SDK call, actual exposure/gain/offset are read back from the SDK, and frame min/max/mean are logged. Native QHY discovery is not invoked while a QHY handle is active.
-- **Scoped native rediscovery:** reconnect retries refresh only the missing native driver. An unplugged Gemini no longer causes `ScanQHYCCD()` or repeated EQDrive/Sky-Watcher probes against a COM port currently owned by EQMOD/Classic ASCOM.
+- **Native rediscovery:** periodic reconnect probing is disabled. Canon EDSDK can request bounded automatic hot-plug rediscovery; other later-connected devices use explicit Refresh, while serial-driver COM selection refreshes only the selected driver.
 - **Gemini COM migration:** stale port-based bindings can migrate after unique automatic rediscovery; changing the serial selector refreshes only `oal.gemini` and updates the persisted native binding.
 - **SynScan network UX:** `synscan-wifi` auto-discovers the direct adapter on UDP 11880 (including common 192.168.4.1/192.168.0.1 AP addresses); `synscan-app` independently discovers the phone/PC running SynScan Pro on UDP 11881. TCP 11882 is documented only as another server exported by SynScan App/Pro, not as direct mount Wi-Fi.
 - **Mount direction diagnostics:** OpenAstroLink does not guess/invert RA or DEC. Before GOTO it logs current RA/Dec, target, tracking, pier side and shortest coordinate deltas; Stellarium coordinates are logged as decoded/forwarded unchanged.
@@ -455,7 +500,7 @@ Windows HIL with a Gemini EAF on a CH340 USB-serial adapter showed that the cont
 
 This hotfix addresses three issues found during the first Windows hardware-in-the-loop run:
 
-1. Native device discovery is now cached. Normal `/api/v1/node/backends`, `/api/v1/state`, and GUI startup reads do **not** rescan USB/serial hardware. A full rescan is performed once before the node reports ready and thereafter only by the explicit **Refresh native device discovery** action (`POST /api/v1/drivers/refresh`). This prevents serial probing from causing the remote GUI's 3 s metadata timeout.
+1. Native device discovery is now cached. Normal `/api/v1/node/backends`, `/api/v1/state`, and GUI startup reads do **not** rescan USB/serial hardware. A vendor-neutral rescan is started once **after** the HTTP/WebSocket control plane reports ready and thereafter only by the explicit **Refresh native device discovery** action (`POST /api/v1/drivers/refresh`). This prevents serial probing from causing the remote GUI's 3 s metadata timeout.
 2. ZWO ASI/EAF manifests now conform to the ABI-v2 manifest contract (`schema` plus array-valued `permissions`).
 3. On Windows, `QHYCCD_RUNTIME_DIR`, `ZWO_ASI_RUNTIME_DIR`, `ZWO_EAF_RUNTIME_DIR`, and `CANON_EDSDK_RUNTIME_DIR` are now active build-tree staging inputs, not packaging-only hints. DLLs from these directories are copied beside the executables and native drivers at configure time, so the development build can run without manually extending `PATH`.
 
@@ -514,3 +559,14 @@ REST clients can start the same node-local operation with `POST /api/v1/solve/ad
 - Native Gemini moves are asynchronous at the driver boundary; `focuser.status` remains callable during motion and reports live position/`moving`. Autofocus now explicitly waits for the focuser to become idle before each exposure.
 - The GUI polls focuser status during manual moves.
 - Native Sky-Watcher discovery now logs each serial probe and the exact SynScan `KO -> O#` handshake failure/success, with a same-session retry for slow USB hand controllers. The current RA/DEC native mount device still targets the SynScan hand-controller protocol; direct USB/EQDIR motor-controller transport remains a separate incomplete path.
+
+### v0.2.10.25 Canon EOS 550D HIL follow-up
+
+EOS 550D now has HIL-confirmed 1–30 s non-AF exposure and original-file transfer. This patch fixes the remaining observed issues: explicit hot-plug Refresh waits for delayed EDSDK enumeration, CR2/JPEG preview falls back to the stored file/embedded JPEG instead of failing on an empty EDSDK thumbnail, and >30 s Bulb uses held `Completely_NonAF` shutter with `BulbStart/BulbEnd` only as fallback. The next HIL should verify hot-plug Refresh, GUI preview, 45 s Bulb and cancellation.
+
+## v0.2.10.29 Canon hot-plug EDSDK thread-affinity fix
+
+- Fixes a Canon EOS hot-plug regression where final fallback discovery found and connected the camera, ISO/shutter commands worked, but exposures timed out waiting for `kEdsObjectEvent_DirItemRequestTransfer`.
+- Root cause: the v0.2.10.28 hard-reload fallback called `EdsInitializeSDK()` from the short-lived asynchronous discovery `QThread`. Canon EDSDK event/callback delivery is thread-affine; once that worker exited, transfer callbacks were no longer delivered.
+- Canon DLL/EDSDK hard restart is now marshalled synchronously to the long-lived `ApplicationController` Qt event-loop thread, matching the already-working cold-start path. Enumeration remains asynchronous.
+- QHY and serial-driver discovery/recovery behavior is unchanged.

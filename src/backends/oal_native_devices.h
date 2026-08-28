@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/interfaces.h"
+#include "core/mount_geometry.h"
 #include <QJsonObject>
 #include <memory>
 
@@ -51,7 +52,8 @@ public:
 
 class NativeOalMount final : public IMount, private NativeOalDeviceBase {
 public:
-    NativeOalMount(std::shared_ptr<OalDriverPluginLoader> loader, const QJsonObject &descriptor);
+    NativeOalMount(std::shared_ptr<OalDriverPluginLoader> loader, const QJsonObject &descriptor,
+                   MountGeometryConfig geometry = {}, ObserverLocation observer = {});
     ~NativeOalMount() override { disconnectDevice(); }
 
     QString id() const override { return deviceId_; }
@@ -67,6 +69,13 @@ public:
     bool setTracking(bool, QString *error=nullptr) override;
     bool park(bool, QString *error=nullptr) override;
     bool pulseGuide(GuideDirection, int durationMs, QString *error=nullptr) override;
+    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; }
+private:
+    bool rawAxisStatus(MechanicalAxes &axes, bool *slewing=nullptr, QString *error=nullptr) const;
+    bool rawAxisGoto(const MechanicalAxes &axes, double maxAxisDeltaDeg, QString *error=nullptr);
+    bool geometryAware_{false};
+    MountGeometryModel geometry_;
+    bool parked_{false};
 };
 
 class NativeOalFocuser final : public IFocuser, private NativeOalDeviceBase {

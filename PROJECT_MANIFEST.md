@@ -1,4 +1,4 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.19
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.30
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
@@ -7,7 +7,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
 - Protocol / native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.19-hil-start-catalog-mount-fix`
+- Version: `0.2.10.30-adaptive-histogram-stability`
 - Language: C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -19,6 +19,43 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Async execution: Qt Concurrent + `OperationManager`
 - Native driver ABI: C ABI v2
 
+## v0.2.10.30 adaptive solver stability / histogram
+
+- Software fallback binning for solver frames when hardware binning is unavailable.
+- Bounded adaptive capture phase and Canon inter-frame settling.
+- Histogram/quality-driven next-exposure selection (gain/ISO remains explicit).
+- Optional GUI preview histogram with clipping statistics and next-exposure suggestion/auto-apply.
+- Reduced full-state broadcasts during operation progress to protect HTTP/WS responsiveness.
+
+## v0.2.10.29 Canon hot-plug settle/retry recovery
+
+- EOS 550D HIL confirmed that EDSDK `camera-added` may precede visibility in `EdsGetCameraList()` by more than the original short settle window.
+- `ApplicationController` now debounces the callback and retries only `oal.canon` at approximately 0.7 / 2.2 / 4.5 / 8 seconds.
+- The last retry may hard-reload only the idle Canon EDSDK driver after a zero-device scan; QHY and serial drivers are not probed by this recovery path.
+- Focused hard-recovery requests retain their driver scope when queued behind an already-running native discovery.
+- Includes the v0.2.10.27 Qt 6.10/MSVC capture-result build correction.
+
+## v0.2.10.26 Canon automatic rediscovery + ISO gain
+- EDSDK `camera-added` now becomes an OAL `device.discoveryHint`, consumed by `ApplicationController` as an asynchronous driver-scoped `oal.canon` rediscovery.
+- Windows Canon OAL `gain` is implemented as ISO using the camera-advertised `kEdsPropID_ISOSpeed` descriptor.
+- `CameraFrame` carries `scienceFilePath`; exposure operation results and the GUI surface the original CR2/CR3 path.
+- Operational Canon preview remains the input to autofocus/plate solve; original RAW remains the science artifact.
+
+## v0.2.10.25 Canon EOS 550D HIL follow-up
+
+- Pending EDSDK camera-added events receive a bounded enumeration settle/retry window on explicit Refresh and are not cleared until a camera is actually enumerable.
+- Explicit all-device Refresh remains vendor-neutral and can hard-reload inactive Canon/EDSDK after a zero-device scan; no periodic Canon probing was introduced.
+- EOS 550D long exposure now prefers held `Completely_NonAF` shutter while Tv=Bulb; `BulbStart/BulbEnd` is compatibility fallback because the 550D returned EDSDK `0x60` (`INVALID_PARAMETER`) for `BulbStart`.
+- Successful RAW transfer no longer fails solely because `EdsDownloadThumbnail()` is empty. JPEG originals are decoded directly; CR2 preview falls back to its largest embedded decodable JPEG while the original RAW remains untouched.
+- Device UI wording now clearly separates selected serial-driver rediscovery from global USB/serial native discovery.
+
+## v0.2.10.22 build correction
+
+- Fixed the Windows GUI link failure caused by a declared-but-undefined `MainWindow::refreshFocuserStatus()`.
+- Added a GUI declaration/definition link-contract regression check.
+- Replaced the ignored `QtConcurrent::run()` future in `OperationManager` with `QThreadPool::start()` to eliminate C4858.
+
+
 ## Native OAL drivers
 
 - `oal.qhy` — QHY cameras through QHYCCD SDK; Windows vendor-header isolation included.
@@ -27,10 +64,10 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - `oal.zwo.eaf` — ZWO EAF focusers through ZWO EAF SDK.
 - `oal.gemini` — Gemini EAF native serial path.
 - `oal.skywatcher` — existing Sky-Watcher SynScan / EqMount native mount path.
-- `oal.eqdrive` — experimental dual-protocol EQDrive serial path (EQMOD-compatible Motor Controller first, official ASTEP fallback); sync-anchor celestial model in this release.
+- `oal.eqdrive` — dual-protocol EQDrive serial path (EQMOD-compatible Motor Controller first, official ASTEP fallback); raw-axis interface consumed by the OAL Core mount-geometry model.
 - `oal.simulated` — reference ABI-v2 simulated devices.
 
-Gemini EAF has passed basic Windows HIL for discovery, connection and motion; the other physical native drivers remain HIL-pending or only partially qualified on their actual device/firmware/host combinations.
+Windows HIL has confirmed native Gemini discovery/motion, native EQDrive discovery/motion, direct SynScan/EQDrive Wi-Fi motion, and Classic ASCOM/EQMOD operation. QHY discovery/capture is partially qualified; explicit Refresh can now hard-reload the inactive QHY driver DLL/SDK after a zero-device scan, while runtime hot-plug/repeated-capture stability remains under HIL.
 
 ## Compatibility adapters
 
@@ -47,6 +84,17 @@ Classic ASCOM (Windows helper/Chooser), SynScan App network, SynScan serial-prot
 - Stellarium mount position/GOTO TCP bridge.
 - Cross-platform presets/scripts for Windows/Linux/RPi.
 
+## v0.2.10.21 mount geometry and QHY explicit recovery
+
+- Added `MountGeometryType`/`MountGeometryModel` to OAL Core with GEM, fork-equatorial, Alt-Az, Alt-Az+derotator, equatorial-platform and custom two-axis profiles.
+- Native EQDrive and direct SynScan/EQDrive Wi-Fi now consume the shared Core geometry model instead of treating celestial RA/DEC as motor coordinates.
+- Mechanical Home/Park is stored separately from celestial coordinates; default Park is Axis1=90°, Axis2=0°. Current axes can be saved as a custom Park from the Mount GUI.
+- GEM geometry uses UTC/site longitude to derive local sidereal time and hour angle; pier branch and axis signs are installation configuration. Automatic meridian-flip planning remains experimental/off by default.
+- Mount status/API/state now expose geometry type and raw mechanical Axis1/Axis2 when available.
+- Classic ASCOM async slews emit periodic RA/DEC/pier/tracking samples for EQMOD geometry diagnostics.
+- Explicit all-native Refresh can hard unload/reload an inactive ABI-v2 QHY driver DLL, releasing/reloading its QHYCCD dependency before a second scan. This is never performed while a QHY camera handle is active and never on a periodic timer.
+- Documentation: `docs/MOUNT_GEOMETRY.md` and Ukrainian mirror.
+
 ## v0.2.10.17 adaptive urban plate solving
 
 - Node-owned `solver.adaptive` operation captures short exposures, evaluates solver-frame quality, registers drift between frames, stacks accepted frames, removes large-scale sky gradients and retries the selected plate solver.
@@ -59,7 +107,7 @@ Classic ASCOM (Windows helper/Chooser), SynScan App network, SynScan serial-prot
 ## v0.2.10.17 mount interoperability
 
 - Native ABI-v2 driver `oal.eqdrive` keeps `oal.skywatcher` intact and now probes the EQMOD-compatible Sky-Watcher Motor Controller transport first, with the published EQDrive ASTEP motor-control section as a fallback.
-- Native EQDrive celestial coordinates use `sync-anchor-v2`; one known-position Sync is required before RA/Dec GOTO. `coordinateValid=false` prevents unsynced coordinates from being used as ASTAP hints or published to Stellarium.
+- Native EQDrive/direct Wi-Fi expose raw mechanical axes to OAL Core. `MountGeometryModel` performs J2000/JNow ↔ hour-angle/Alt-Az ↔ mechanical-axis conversion according to the selected GEM/fork/Alt-Az profile; one known-position Sync establishes installation encoder offsets/signs.
 - Windows `ascom-classic` backend runs COM automation in the separate native `oas-ascom-host.exe`, with ASCOM Chooser and driver setup UI available in the local GUI.
 - `synscan-wifi` talks directly to the mount/EQDrive Wi-Fi adapter using the Motor Controller protocol over UDP 11880; `synscan-app` implements the SynScan App Protocol to a running SynScan Pro host over UDP 11881.
 - Native serial discovery includes EQDrive and persisted serial-port migration; selecting a new Gemini COM port updates the persisted native backend binding after successful rediscovery.
@@ -74,6 +122,14 @@ Classic ASCOM (Windows helper/Chooser), SynScan App network, SynScan serial-prot
 - Classic ASCOM GOTO logs coordinate/pier-side preflight data; no RA/DEC sign inversion is introduced.
 - Focused EQDrive diagnostics cover all DTR/RTS combinations and multiple read-only ASTEP identity/motor queries.
 - Gemini stale COM bindings can auto-migrate after unique rediscovery, while explicit COM selection refreshes only the Gemini driver.
+
+
+### Coordinate-frame policy
+
+- OAL canonical equatorial coordinates are **J2000**.
+- Mount GOTO/Sync and session targets accept explicit `coordinateFrame: J2000|JNOW`; omitted frame means J2000.
+- JNow/of-date support currently applies precession between J2000 and mean equator/equinox of date; nutation, annual aberration, atmospheric refraction and a full topocentric apparent-place model are not yet part of this conversion.
+- Classic ASCOM reads `EquatorialSystem` and converts at the compatibility boundary; Stellarium is treated as a J2000 catalogue interface.
 
 ## Current major gaps
 
@@ -109,9 +165,12 @@ New-chat handoff: `docs/NEW_CHAT_HANDOFF.md` and `docs/uk/NEW_CHAT_HANDOFF.md`.
 - Sky-Watcher native discovery now emits detailed SynScan serial handshake diagnostics and same-session retry.
 - Important: the native RA/DEC Sky-Watcher device currently targets the SynScan hand-controller protocol. Direct USB/EQDIR motor-controller transport is not yet exposed as a full mount backend.
 
-## v0.2.10.19 live native catalogue / direct Wi-Fi
+## v0.2.10.20 manual discovery / J2000 / live native catalogue
 
-- Backend catalogues are carried in node state and remote GUI comboboxes update after native hot-plug/discovery.
+- Backend catalogues are carried in node state and remote GUI comboboxes update after explicit discovery. One vendor-neutral scan runs after the server is online; there is no periodic vendor polling. Hardware connected later is enumerated only by **Refresh native device discovery** / `POST /api/v1/drivers/refresh`.
 - `synscan-wifi` is direct Motor Controller UDP/11880 to the mount/EQDrive Wi-Fi adapter; `synscan-app` remains UDP/11881 to SynScan Pro.
 - `oal.eqdrive` is dual-protocol: EQMOD-compatible Sky-Watcher Motor Controller serial transport is tried first and official EQDrive ASTEP is retained as a fallback; existing `oal.skywatcher` is retained. Direct `synscan-wifi` uses the same Motor Controller command set over UDP 11880.
 - Native EQDrive GOTO requires Sync and is HIL safety-limited; park/pier/pulse-guide remain unqualified.
+
+### v0.2.10.29 hot-plug capture fix
+Canon hard-recovery must initialize EDSDK on the long-lived application Qt event-loop thread. Do not move the Canon `restartDriver()` call back into the transient native-discovery worker: doing so allows enumeration and commands but loses EOS object-transfer callbacks after hot-plug.

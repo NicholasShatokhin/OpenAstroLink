@@ -1,4 +1,5 @@
 #include "core/application_controller.h"
+#include "core/equatorial_frames.h"
 #include "algorithms/pattern_plate_solver.h"
 #include "algorithms/astap_solver.h"
 #include "algorithms/neural_solver.h"
@@ -25,6 +26,7 @@
 #endif
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QDir>
 #include <QJsonArray>
 #include <QUrl>
@@ -47,6 +49,19 @@ namespace {
 QJsonObject solveQualityJson(const SolveFrameQuality &q){
     return {{"detectedStars",q.detectedStars},{"background",q.background},{"noiseSigma",q.noiseSigma},
             {"p99",q.p99},{"saturationFraction",q.saturationFraction},{"medianHfrPx",q.medianHfrPx}};
+}
+CameraFrame softwareBinForSolver(CameraFrame frame,int requestedBinX,int requestedBinY){
+    if(frame.image.empty())return frame;
+    const int actualX=std::max(1,frame.binX),actualY=std::max(1,frame.binY);
+    const int targetX=std::max(actualX,std::max(1,requestedBinX));
+    const int targetY=std::max(actualY,std::max(1,requestedBinY));
+    if(targetX==actualX&&targetY==actualY)return frame;
+    const double sx=double(actualX)/double(targetX),sy=double(actualY)/double(targetY);
+    const int w=std::max(1,int(std::lround(frame.image.cols*sx)));
+    const int h=std::max(1,int(std::lround(frame.image.rows*sy)));
+    cv::Mat reduced;cv::resize(frame.image,reduced,cv::Size(w,h),0.0,0.0,cv::INTER_AREA);
+    frame.image=std::move(reduced);frame.binX=targetX;frame.binY=targetY;
+    return frame;
 }
 QJsonObject nativeDescriptor(const std::shared_ptr<OalDriverPluginLoader> &loader,const QString &backend,const QString &type,QString *error){
     QString driverId,deviceId;if(!parseNativeBackendKey(backend,driverId,deviceId)){if(error)*error="Invalid native OAL backend key";return{};}
@@ -197,19 +212,39 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
         // reason to request a fresh state snapshot. Queue a normal state refresh
         // after the driver invocation has released its per-device serial lock.
         const QString type=event.value("type").toString();
+        if(type=="device.discoveryHint"){
+            // Vendor hot-plug callbacks are edge notifications, not a guarantee
+            // that the body is already enumerable. Canon EDSDK in particular can
+            // fire CameraAdded while EdsGetCameraList() still returns zero for a
+            // few seconds. Do not consume that edge with an immediate one-shot
+            // scan: use a bounded, debounced settle/retry sequence instead.
+            if(driver=="oal.canon"){
+                const quint64 generation=++canonHotplugGeneration_;
+                emit logMessage("Native Canon hot-plug hint received; scheduling settled automatic rediscovery");
+                scheduleCanonHotplugRediscovery(generation);
+            }else{
+                emit logMessage(QString("Native hot-plug hint from %1; scheduling automatic rediscovery").arg(driver));
+                QTimer::singleShot(250,this,[this,driver](){if(!shuttingDown_)refreshNativeDiscoveryAsync(QStringList{driver});});
+            }
+        }
         if(type=="focuser.moveStarted"||type=="focuser.position"||
            type=="device.connected"||type=="device.disconnected")
             QTimer::singleShot(0,this,[this](){if(!shuttingDown_)emitState();});
     });
-    QTimer::singleShot(0,this,[this,nativeCount,driverErrors](){emit logMessage(QString("Native OAL driver registry: %1 driver(s)").arg(nativeCount));for(const auto&e:driverErrors)emit logMessage("Native driver load warning: "+e);});
+    const auto loadedNativeDrivers=driverLoader_->drivers();
+    QTimer::singleShot(0,this,[this,nativeCount,driverErrors,loadedNativeDrivers](){
+        QStringList ids;for(const auto&v:loadedNativeDrivers)ids<<v.toObject().value("driverId").toString();
+        emit logMessage(QString("Native OAL driver registry: %1 driver(s)%2").arg(nativeCount).arg(ids.isEmpty()?QString():QString(" [%1]").arg(ids.join(", "))));
+        for(const auto&e:driverErrors)emit logMessage("Native driver load warning: "+e);
+    });
     #ifdef OAS_HAVE_POSITIONING
     if(profile_.observer.latitudeDeg==0.0&&profile_.observer.longitudeDeg==0.0)QTimer::singleShot(0,this,&ApplicationController::requestSystemLocation);
 #endif
     connect(&scheduler_,&Scheduler::statusChanged,this,[this](const SessionStatus&s){auto j=sessionJson(s);emit sessionChanged(j);if(oalWsServer_)oalWsServer_->broadcast("sessionUpdate",j);emitState();});
-    // Driver code is loaded synchronously, but hardware enumeration is deferred
-    // until the Qt event loop is alive. This keeps both the headless node and
-    // Embedded GUI responsive during slow serial/vendor-SDK discovery.
-    QTimer::singleShot(0,this,[this](){if(!shuttingDown_&&!nativeDiscoveryRunning())refreshNativeDiscoveryAsync();});
+    // Hardware enumeration is owned by the application/node lifecycle (one
+    // initial scan after the control plane is online, then explicit user
+    // refreshes).  Do not start a second implicit scan from the controller
+    // constructor: vendor SDKs such as QHY may be expensive or stateful.
     connect(&operations_,&OperationManager::operationChanged,this,[this](const QJsonObject&o){
         emit operationChanged(o);
         if(oalWsServer_)oalWsServer_->broadcast("operation",o);
@@ -225,7 +260,11 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
             if(oalWsServer_)oalWsServer_->broadcast("autofocusResult",result);
             emit logMessage(result.value("message").toString());
         }
-        emitState();
+        // Operation progress already has its own WebSocket event. Rebuilding and
+        // broadcasting the complete hardware state for every progress tick can
+        // starve the HTTP event loop during CPU-heavy adaptive preprocessing.
+        // Emit a full snapshot only at operation start and terminal transitions.
+        if(state!="running"||o.value("phase").toString()=="starting")emitState();
     });
 }
 ApplicationController::~ApplicationController(){shutdown();}
@@ -260,7 +299,7 @@ void ApplicationController::shutdown(){
     if(driverLoader_)driverLoader_->clear();
     emit logMessage("OpenAstroLink node shutdown complete");
 }
-void ApplicationController::setProfile(const TelescopeProfile&p){profile_=p;settings_.saveProfile(p);emit profileChanged();emitState();}
+void ApplicationController::setProfile(const TelescopeProfile&p){profile_=p;settings_.saveProfile(p);if(mount_)mount_->configureGeometry(profile_.mount,profile_.observer);emit profileChanged();emit logMessage("Mount geometry/profile updated; native/direct mounts require a fresh Sync after geometry changes");emitState();}
 QStringList ApplicationController::cameraBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"camera");x<<"simulated"<<"opencv"<<"oal";
 #ifdef OAS_HAVE_GPHOTO2
 x<<"canon-gphoto2";
@@ -312,8 +351,8 @@ bool ApplicationController::connectGuideCamera(const QString&b,const QString&e,Q
     if(!d->connectDevice(err))return false;guideCamera_=std::move(d);settings_.saveGuideCameraBinding({guideCamera_->backendName(),e,true});
     if(!note.isEmpty())emit logMessage(note);emit logMessage("Guide camera connected: "+guideCamera_->displayName());emitState();return true;
 }
-bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"mount"},err))return false;std::shared_ptr<IMount>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"mount",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalMount>(driverLoader_,desc);}
-else if(b=="simulated")d=std::make_shared<SimulatedMount>();else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);else if(b=="synscan-app")d=std::make_shared<SynScanAppMount>(e);else if(b=="synscan-wifi")d=std::make_shared<SynScanNetworkMount>(e);
+bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"mount"},err))return false;std::shared_ptr<IMount>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"mount",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalMount>(driverLoader_,desc,profile_.mount,profile_.observer);}
+else if(b=="simulated")d=std::make_shared<SimulatedMount>();else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);else if(b=="synscan-app")d=std::make_shared<SynScanAppMount>(e);else if(b=="synscan-wifi")d=std::make_shared<SynScanNetworkMount>(e,profile_.mount,profile_.observer);
 #ifdef OAS_HAVE_ASCOM_CLASSIC
 else if(b=="ascom-classic")d=std::make_shared<AscomClassicMount>(e);
 #endif
@@ -449,23 +488,99 @@ bool ApplicationController::nativeDiscoveryRunning() const {
     return nativeDiscoveryThread_ && nativeDiscoveryThread_->isRunning();
 }
 
-void ApplicationController::refreshNativeDiscoveryAsync(const QStringList &driverIds) {
+bool ApplicationController::nativeDriverHasCachedDevice(const QString &driverId) const {
+    if(!driverLoader_)return false;
+    for(const auto &v:driverLoader_->devices())
+        if(v.toObject().value("driverId").toString()==driverId)return true;
+    return false;
+}
+
+void ApplicationController::scheduleCanonHotplugRediscovery(quint64 generation) {
+    // EDSDK CameraAdded is observed before some EOS bodies become visible to
+    // EdsGetCameraList().  Keep the node responsive and retry only oal.canon at
+    // increasing settle delays.  A newer CameraAdded edge supersedes this
+    // sequence.  The final pass may hard-reload only the idle Canon driver,
+    // which reproduces the successful manual Refresh recovery without touching
+    // QHY or serial drivers.
+    static constexpr int delaysMs[]={700,2200,4500,8000};
+    for(int i=0;i<4;++i){
+        QTimer::singleShot(delaysMs[i],this,[this,generation,i](){
+            if(shuttingDown_||generation!=canonHotplugGeneration_)return;
+            if(nativeDriverHasCachedDevice("oal.canon")){
+                if(i>0)emit logMessage("Canon hot-plug rediscovery completed; cancelling remaining retries");
+                return;
+            }
+            const bool hardRecovery=(i==3);
+            emit logMessage(QString("Canon hot-plug rediscovery attempt %1/4%2")
+                                .arg(i+1)
+                                .arg(hardRecovery?" (final EDSDK reload fallback)":""));
+            refreshNativeDiscoveryAsync(QStringList{"oal.canon"},hardRecovery);
+        });
+    }
+}
+
+void ApplicationController::refreshNativeDiscoveryAsync(const QStringList &driverIds, bool hardVendorRecovery) {
     if(shuttingDown_||!driverLoader_)return;
     if(nativeDiscoveryRunning()){
         // Never lose an explicit discovery request just because a slow vendor/
         // serial scan is already running. This is especially important when the
         // user changes Gemini from Auto to COM6 while the initial all-driver
-        // startup scan is still in flight.
+        // startup scan is still in flight. A focused hard-recovery request must
+        // preserve BOTH its driver scope and its hard-recovery flag.
         if(driverIds.isEmpty())pendingNativeDiscoveryAll_=true;
         else for(const auto&id:driverIds)if(!pendingNativeDiscoveryDrivers_.contains(id))pendingNativeDiscoveryDrivers_<<id;
+        if(hardVendorRecovery)pendingNativeDiscoveryHardRecovery_=true;
         return;
     }
     const auto loader=driverLoader_;
     const QStringList ids=driverIds;
+    const bool qhyInUse=(camera_&&camera_->backendName().startsWith("native:oal.qhy/"))||(guideCamera_&&guideCamera_->backendName().startsWith("native:oal.qhy/"));
+    const bool canonInUse=(camera_&&camera_->backendName().startsWith("native:oal.canon/"))||(guideCamera_&&guideCamera_->backendName().startsWith("native:oal.canon/"));
+    const bool hardRecovery=hardVendorRecovery;
     QPointer<ApplicationController> self(this);
-    auto *thread=QThread::create([loader,ids,self](){
+    auto *thread=QThread::create([loader,ids,self,qhyInUse,canonInUse,hardRecovery](){
         QStringList errors;
-        const auto devices=loader->refreshDevices(ids,&errors);
+        auto devices=loader->refreshDevices(ids,&errors);
+        // A hard recovery is still bounded to an idle vendor driver. Explicit
+        // all-driver Refresh keeps its previous QHY+Canon behaviour; a focused
+        // hot-plug fallback can now hard-reload only the requested Canon driver.
+        if(hardRecovery){
+            const auto hasDriver=[&](const QString&driverId){for(const auto&v:loader->drivers())if(v.toObject().value("driverId").toString()==driverId)return true;return false;};
+            const auto hasDevice=[&](const QString&driverId){for(const auto&v:devices)if(v.toObject().value("driverId").toString()==driverId)return true;return false;};
+            const auto requested=[&](const QString&driverId){return ids.isEmpty()||ids.contains(driverId);};
+            if(requested("oal.qhy")&&!qhyInUse&&hasDriver("oal.qhy")&&!hasDevice("oal.qhy")){
+                QString restartError;if(loader->restartDriver("oal.qhy",&restartError)){
+                    if(self)QMetaObject::invokeMethod(self,[self,ids](){if(self)emit self->logMessage(ids.isEmpty()?"Explicit Refresh: hard-reloaded native QHY driver DLL/SDK after zero-device scan":"Focused recovery: hard-reloaded native QHY driver DLL/SDK after zero-device scan");},Qt::QueuedConnection);
+                    devices=loader->refreshDevices(QStringList{"oal.qhy"},&errors);
+                }else if(!restartError.isEmpty())errors<<restartError;
+            }
+            if(requested("oal.canon")&&!canonInUse&&hasDriver("oal.canon")&&!hasDevice("oal.canon")){
+                // Canon EDSDK has a thread-affinity requirement that ordinary
+                // vendor SDKs such as QHYCCD do not. In the normal startup path
+                // the OAL Canon driver is started on ApplicationController's Qt
+                // event-loop thread, and EOS object-transfer callbacks work.
+                // v0.2.10.28 restarted the Canon DLL here on this short-lived
+                // discovery QThread. EdsInitializeSDK() therefore became owned
+                // by a worker that exited immediately after discovery: camera
+                // commands (ISO/shutter) still succeeded, but
+                // kEdsObjectEvent_DirItemRequestTransfer was never delivered.
+                // Marshal ONLY the Canon stop/unload/load/start boundary back to
+                // the long-lived application event-loop thread. The potentially
+                // slow enumeration remains on this worker afterwards.
+                QString restartError;
+                bool restarted=false;
+                if(self){
+                    QMetaObject::invokeMethod(self,[self,loader,&restartError,&restarted](){
+                        if(!self||self->shuttingDown_){restartError="Canon EDSDK restart cancelled during shutdown";return;}
+                        restarted=loader->restartDriver("oal.canon",&restartError);
+                    },Qt::BlockingQueuedConnection);
+                }else restartError="Canon EDSDK restart cancelled because application controller is unavailable";
+                if(restarted){
+                    if(self)QMetaObject::invokeMethod(self,[self,ids](){if(self)emit self->logMessage(ids.isEmpty()?"Explicit Refresh: hard-reloaded native Canon EDSDK driver on application event-loop thread after zero-device scan":"Canon hot-plug fallback: hard-reloaded native Canon EDSDK driver on application event-loop thread after zero-device scan");},Qt::QueuedConnection);
+                    devices=loader->refreshDevices(QStringList{"oal.canon"},&errors);
+                }else if(!restartError.isEmpty())errors<<restartError;
+            }
+        }
         if(!self)return;
         QMetaObject::invokeMethod(self,[self,ids,errors,devices](){
             if(!self||self->shuttingDown_)return;
@@ -516,10 +631,11 @@ void ApplicationController::refreshNativeDiscoveryAsync(const QStringList &drive
         thread->deleteLater();
         if(shuttingDown_)return;
         const bool all=pendingNativeDiscoveryAll_;
+        const bool hard=pendingNativeDiscoveryHardRecovery_;
         const QStringList pending=pendingNativeDiscoveryDrivers_;
-        pendingNativeDiscoveryAll_=false;pendingNativeDiscoveryDrivers_.clear();
+        pendingNativeDiscoveryAll_=false;pendingNativeDiscoveryHardRecovery_=false;pendingNativeDiscoveryDrivers_.clear();
         if(all||!pending.isEmpty())
-            QTimer::singleShot(0,this,[this,all,pending](){refreshNativeDiscoveryAsync(all?QStringList{}:pending);});
+            QTimer::singleShot(0,this,[this,all,pending,hard](){refreshNativeDiscoveryAsync(all?QStringList{}:pending,hard);});
     });
     thread->start();
 }
@@ -527,7 +643,7 @@ void ApplicationController::commitCapturedFrame(const CameraFrame&f){
     previousFrame_=lastFrame_;lastFrame_=f;emit frameCaptured(toQImage(f.image),f.id);
     QString stats;
     if(!f.image.empty()&&f.image.channels()==1){double mn=0,mx=0;cv::minMaxLoc(f.image,&mn,&mx);const auto mean=cv::mean(f.image);stats=QString(" min=%1 max=%2 mean=%3").arg(mn,0,'f',1).arg(mx,0,'f',1).arg(mean[0],0,'f',1);}
-    emit logMessage(QString("Captured %1 × %2 frame %3 exp=%4s gain=%5%6").arg(f.image.cols).arg(f.image.rows).arg(f.id).arg(f.exposureSec,0,'g',6).arg(f.gain).arg(stats));
+    emit logMessage(QString("Captured %1 × %2 frame %3 exp=%4s gain=%5%6%7").arg(f.image.cols).arg(f.image.rows).arg(f.id).arg(f.exposureSec,0,'g',6).arg(f.gain).arg(stats).arg(f.scienceFilePath.isEmpty()?QString():QString(" science=%1").arg(f.scienceFilePath)));
     if(oalWsServer_)oalWsServer_->broadcast("frameReady",QJsonObject{{"frameId",f.id},{"capturedUtc",f.capturedUtc.toString(Qt::ISODateWithMs)},{"width",f.image.cols},{"height",f.image.rows},{"exposureSec",f.exposureSec},{"gain",f.gain}});
     emitState();
 }
@@ -543,7 +659,9 @@ QString ApplicationController::startCapture(const ExposureRequest&r,QString*erro
         if(!cam->capture(r,frame,&err)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","CAPTURE_FAILED"},{"message",err}};return out;}
         if(ctx.isCancellationRequested()){out.cancelled=true;return out;}ctx.reportProgress(0.90,"readout",{{"frameId",frame.id}});
         QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame);},Qt::BlockingQueuedConnection);
-        out.success=true;out.result=QJsonObject{{"frameId",frame.id},{"capturedUtc",frame.capturedUtc.toString(Qt::ISODateWithMs)},{"width",frame.image.cols},{"height",frame.image.rows},{"exposureSec",frame.exposureSec},{"gain",frame.gain},{"binX",frame.binX},{"binY",frame.binY},{"previewResource",QString("/api/v1/frames/%1/preview").arg(frame.id)}};ctx.reportProgress(1.0,"completed");return out;
+        QJsonObject result{{"frameId",frame.id},{"capturedUtc",frame.capturedUtc.toString(Qt::ISODateWithMs)},{"width",frame.image.cols},{"height",frame.image.rows},{"exposureSec",frame.exposureSec},{"gain",frame.gain},{"binX",frame.binX},{"binY",frame.binY},{"previewResource",QString("/api/v1/frames/%1/preview").arg(frame.id)}};
+        if(!frame.scienceFilePath.isEmpty())result.insert("scienceFilePath",frame.scienceFilePath);
+        out.success=true;out.result=result;ctx.reportProgress(1.0,"completed");return out;
     });
     emit logMessage(QString("Exposure operation accepted: %1 (%2 s)").arg(id).arg(r.exposureSec,0,'f',4));return id;
 }
@@ -567,29 +685,41 @@ QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&req
     r.exposure.exposureSec=std::clamp(r.exposure.exposureSec,0.001,std::max(0.001,r.maxSingleExposureSec));
     r.exposure.binX=std::max(1,r.exposure.binX);r.exposure.binY=std::max(1,r.exposure.binY);
     r.maxAttempts=std::clamp(r.maxAttempts,1,6);r.stackFrames=std::clamp(r.stackFrames,2,9);r.finalStackFrames=std::clamp(r.finalStackFrames,r.stackFrames,15);
-    r.minStarsForSolve=std::clamp(r.minStarsForSolve,4,200);r.exposureGrowth=std::clamp(r.exposureGrowth,1.0,3.0);r.maxSingleExposureSec=std::max(r.exposure.exposureSec,r.maxSingleExposureSec);
+    r.minStarsForSolve=std::clamp(r.minStarsForSolve,4,200);r.exposureGrowth=std::clamp(r.exposureGrowth,1.0,3.0);r.maxSingleExposureSec=std::max(r.exposure.exposureSec,r.maxSingleExposureSec);r.maxCapturePhaseSec=std::clamp(r.maxCapturePhaseSec,15.0,600.0);
     if(r.useMountHint&&mount_&&(!r.hint.raDeg||!r.hint.decDeg)){MountStatus ms;if(mount_->status(ms,nullptr)&&ms.coordinateValid){r.hint.raDeg=ms.coordinate.raDeg;r.hint.decDeg=ms.coordinate.decDeg;emit logMessage(QString("Adaptive solve using mount hint RA=%1 DEC=%2").arg(ms.coordinate.raDeg,0,'f',6).arg(ms.coordinate.decDeg,0,'f',6));}else emit logMessage("Adaptive solve: mount coordinate is not valid yet; continuing without a mount hint");}
     auto cam=camera_;auto solver=solver_;const TelescopeProfile profile=profile_;
     const QString id=operations_.submit("solver.adaptive",{"camera","solver"},true,[this,cam,solver,profile,r](OperationContext&ctx){
         OperationOutcome out;ThreadMarshalledCamera cameraProxy(this,cam);QJsonArray attempts;AdaptivePreparedFrame lastPrepared;SolveResult lastResult;
         const int totalFramesBudget=1+std::max(0,r.maxAttempts-2)*r.stackFrames+(r.maxAttempts>1?r.finalStackFrames:0);int capturedTotal=0;
+        QElapsedTimer capturePhaseTimer;capturePhaseTimer.start();const bool canonDslr=cam->backendName().startsWith("native:oal.canon/");double adaptiveExposureSec=r.exposure.exposureSec;
         for(int attempt=0;attempt<r.maxAttempts;++attempt){
             if(ctx.isCancellationRequested()){out.cancelled=true;return out;}
             const int frameCount=attempt==0?1:(attempt==r.maxAttempts-1?r.finalStackFrames:r.stackFrames);
             ExposureRequest exposure=r.exposure;
-            const int growthIndex=std::max(0,attempt-1);
-            exposure.exposureSec=std::min(r.maxSingleExposureSec,r.exposure.exposureSec*std::pow(r.exposureGrowth,growthIndex));
+            exposure.exposureSec=std::clamp(adaptiveExposureSec,0.001,r.maxSingleExposureSec);
             std::vector<CameraFrame> frames;frames.reserve(frameCount);QString captureError;
             for(int i=0;i<frameCount;++i){
                 if(ctx.isCancellationRequested()){out.cancelled=true;return out;}
                 const double progress=0.04+0.66*double(capturedTotal)/std::max(1,totalFramesBudget);
                 ctx.reportProgress(progress,"solve.capture",{{"attempt",attempt+1},{"attempts",r.maxAttempts},{"frame",i+1},{"frames",frameCount},{"exposureSec",exposure.exposureSec},{"gain",exposure.gain},{"binX",exposure.binX},{"binY",exposure.binY}});
-                CameraFrame f;if(!cameraProxy.capture(exposure,f,&captureError)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","ADAPTIVE_SOLVE_CAPTURE_FAILED"},{"message",captureError},{"attempt",attempt+1}};return out;}frames.push_back(std::move(f));++capturedTotal;
+                if(capturePhaseTimer.elapsed()>qint64(r.maxCapturePhaseSec*1000.0)){out.problem={{"code","ADAPTIVE_SOLVE_CAPTURE_BUDGET_EXCEEDED"},{"message",QString("Adaptive capture phase exceeded %1 s wall-clock budget").arg(r.maxCapturePhaseSec,0,'f',1)},{"attempt",attempt+1},{"capturedFrames",capturedTotal}};return out;}
+                CameraFrame f;if(!cameraProxy.capture(exposure,f,&captureError)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","ADAPTIVE_SOLVE_CAPTURE_FAILED"},{"message",captureError},{"attempt",attempt+1}};return out;}
+                const int sourceW=f.image.cols,sourceH=f.image.rows,sourceBinX=std::max(1,f.binX),sourceBinY=std::max(1,f.binY);
+                f=softwareBinForSolver(std::move(f),exposure.binX,exposure.binY);
+                if((f.image.cols!=sourceW||f.image.rows!=sourceH)&&(capturedTotal==0||i==0))QMetaObject::invokeMethod(this,[this,sourceW,sourceH,w=f.image.cols,h=f.image.rows,sourceBinX,sourceBinY,bx=f.binX,by=f.binY](){emit logMessage(QString("Adaptive solver software bin: %1x%2 bin %3x%4 -> %5x%6 effective bin %7x%8").arg(sourceW).arg(sourceH).arg(sourceBinX).arg(sourceBinY).arg(w).arg(h).arg(bx).arg(by));},Qt::QueuedConnection);
+                frames.push_back(std::move(f));++capturedTotal;
+                if(canonDslr&&i+1<frameCount){for(int settle=0;settle<10&&!ctx.isCancellationRequested();++settle)QThread::msleep(25);}
             }
             QString prepWarning;lastPrepared=adaptiveSolvePreprocessor_.prepare(frames,r.registerFrames,r.equalizeBackground,&prepWarning);
             if(lastPrepared.frame.image.empty()){out.problem={{"code","ADAPTIVE_SOLVE_PREPROCESS_FAILED"},{"message",prepWarning.isEmpty()?"Could not prepare solver frame":prepWarning}};return out;}
             QJsonObject diag{{"attempt",attempt+1},{"capturedFrames",frameCount},{"registeredFrames",lastPrepared.registeredFrames},{"singleExposureSec",exposure.exposureSec},{"effectiveExposureSec",lastPrepared.frame.exposureSec},{"quality",solveQualityJson(lastPrepared.quality)}};if(!prepWarning.isEmpty())diag["warning"]=prepWarning;
             const bool finalAttempt=attempt==r.maxAttempts-1;const bool enoughStars=lastPrepared.quality.detectedStars>=r.minStarsForSolve;
+            if(!finalAttempt){
+                double multiplier=r.exposureGrowth;QString exposureDecision="increase exposure for more stellar signal";
+                if(lastPrepared.quality.saturationFraction>0.01||lastPrepared.quality.background>0.45){multiplier=0.65;exposureDecision="reduce exposure: bright/clipped background";}
+                else if(lastPrepared.quality.background>=0.12&&lastPrepared.quality.p99>=0.55){multiplier=std::min(1.15,r.exposureGrowth);exposureDecision="small exposure increase: background already adequate";}
+                adaptiveExposureSec=std::clamp(exposure.exposureSec*multiplier,0.001,r.maxSingleExposureSec);diag["nextExposureSec"]=adaptiveExposureSec;diag["exposureDecision"]=exposureDecision;
+            }
             if(!enoughStars&&!finalAttempt){diag["solverInvoked"]=false;diag["decision"]=QString("Only %1 stars detected; collect more short frames").arg(lastPrepared.quality.detectedStars);attempts.append(diag);ctx.reportProgress(0.72,"solve.quality",diag);continue;}
             SolveHint hint=r.hint;if(hint.raDeg&&hint.decDeg){const double maxRadius=std::clamp(r.hint.searchRadiusDeg,0.1,180.0);hint.searchRadiusDeg=std::min(maxRadius,std::min(180.0,5.0*std::pow(2.0,attempt)));}
             ctx.reportProgress(0.76+0.18*double(attempt)/std::max(1,r.maxAttempts),"solve.astap",{{"attempt",attempt+1},{"detectedStars",lastPrepared.quality.detectedStars},{"searchRadiusDeg",hint.searchRadiusDeg}});
@@ -602,7 +732,7 @@ QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&req
         if(!lastPrepared.frame.image.empty())QMetaObject::invokeMethod(this,[this,frame=lastPrepared.frame,result=lastResult](){commitCapturedFrame(frame);lastSolve_=result;auto j=solveToJson(lastSolve_);emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();},Qt::BlockingQueuedConnection);
         QJsonObject resultJson=solveToJson(lastResult);resultJson["attempts"]=attempts;resultJson["quality"]=solveQualityJson(lastPrepared.quality);resultJson["solverFrameId"]=lastPrepared.frame.id;out.result=resultJson;out.problem={{"code","ADAPTIVE_SOLVE_FAILED"},{"message",lastResult.message.isEmpty()?"Adaptive plate solve exhausted all attempts":lastResult.message},{"attempts",attempts}};return out;
     });
-    emit logMessage(QString("Adaptive plate-solve operation accepted: %1 — base %2 s, %3x%4 bin, max %5 s").arg(id).arg(r.exposure.exposureSec,0,'f',3).arg(r.exposure.binX).arg(r.exposure.binY).arg(r.maxSingleExposureSec,0,'f',3));return id;
+    emit logMessage(QString("Adaptive plate-solve operation accepted: %1 — base %2 s, %3x%4 effective bin, max %5 s, capture budget %6 s").arg(id).arg(r.exposure.exposureSec,0,'f',3).arg(r.exposure.binX).arg(r.exposure.binY).arg(r.maxSingleExposureSec,0,'f',3).arg(r.maxCapturePhaseSec,0,'f',0));return id;
 }
 AutofocusResult ApplicationController::autofocus(const AutofocusRequest&r){AutofocusResult x;QString busy;if(!ensureResourcesAvailable({"camera","focuser"},&busy)){x.message=busy;}else if(!camera_||!focuser_){x.message="Camera and focuser must be connected";}else x=autofocusEngine_.run(*camera_,*focuser_,r,[this](const FocusSample&s){QJsonObject j{{"position",s.position},{"score",s.score},{"spread",s.spread}};emit autofocusProgress(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusProgress",j);});auto j=autofocusToJson(x);emit autofocusCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusResult",j);emit logMessage(x.message);emitState();return x;}
 QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*error){
@@ -644,20 +774,22 @@ void ApplicationController::requestSystemLocation(){
     emit logMessage("Qt Positioning was not available at build time; enter location manually");
 #endif
 }
-bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}MountStatus before;QString statusError;if(mount_->status(before,&statusError)&&before.coordinateValid){double dra=t.raDeg-before.coordinate.raDeg;while(dra>180.0)dra-=360.0;while(dra<-180.0)dra+=360.0;QString pierError;const QString destinationPier=mount_->destinationPierSide(t,&pierError);emit logMessage(QString("Mount GOTO preflight: current RA=%1° DEC=%2° pier=%3 tracking=%4 -> target RA=%5° DEC=%6° (short dRA=%7° dDEC=%8°%9)").arg(before.coordinate.raDeg,0,'f',6).arg(before.coordinate.decDeg,0,'f',6).arg(before.pierSide).arg(before.tracking?"ON":"OFF").arg(t.raDeg,0,'f',6).arg(t.decDeg,0,'f',6).arg(dra,0,'f',6).arg(t.decDeg-before.coordinate.decDeg,0,'f',6).arg(destinationPier.isEmpty()?QString():QString(" destinationPier=%1").arg(destinationPier)));if(!pierError.isEmpty())emit logMessage("Mount DestinationSideOfPier unavailable: "+pierError);}else if(!statusError.isEmpty())emit logMessage("Mount GOTO preflight status unavailable: "+statusError);bool ok=mount_->slewTo(t,e);if(ok)emit logMessage(QString("Mount slew accepted: RA=%1°, DEC=%2° (coordinates forwarded without RA/DEC sign inversion)").arg(t.raDeg,0,'f',6).arg(t.decDeg,0,'f',6));emitState();return ok;}
+bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);MountStatus before;QString statusError;if(mountStatus(before,&statusError)&&before.coordinateValid){double dra=target.raDeg-before.coordinate.raDeg;while(dra>180.0)dra-=360.0;while(dra<-180.0)dra+=360.0;QString pierError;const QString destinationPier=mount_->destinationPierSide(target,&pierError);emit logMessage(QString("Mount GOTO preflight [J2000]: current RA=%1° DEC=%2° pier=%3 tracking=%4 -> target RA=%5° DEC=%6° (short dRA=%7° dDEC=%8°%9)").arg(before.coordinate.raDeg,0,'f',6).arg(before.coordinate.decDeg,0,'f',6).arg(before.pierSide).arg(before.tracking?"ON":"OFF").arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6).arg(dra,0,'f',6).arg(target.decDeg-before.coordinate.decDeg,0,'f',6).arg(destinationPier.isEmpty()?QString():QString(" destinationPier=%1").arg(destinationPier)));if(!pierError.isEmpty())emit logMessage("Mount DestinationSideOfPier unavailable: "+pierError);}else if(!statusError.isEmpty())emit logMessage("Mount GOTO preflight status unavailable: "+statusError);bool ok=mount_->slewTo(target,e);if(ok)emit logMessage(QString("Mount slew accepted: RA=%1°, DEC=%2° J2000 (no RA/DEC sign inversion)").arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6));emitState();return ok;}
 QString ApplicationController::startMountSlew(const EquatorialCoord&t,QString*e){
-    if(!mount_){if(e)*e="No mount connected";return{};}auto mount=mount_;
-    const QString id=operations_.submit("mount.slew",{"mount"},true,[this,mount,t](OperationContext&ctx){
-        ThreadMarshalledMount proxy(this,mount);QString err;OperationOutcome out;ctx.reportProgress(0.05,"commanding",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}});
-        if(!proxy.slewTo(t,&err)){out.problem={{"code","MOUNT_SLEW_FAILED"},{"message",err}};return out;}
+    if(!mount_){if(e)*e="No mount connected";return{};}const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);auto mount=mount_;const bool ascomDiagnostics=mount->backendName()=="ascom-classic";
+    const QString id=operations_.submit("mount.slew",{"mount"},true,[this,mount,target,ascomDiagnostics](OperationContext&ctx){
+        ThreadMarshalledMount proxy(this,mount);QString err;OperationOutcome out;ctx.reportProgress(0.05,"commanding",{{"raDeg",target.raDeg},{"decDeg",target.decDeg},{"coordinateFrame","J2000"}});
+        if(!proxy.slewTo(target,&err)){out.problem={{"code","MOUNT_SLEW_FAILED"},{"message",err}};return out;}
         ctx.reportProgress(0.25,"slewing");
         for(int i=0;i<3000;++i){
             if(ctx.isCancellationRequested()){proxy.abortMotion(nullptr);out.cancelled=true;return out;}
             MountStatus st;if(!proxy.status(st,&err)){out.problem={{"code","MOUNT_STATUS_FAILED"},{"message",err}};return out;}
+            if(ascomDiagnostics&&(i%5)==0){const auto current=st.coordinateValid?convertEquatorialFrame(st.coordinate,EquatorialFrame::J2000):st.coordinate;emit logMessage(QString("ASCOM slew sample: t=%1 s RA=%2° DEC=%3° pier=%4 tracking=%5 slewing=%6").arg(i*0.2,0,'f',1).arg(current.raDeg,0,'f',6).arg(current.decDeg,0,'f',6).arg(st.pierSide).arg(st.tracking?"ON":"OFF").arg(st.slewing?"YES":"NO"));}
             if(!st.slewing){
                 if(st.coordinateValid){
-                    double dra=t.raDeg-st.coordinate.raDeg;while(dra>180.0)dra-=360.0;while(dra<-180.0)dra+=360.0;
-                    const double ddec=t.decDeg-st.coordinate.decDeg;
+                    auto current=convertEquatorialFrame(st.coordinate,EquatorialFrame::J2000);
+                    double dra=target.raDeg-current.raDeg;while(dra>180.0)dra-=360.0;while(dra<-180.0)dra+=360.0;
+                    const double ddec=target.decDeg-current.decDeg;
                     if(std::max(std::abs(dra),std::abs(ddec))>0.5){
                         out.problem={{"code","MOUNT_SLEW_INCOMPLETE"},{"message",QString("Mount stopped without reaching target: residual dRA=%1 deg dDEC=%2 deg").arg(dra,0,'f',3).arg(ddec,0,'f',3)}};
                         return out;
@@ -669,11 +801,11 @@ QString ApplicationController::startMountSlew(const EquatorialCoord&t,QString*e)
         }
         proxy.abortMotion(nullptr);out.problem={{"code","MOUNT_SLEW_TIMEOUT"},{"message","Mount slew did not complete within 10 minutes"}};return out;
     });
-    emit logMessage(QString("Mount slew operation accepted: %1 → RA=%2°, DEC=%3°").arg(id).arg(t.raDeg,0,'f',6).arg(t.decDeg,0,'f',6));return id;
+    emit logMessage(QString("Mount slew operation accepted: %1 → RA=%2°, DEC=%3° J2000").arg(id).arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6));return id;
 }
 bool ApplicationController::abortMountMotion(QString*e){QString owner;if(operations_.isResourceLocked("mount",&owner))operations_.cancel(owner,nullptr);if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->abortMotion(e);if(ok)emit logMessage("Mount motion abort requested");emitState();return ok;}
-bool ApplicationController::syncMount(const EquatorialCoord&t,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->syncTo(t,e);if(ok)emit logMessage(QString("Mount sync: RA=%1°, DEC=%2°").arg(t.raDeg,0,'f',6).arg(t.decDeg,0,'f',6));emitState();return ok;}
-bool ApplicationController::mountStatus(MountStatus&s,QString*e)const{if(!mount_){if(e)*e="No mount connected";return false;}return mount_->status(s,e);}
+bool ApplicationController::syncMount(const EquatorialCoord&t,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);bool ok=mount_->syncTo(target,e);if(ok)emit logMessage(QString("Mount sync: RA=%1°, DEC=%2° J2000").arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6));emitState();return ok;}
+bool ApplicationController::mountStatus(MountStatus&s,QString*e)const{if(!mount_){if(e)*e="No mount connected";return false;}if(!mount_->status(s,e))return false;if(s.coordinateValid)s.coordinate=convertEquatorialFrame(s.coordinate,EquatorialFrame::J2000);return true;}
 bool ApplicationController::focuserStatus(FocuserStatus&s,QString*e)const{if(!focuser_){if(e)*e="No focuser connected";return false;}return focuser_->status(s,e);}
 bool ApplicationController::moveFocuser(int p,QString*e){if(!ensureResourcesAvailable({"focuser"},e))return false;if(!focuser_){if(e)*e="No focuser connected";return false;}bool ok=focuser_->moveAbsolute(p,e);emitState();return ok;}
 bool ApplicationController::haltFocuser(QString*e){QString owner;if(operations_.isResourceLocked("focuser",&owner))operations_.cancel(owner,nullptr);if(!focuser_){if(e)*e="No focuser connected";return false;}bool ok=focuser_->halt(e);if(ok)emit logMessage("Focuser halt requested");return ok;}
@@ -709,7 +841,7 @@ void ApplicationController::refreshState(){emitState();}
 QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const QString&role,const DeviceBinding&binding){if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"role",role},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")}});}};add(camera_,"camera","main",settings_.cameraBinding());add(guideCamera_,"camera","guide",settings_.guideCameraBinding());add(mount_,"mount","main",settings_.mountBinding());add(focuser_,"focuser","main",settings_.focuserBinding());return a;}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();j["canAbortExposure"]=camera_->canAbortExposure();}return j;}
 bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
-QJsonObject ApplicationController::stateJson()const{auto strings=[](const QStringList&xs){QJsonArray a;for(const auto&x:xs)a.append(x);return a;};QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"backends",QJsonObject{{"camera",strings(cameraBackends())},{"mount",strings(mountBackends())},{"focuser",strings(focuserBackends())},{"solver",strings(solverBackends())}}},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr))j["mount"]=QJsonObject{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide}};FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
+QJsonObject ApplicationController::stateJson()const{auto strings=[](const QStringList&xs){QJsonArray a;for(const auto&x:xs)a.append(x);return a;};QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"backends",QJsonObject{{"camera",strings(cameraBackends())},{"mount",strings(mountBackends())},{"focuser",strings(focuserBackends())},{"solver",strings(solverBackends())}}},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr)){QJsonObject mj{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateFrame",equatorialFrameName(m.coordinate.frame)},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide},{"geometryType",m.geometryType}};if(m.axes.valid){mj["axis1Deg"]=m.axes.axis1Deg;mj["axis2Deg"]=m.axes.axis2Deg;mj["axesValid"]=true;}else mj["axesValid"]=false;j["mount"]=mj;}FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
 QJsonObject ApplicationController::nodeInfoJson()const{
     return {{"nodeId",QCoreApplication::applicationName()+"@"+QSysInfo::machineHostName()},
             {"version",QString::fromLatin1(OAS_VERSION)},
@@ -722,11 +854,9 @@ QJsonObject ApplicationController::nodeInfoJson()const{
 }
 bool ApplicationController::refreshNativeDiscovery(QString *error){
     if(!driverLoader_){if(error)*error="Native OAL driver registry unavailable";return false;}
-    QStringList errors;const auto devices=driverLoader_->refreshDevices(&errors);
-    if(!errors.isEmpty()){for(const auto&e:errors)emit logMessage("Native discovery warning: "+e);if(error)*error=errors.join("; ");}
-    emit logMessage(QString("Native OAL discovery refreshed: %1 device(s)").arg(devices.size()));
-    emitState();
-    return errors.isEmpty();
+    refreshNativeDiscoveryAsync({},true);
+    emit logMessage("Explicit native device discovery started (vendor-neutral; QHY hard SDK recovery allowed if needed)");
+    return true;
 }
 QJsonArray ApplicationController::availableSerialPorts()const{
     QJsonArray out;

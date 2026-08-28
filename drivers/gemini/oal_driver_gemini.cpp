@@ -201,7 +201,7 @@ bool probePort(const QString &port, Device &device, bool keepOpen) {
 
     // Windows HIL established that this CH340/Gemini controller needs a quiet
     // boot window after Open() before the first :02# byte.  The driver manifest
-    // is the authoritative runtime configuration, so v0.2.10.19 keeps its
+    // is the authoritative runtime configuration, so v0.2.10.25 keeps its
     // openSettleMs in lock-step with the C++ default (2200 ms).  If the first
     // post-settle exchange still fails, keep the same port open and retry only
     // after an additional recovery delay.  Reopening would restart the device.
@@ -330,7 +330,7 @@ void stop(void *) {
 const char *manifest(void *) {
     return json(QJsonObject{{"driverId", "oal.gemini"},
                             {"name", "OpenAstroLink native Gemini EAF driver"},
-                            {"version", "0.2.10.19"},
+                            {"version", "0.2.10.25"},
                             {"abiVersion", 2},
                             {"threadModel", "per-device-serial"},
                             {"protocol", "MyFocuserPro2 serial"},
@@ -478,7 +478,7 @@ OalDriverV2 api{OAL_DRIVER_ABI_V2,
                 OAL_DRIVER_FEATURE_EVENTS | OAL_DRIVER_FEATURE_HEALTH,
                 "oal.gemini",
                 "OpenAstroLink native Gemini EAF driver",
-                "0.2.10.19",
+                "0.2.10.25",
                 nullptr,
                 &manifest,
                 &start,

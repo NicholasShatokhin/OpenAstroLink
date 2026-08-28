@@ -1,4 +1,4 @@
-# OAL API — v0.2.10.19
+# OAL API — v0.2.10.25
 
 Канонічний документ: `../OAL_API.md`.
 
@@ -7,6 +7,6 @@ Node API забезпечує discovery, profile, device connect/disconnect, ope
 Тривалі дії мають виконуватися як operation resources; REST/WS лишаються control plane, а великі science data мають переходити в окремий data plane.
 
 
-## v0.2.10.19 adaptive solve
+## v0.2.10.25 adaptive solve
 
 `POST /api/v1/solve/adaptive` запускає асинхронну `solver.adaptive` operation з locks `camera + solver`. Node сам робить короткі експозиції, registration/stack, background normalization та retry solver. Деталі: `docs/uk/PLATE_SOLVING.md`.
