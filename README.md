@@ -1,13 +1,24 @@
 # OpenAstroSuite / OpenAstroLink
 
 
-**0.2.10.16 mount interoperability release:** adds an experimental native `oal.eqdrive` ASTEP driver while keeping the existing Sky-Watcher/EqMount driver, a Windows Classic ASCOM backend with ASCOM Chooser/isolated helper process, SynScan/SynScan Pro network backends (UDP 11881 and TCP 11882 compatibility), and persistent native serial-port selection/migration for Gemini/EQDrive/Sky-Watcher.
+**Current release: v0.2.10.19 — server-first startup + live native catalogue + corrected direct mount control**
 
-**Current release: v0.2.10.16 — EQDrive + Classic ASCOM + SynScan network**
+This release brings HTTP/WebSocket control up before slow hardware enumeration, fixes the native-device combobox catalogue, keeps `synscan-wifi` as direct UDP/11880 mount control, and makes `oal.eqdrive` a dual-protocol native driver: EQMOD-compatible Sky-Watcher Motor Controller transport first, official EQDrive ASTEP as a fallback. Classic ASCOM remains available and the existing `oal.skywatcher` / EqMount driver is retained.
 
 English is the canonical project language. Ukrainian mirrors are provided in `README_UA.md` and `docs/uk/`.
 
 OpenAstroLink (OAL) is a local-first observatory control stack. The reference path is **native OAL drivers**; INDI, ASCOM Alpaca and LX200 remain optional compatibility layers for equipment that does not yet have a native OAL driver.
+
+
+## v0.2.10.19 HIL startup/catalogue/mount correction
+
+- **Server-first node startup:** driver libraries are loaded, HTTP/WebSocket listeners start, and hardware enumeration runs on a background thread. Slow Gemini reset recovery or EQDrive/QHY discovery no longer prevents the GUI from connecting to the node.
+- **Live native catalogue fix:** native device records are no longer incorrectly filtered by a driver-only `native` flag. A Gemini/QHY/native mount discovered after startup is propagated in node state and appears in the remote GUI combobox without restarting the GUI.
+- **Asynchronous serial selector:** applying a Gemini/Sky-Watcher/EQDrive COM override queues discovery instead of blocking the GUI. If the selected native device is already cached, no redundant serial reopen/reset is performed.
+- **Direct SynScan/EQDrive Wi-Fi:** `synscan-wifi` continues to talk directly to the mount adapter over UDP 11880, while `synscan-app` remains the separate SynScan Pro/App compatibility backend on UDP 11881.
+- **Motor Controller semantics corrected:** running/GOTO/initialization/direction bits and GOTO motion-mode encoding now follow the Sky-Watcher/EQMOD convention. Direct GOTO uses the proven `G -> H -> M -> J` sequence and verifies encoder movement before reporting success.
+- **Native EQDrive dual protocol:** `oal.eqdrive` first probes the EQMOD-compatible Sky-Watcher Motor Controller command set used by the proven EQMOD path, then falls back to official EQDrive ASTEP (`St`, `Pos`, `Cg`, `Speed`, `Goto`) where exposed by firmware. A busy COM port exits discovery immediately rather than fighting EQMOD/ASCOM.
+- **Safety retained:** direct Wi-Fi and native EQDrive celestial GOTO still require Sync and remain HIL-limited to small test moves until axis direction/pier geometry is qualified.
 
 ## Current hardware coverage
 
@@ -19,17 +30,26 @@ Native OAL driver code exists for:
 - ZWO EAF focusers (`oal.zwo.eaf`, EAF SDK);
 - Gemini EAF (`oal.gemini`, direct serial protocol);
 - Sky-Watcher/SynScan mounts (`oal.skywatcher`, existing direct serial/EqMount path);
-- EQDrive controllers (`oal.eqdrive`, experimental direct ASTEP serial path).
+- EQDrive controllers (`oal.eqdrive`, experimental dual-protocol direct serial path: EQMOD-compatible Motor Controller first, official ASTEP fallback).
 
 These drivers are implemented but still require hardware-in-the-loop qualification on the actual host OS, CPU architecture and device/firmware before being labelled production-ready.
 
 
-## Mount interoperability added in v0.2.10.16
+## Mount interoperability added in v0.2.10.17
 
 - **Native EQDrive:** `oal.eqdrive` is separate from and does not replace `oal.skywatcher`. Discovery is read-only; the initial RA/Dec model is a conservative sync-anchor model and requires one Sync before native celestial GOTO. See `docs/EQDRIVE.md`.
 - **Classic ASCOM (Windows):** backend `ascom-classic` uses `oas-ascom-host.exe` and the installed ASCOM Platform/registered Telescope driver, with GUI **ASCOM Chooser...** and **ASCOM Properties...** controls. This is the compatibility path for EQMOD-style use. See `docs/ASCOM_CLASSIC.md`.
-- **SynScan network:** `synscan-app` uses the richer SynScan App Protocol on UDP 11881; `synscan-wifi` reuses the serial-protocol compatibility server on TCP 11882. The host is the phone/PC running SynScan Pro. See `docs/SYNSCAN_NETWORK.md`.
+- **SynScan network:** `synscan-wifi` talks directly to the mount/EQDrive Wi-Fi adapter with the Motor Controller protocol on UDP 11880 and does not need SynScan Pro. `synscan-app` talks to a running SynScan App/Pro on UDP 11881. See `docs/SYNSCAN_NETWORK.md`.
 - **Gemini serial selection:** choosing a COM port in **Native serial discovery** now persists the override and migrates an old native Gemini backend binding to the newly discovered device on that port. CLI `--gemini-port` still wins for the current process.
+
+## HIL reliability fixes in this package
+
+- **QHY single-frame lifecycle:** every successful/failed single-frame cycle is explicitly terminated with `CancelQHYCCDExposingAndReadout`; a readout watchdog cancels a stuck SDK call, actual exposure/gain/offset are read back from the SDK, and frame min/max/mean are logged. Native QHY discovery is not invoked while a QHY handle is active.
+- **Scoped native rediscovery:** reconnect retries refresh only the missing native driver. An unplugged Gemini no longer causes `ScanQHYCCD()` or repeated EQDrive/Sky-Watcher probes against a COM port currently owned by EQMOD/Classic ASCOM.
+- **Gemini COM migration:** stale port-based bindings can migrate after unique automatic rediscovery; changing the serial selector refreshes only `oal.gemini` and updates the persisted native binding.
+- **SynScan network UX:** `synscan-wifi` auto-discovers the direct adapter on UDP 11880 (including common 192.168.4.1/192.168.0.1 AP addresses); `synscan-app` independently discovers the phone/PC running SynScan Pro on UDP 11881. TCP 11882 is documented only as another server exported by SynScan App/Pro, not as direct mount Wi-Fi.
+- **Mount direction diagnostics:** OpenAstroLink does not guess/invert RA or DEC. Before GOTO it logs current RA/Dec, target, tracking, pier side and shortest coordinate deltas; Stellarium coordinates are logged as decoded/forwarded unchanged.
+- **EQDrive serial diagnostics:** focused native discovery now tries all four DTR/RTS states and logs read-only ASTEP replies (`FWs`, `FW`, `FWx`, `St`, `Pos`, `Cg`) before exposing a mount only when the motor section is actually usable.
 
 ## Runtime model
 
@@ -480,7 +500,7 @@ OpenAstroLink node shutdown complete
 Windows HIL status: native Gemini EAF discovery/connection, direct focuser motion and autofocus-driven motion have now been confirmed on real hardware. Autofocus convergence/repeatability on a real optical target remains a separate validation item.
 
 
-## v0.2.10.16 — urban-resilient adaptive plate solving
+## v0.2.10.17 — urban-resilient adaptive plate solving
 
 For light-polluted sites and mounts that cannot support a single long solver exposure, the node now provides an adaptive solve operation instead of relying on `capture once -> ASTAP once`. The default policy starts with one short exposure, then escalates to registered stacks of short exposures. Large-scale sky gradients are removed before solving, solver-frame star count is measured before expensive retries, and the last attempt always invokes the selected solver even if the local quality gate is pessimistic.
 
@@ -488,7 +508,7 @@ The GUI exposes **Adaptive urban capture + solve**. Its defaults are 2x2 solver 
 
 REST clients can start the same node-local operation with `POST /api/v1/solve/adaptive`. The operation returns per-attempt diagnostics (`detectedStars`, background/noise statistics, registered frame count, effective stacked exposure, search radius and solver message) plus the `solverFrameId` used by ASTAP. The solver frame remains available through the normal frame preview endpoint for diagnosis.
 
-### v0.2.10.16 HIL discovery/state fixes
+### v0.2.10.17 HIL discovery/state fixes
 
 - Persisted native USB devices are re-discovered before each auto-connect retry, so a QHY camera that appears after node startup can recover without restarting the node.
 - Native Gemini moves are asynchronous at the driver boundary; `focuser.status` remains callable during motion and reports live position/`moving`. Autofocus now explicitly waits for the focuser to become idle before each exposure.

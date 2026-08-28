@@ -2,6 +2,7 @@
 class QTimer;
 #include "core/observatory_controller.h"
 #include <QMainWindow>
+#include <QHash>
 
 class QComboBox; class QLineEdit; class QDoubleSpinBox; class QSpinBox; class QLabel; class QTextEdit; class QListWidget; class QGraphicsScene; class QCheckBox; class QPushButton; class QTabWidget;
 
@@ -19,7 +20,7 @@ private:
     QImage lastImage_;
     QComboBox *cameraBackend_{}; QLineEdit *cameraEndpoint_{}; QLabel *cameraDeviceStatus_{};
     QComboBox *guideCameraBackend_{}; QLineEdit *guideCameraEndpoint_{}; QLabel *guideCameraDeviceStatus_{};
-    QComboBox *mountBackend_{}; QLineEdit *mountEndpoint_{}; QLabel *mountDeviceStatus_{};
+    QComboBox *mountBackend_{}; QLineEdit *mountEndpoint_{}; QLabel *mountDeviceStatus_{}; QHash<QString,QString> mountEndpointsByBackend_; QString lastMountBackend_;
     QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{}; QLabel *focuserDeviceStatus_{};
     QComboBox *nativeSerialDriver_{}; QComboBox *nativeSerialPort_{};
     QDoubleSpinBox *exposure_{}; QComboBox *solverBackend_{}; QLineEdit *catalogPath_{}; QLineEdit *modelPath_{}; QSpinBox *gain_{}; QDoubleSpinBox *hintRa_{}; QDoubleSpinBox *hintDec_{}; QDoubleSpinBox *hintRadius_{};

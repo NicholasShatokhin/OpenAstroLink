@@ -6,10 +6,23 @@
 #include <algorithm>
 
 namespace oas {
-SynScanAppMount::SynScanAppMount(QString e):endpoint_(std::move(e)){if(endpoint_.trimmed().isEmpty())endpoint_="127.0.0.1:11881";}
+SynScanAppMount::SynScanAppMount(QString e):endpoint_(std::move(e)){if(endpoint_.trimmed().isEmpty())endpoint_="auto";}
 bool SynScanAppMount::parseEndpoint(QHostAddress&host,quint16&port,QString*error)const{
-    QString text=endpoint_.trimmed();QUrl u=text.contains("://")?QUrl(text):QUrl("udp://"+text);
-    if(!u.isValid()||u.host().isEmpty()){if(error)*error="SynScan App endpoint must be the SynScan-app device host/IP[:port], default UDP port 11881";return false;}
+    QString text=endpoint_.trimmed();
+    if(text.isEmpty()||text.compare("auto",Qt::CaseInsensitive)==0){
+        // SynScan App Protocol is served by the phone/PC running SynScan Pro,
+        // not by the Wi-Fi adapter itself. Discover it with a harmless UDP
+        // ServerVersion broadcast on the documented 11881 port.
+        QUdpSocket probe;probe.setSocketOption(QAbstractSocket::MulticastTtlOption,1);
+        if(!probe.bind(QHostAddress::AnyIPv4,0,QUdpSocket::ShareAddress)){if(error)*error="Could not bind SynScan discovery socket: "+probe.errorString();return false;}
+        const QByteArray q("ServerVersion");probe.writeDatagram(q,QHostAddress::Broadcast,11881);
+        QElapsedTimer timer;timer.start();while(timer.elapsed()<1800){if(!probe.waitForReadyRead(150))continue;while(probe.hasPendingDatagrams()){const auto dg=probe.receiveDatagram();const auto r=QString::fromLatin1(dg.data()).trimmed();if(r.startsWith("Ok,ServerVersion")){host=dg.senderAddress();port=11881;return true;}}}
+        // Same-machine SynScan Pro is common on Windows; try loopback after the
+        // broadcast so Auto still works when broadcast is filtered.
+        host=QHostAddress::LocalHost;port=11881;return true;
+    }
+    QUrl u=text.contains("://")?QUrl(text):QUrl("udp://"+text);
+    if(!u.isValid()||u.host().isEmpty()){if(error)*error="SynScan App endpoint must be auto or the IP/host of the phone/PC running SynScan Pro[:11881] (not the mount Wi-Fi adapter IP)";return false;}
     port=quint16(u.port(11881));host=QHostAddress(u.host());
     if(host.isNull()){const auto info=QHostInfo::fromName(u.host());for(const auto&a:info.addresses())if(a.protocol()==QAbstractSocket::IPv4Protocol){host=a;break;}}
     if(host.isNull()){if(error)*error="Could not resolve SynScan App host: "+u.host();return false;}return true;

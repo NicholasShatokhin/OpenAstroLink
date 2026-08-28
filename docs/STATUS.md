@@ -1,4 +1,4 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.16
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.19
 
 Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL or production qualification pending; 🧪 experimental; ⏳ not yet implemented.
 
@@ -12,7 +12,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Per-device disconnect | ✅ | Main camera, guide camera, mount, focuser independent |
 | HTTP API | ✅ | `/api/v1` reference API present |
 | WebSocket state/events | 🟡 | Channel exists; reliable sequence/replay contract still missing |
-| Stellarium bridge | 🟡 | Position/GOTO implemented; HIL/interoperability pending |
+| Stellarium bridge | ✅ basic HIL | Stellarium GOTO confirmed through node and Classic ASCOM/EQMOD; native-mount parity still pending |
 
 ## Operations
 
@@ -42,14 +42,16 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 
 | Driver | Status | Notes |
 |---|---|---|
-| QHY | 🟡 | Native QHYCCD SDK driver; Windows QHY header isolation added; HIL pending |
+| QHY | 🟡 HIL active | QHY5III462C discovery/connect/capture confirmed; post-frame readout termination, watchdog/control read-back and server-first live-catalogue propagation are under repeated-capture HIL qualification |
 | Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
 | ZWO ASI | 🟡 | Native ASI SDK, multi-camera discovery; HIL pending |
 | ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
 | Gemini EAF | ✅ basic HIL | Windows native discovery/connection, direct motion and autofocus-driven motion confirmed; long-run/reconnect/limits qualification remains |
-| Sky-Watcher/SynScan | 🟡 | Direct SynScan path; HIL pending |
-| Sky-Watcher direct motor-controller | 🧪 | Codec/protocol foundation only |
+| Sky-Watcher/SynScan | 🟡 | Serial SynScan path retained; `synscan-wifi` is direct Motor Controller UDP/11880 and `synscan-app` is SynScan Pro/App UDP/11881; direct Wi-Fi movement semantics corrected, HIL pending |
+| Sky-Watcher direct motor-controller | 🧪 | Shared Motor Controller codec now follows EQMOD/INDI status/direction semantics and is used by direct Wi-Fi plus the EQDrive native fallback |
+| EQDrive native | 🧪 | Separate `oal.eqdrive` dual-protocol driver: EQMOD-compatible Motor Controller first, ASTEP fallback; direct Standard5N HIL still pending while Classic ASCOM/EQMOD is confirmed |
 | INDI compatibility | ✅ | Optional compatibility client; independent of native drivers |
+| Classic ASCOM | ✅ basic HIL | Windows out-of-process COM bridge; EQMOD HEQ5/6 connect, park/unpark and Stellarium-driven GOTO confirmed |
 | ASCOM Alpaca | ✅ | Compatibility backend |
 | LX200 | ✅ | Minimal compatibility path |
 
@@ -116,4 +118,4 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 
 ## Release posture
 
-v0.2.10.5 is a **build/HIL qualification release**, not yet an unattended observatory release. The next engineering priority is a clean full build on a physical Windows/Linux host followed by supervised HIL qualification of each connected device.
+v0.2.10.19 is a **supervised HIL qualification release**, not yet an unattended observatory release. Windows HIL has confirmed graceful shutdown, QHY connection/capture, Gemini motion/autofocus motion, Classic ASCOM through EQMOD, and Stellarium-driven GOTO. Current qualification focus is QHY repeated-capture stability/control read-back, mount GOTO direction/pier-side diagnostics, SynScan App network transport, and native EQDrive discovery.

@@ -160,6 +160,7 @@ public:
     QJsonObject abort(){return method0(L"AbortSlew","ABORT_FAILED");}
     QJsonObject park(bool parked){return method0(parked?L"Park":L"Unpark",parked?"PARK_FAILED":"UNPARK_FAILED");}
     QJsonObject pulseGuide(int direction,int ms){return method2(L"PulseGuide",vInt(direction),vInt(ms),"PULSE_GUIDE_FAILED");}
+    QJsonObject destinationPierSide(double ra,double dec){if(!telescope_.valid())return notConnected();QString e;AutoVariant out;if(!telescope_.call(L"DestinationSideOfPier",{vDouble(ra),vDouble(dec)},&out.value,&e))return errorJson("DESTINATION_PIER_SIDE_FAILED",e);return ok({{"sideOfPier",asInt(out.value,-1)}});}
 private:
     QJsonObject notConnected(){return errorJson("NOT_CONNECTED","ASCOM telescope is not connected");}
     QJsonObject method0(const wchar_t*n,const QString&code){if(!telescope_.valid())return notConnected();QString e;if(!telescope_.call(n,{},nullptr,&e))return errorJson(code,e);return ok();}
@@ -201,6 +202,7 @@ int main(int argc,char **argv){
             else if(cmd=="tracking")r=s.tracking(q.value("enabled").toBool());
             else if(cmd=="park")r=s.park(q.value("parked").toBool());
             else if(cmd=="pulseGuide")r=s.pulseGuide(q.value("direction").toInt(),q.value("durationMs").toInt());
+            else if(cmd=="destinationPierSide")r=s.destinationPierSide(q.value("raHours").toDouble(),q.value("decDeg").toDouble());
             else if(cmd=="quit"){r=ok();r["quit"]=true;}
             else r=errorJson("UNKNOWN_COMMAND","Unknown command: "+cmd);
         }

@@ -1,76 +1,67 @@
 # Native EQDrive support
 
-This document describes the experimental native OpenAstroLink driver for EQDrive controllers.
+`oal.eqdrive` is the experimental native ABI-v2 driver for EQDrive controllers.
+It remains separate from the existing `oal.skywatcher` / EqMount path.
 
-## Scope
+## Canonical serial protocol: ASTEP
 
-`oal.eqdrive` is a new ABI-v2 mount driver and is separate from the existing `oal.skywatcher` / EqMount path. The existing Sky-Watcher driver is retained unchanged for SynScan-compatible hardware.
+The native serial driver uses the public **EQDrive ASTEP (astronomical equipment
+protocol)** specification published by EQDrive. The mount section explicitly
+defines read-only `St`, `Pos`, `Cg`, voltage telemetry and the motion commands
+`Speed`, `Slew`, `Goto`, and `Drv`. Axis positions/displacements are degrees and
+speeds are degrees/hour.
 
-The driver talks directly to an EQDrive controller over a serial/VCP connection using the published ASTEP command set. It does **not** require EQMOD or ASCOM for the native path.
+Canonical reference: <https://www.eqdrive.com.ua/en/support/eqdrive-protocol>.
 
-Reference: EQDrive public ASTEP protocol, <https://www.eqdrive.com.ua/en/support/eqdrive-protocol>.
+Discovery is deliberately movement-free. It probes the mount-specific commands
+in this order:
+
+- `St\r` — state, both axis positions/speeds and GOTO/driver bits;
+- `Pos\r` — both axis positions;
+- `Cg\r` — motor configuration, including Direction/Reversed;
+- `FWx/FWs/FW` only as supplemental identity diagnostics.
+
+A device is exposed as a mount only after `St` or `Pos` validates as an ASTEP
+mount response. This avoids treating a focuser/configuration-only personality as
+a telescope mount.
 
 ## Discovery
 
-Automatic discovery is intentionally conservative. It prefers CP210x/EQDrive-like serial devices. A port can be pinned explicitly:
+CP210x/SILABS ports are preferred automatically. A port can also be pinned:
 
 ```text
 openastrolink-node.exe --eqdrive-port COM5
 ```
 
-or selected in **Devices → Native serial discovery → EQDrive (ASTEP)**.
+Focused discovery tries the configured baud list and all four DTR/RTS line-state
+combinations. If Windows reports `Access is denied`, probing stops immediately:
+EQMOD/Classic ASCOM, EQDrive Config and the native driver cannot own the same
+COM port simultaneously. A previously verified descriptor remains visible while
+the physical port exists, even if another program temporarily owns it.
 
-Focused discovery tests a bounded list of baud rates and modem-line combinations and only uses read-only ASTEP commands (`St`, firmware queries, `Cg`). Discovery never slews the mount.
+## Coordinate and motion safety
 
-The resulting backend has the form:
+ASTEP exposes mechanical axis degrees, not celestial RA/DEC. OpenAstroLink uses
+`sync-anchor-v2` and does not invent a home/pier model:
 
-```text
-native:oal.eqdrive/eqdrive:<stable-id>
-```
+1. connect the native EQDrive backend;
+2. point at a known sky coordinate;
+3. issue Sync once;
+4. RA/DEC status and GOTO are derived relative to that axis/sky anchor.
 
-where a USB serial number is preferred over a COM-port name when available.
+`coordinateValid=false` until Sync. The first HIL release limits each native GOTO
+to `maxNativeGotoDeg` (15 deg by default). It converts the requested sky delta to
+an **absolute ASTEP `Goto <axis1> <axis2>`** target. EQDrive firmware already owns
+its `Direction/Reversed` motor configuration; OpenAstroLink reports those signs
+as telemetry and does not blindly apply them a second time.
 
-## Implemented ASTEP operations
+Park/meridian-flip remain disabled until the real pier model is qualified.
+Classic ASCOM/EQMOD remains the qualified full-slew fallback.
 
-The driver uses the public mount section of ASTEP:
+## Direct Wi-Fi is a different transport
 
-- `St` — axis state, positions and speeds;
-- `Pos` — axis positions;
-- `Slew` — relative axis motion;
-- `Goto` — used for best-effort motion cancellation by retargeting the current position;
-- `Speed` — tracking and temporary guide-rate offsets;
-- `Vin`, `Vbs`, `Cg` — telemetry/configuration reads;
-- `FW`, `FWs`, `FWx` — optional identity reads.
-
-ASTEP axis positions/offsets are degrees and axis speeds are degrees/hour.
-
-## Celestial coordinate model in v0.2.10.16
-
-The native driver deliberately does not guess a mechanical home position, pier side, or meridian-flip convention for an unqualified installation. Instead it exposes a conservative **sync-anchor-v1** model.
-
-1. Connect the mount.
-2. Point the mount at a known sky position using a trusted method.
-3. Issue one OpenAstroLink **Sync** with the known RA/Dec.
-4. After that anchor exists, OAL maps ASTEP axis deltas to sky coordinates and accepts RA/Dec GOTO commands on the same pier-side branch.
-
-Before the first Sync, `mount.status` returns `coordinateValid=false`. The GUI shows **Sky coordinates: not synced yet**, adaptive plate solving will not use the invalid mount position as a solve hint, and the Stellarium bridge will not publish a bogus `0,0` position.
-
-### Current limitations
-
-The following are intentionally not claimed as qualified in this release:
-
-- automatic pier-side determination;
-- automatic meridian flip;
-- native park/unpark geometry;
-- persistence of a celestial alignment model across arbitrary mechanical repositioning;
-- verified sign/orientation parity on every EQDrive/mount installation.
-
-Those features require real-mount HIL after basic serial control is confirmed.
-
-## Telemetry
-
-The native ABI additionally exposes `eqdrive.telemetry` with axis positions/speeds, driver state, detected firmware text, serial port/baud rate and best-effort `Vin`, `Vbs`, `Cg` reads.
-
-## Relationship to Classic ASCOM
-
-Classic ASCOM/EQMOD remains a first-class compatibility path on Windows. It is useful both for immediate observing and as a behavioral reference while native EQDrive is being qualified. See [ASCOM_CLASSIC.md](ASCOM_CLASSIC.md).
+`synscan-wifi` does **not** use ASTEP. It emulates the path used by SynScan Pro
+when talking directly to a SynScan-compatible Wi-Fi adapter: the official
+Sky-Watcher Motor Controller protocol over UDP 11880. This is intentionally
+separate from `oal.eqdrive` serial ASTEP and from `synscan-app` (SynScan Pro API).
+See [SYNSCAN_NETWORK.md](SYNSCAN_NETWORK.md).

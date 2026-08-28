@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.16 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.19 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -429,7 +429,7 @@ endif()
 if(OAS_ENABLE_NATIVE_EQDRIVE)
     add_library(oal_driver_eqdrive SHARED
         drivers/eqdrive/oal_driver_eqdrive.cpp
-        drivers/eqdrive/astep_protocol.h)
+        drivers/skywatcher/motor_controller_protocol.h)
     target_include_directories(oal_driver_eqdrive PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/drivers/eqdrive)
     target_link_libraries(oal_driver_eqdrive PRIVATE Qt6::Core Qt6::SerialPort)
     oal_set_driver_output(oal_driver_eqdrive)

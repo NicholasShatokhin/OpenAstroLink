@@ -1,13 +1,24 @@
 # OpenAstroSuite / OpenAstroLink
 
 
-**Реліз сумісності mount 0.2.10.16:** додано експериментальний native `oal.eqdrive` ASTEP driver зі збереженням наявного Sky-Watcher/EqMount driver, Windows Classic ASCOM backend з ASCOM Chooser та ізольованим helper-процесом, мережеві SynScan/SynScan Pro backends (UDP 11881 і TCP 11882 compatibility), а також коректне збереження/міграцію вибраного native serial-порту для Gemini/EQDrive/Sky-Watcher.
+**Поточний реліз: v0.2.10.19 — server-first startup + live native catalogue + виправлене пряме керування монтуванням**
 
-**Поточний реліз: v0.2.10.16 — EQDrive + Classic ASCOM + SynScan network**
+Цей реліз виправляє появу native-пристроїв у GUI після hot-plug/discovery, робить `synscan-wifi` справжнім прямим UDP/11880 transport до mount/EQDrive, залишає `synscan-app` шляхом через SynScan Pro на UDP/11881 та залишає `oal.eqdrive` на офіційному ASTEP mount protocol (`St/Pos/Cg/Speed/Slew/Goto`) та відділяє його від direct SynScan Wi-Fi UDP/11880. Classic ASCOM і наявний `oal.skywatcher` зберігаються.
 
 Англійська документація є канонічною. Українські дзеркала знаходяться у `README_UA.md` та `docs/uk/`.
 
 OpenAstroLink (OAL) — local-first стек керування обсерваторією. Основний шлях до обладнання — **нативні OAL-драйвери**; INDI, ASCOM Alpaca та LX200 залишаються опційними шарами сумісності для обладнання, для якого ще немає native OAL driver.
+
+
+## v0.2.10.19 — HIL-виправлення старту, каталогу та mount transport
+
+- **Server-first node startup:** HTTP/WebSocket стартують до hardware enumeration; Gemini/EQDrive/QHY discovery працює у background thread.
+- **Live native catalogue:** прибрано помилковий фільтр device records за driver-only полем `native`; пристрої, знайдені після старту, з’являються у combobox без перезапуску GUI.
+- **Async serial selector:** застосування COM-порту не блокує GUI та не пере-відкриває вже закешований Gemini без потреби.
+- **Direct Wi-Fi:** `synscan-wifi` напряму керує адаптером/монтуванням через UDP 11880; `synscan-app` окремо працює через SynScan Pro/App UDP 11881.
+- **Виправлено Motor Controller semantics:** status/direction bits та GOTO motion mode узгоджені з Sky-Watcher/EQMOD; GOTO використовує `G -> H -> M -> J` і перевіряє реальний рух encoder-а.
+- **Native EQDrive dual protocol:** спочатку пробується EQMOD-сумісний Motor Controller protocol, після нього — офіційний ASTEP fallback. Busy COM одразу припиняє probe, не конфліктуючи з EQMOD/ASCOM.
+- **HIL safety:** direct native GOTO поки потребує Sync і обмежений невеликими тестовими переміщеннями до кваліфікації напрямків/геометрії pier.
 
 ## Поточне покриття обладнання
 
@@ -19,16 +30,16 @@ OpenAstroLink (OAL) — local-first стек керування обсерват
 - фокусерів ZWO EAF (`oal.zwo.eaf`, EAF SDK);
 - Gemini EAF (`oal.gemini`, прямий serial protocol);
 - Sky-Watcher/SynScan (`oal.skywatcher`, наявний direct serial/EqMount path);
-- EQDrive (`oal.eqdrive`, експериментальний direct ASTEP serial path).
+- EQDrive (`oal.eqdrive`, експериментальний dual-protocol serial path: EQMOD-сумісний Motor Controller спочатку, official ASTEP fallback).
 
 Драйвери реалізовані в коді, але ще потребують HIL-кваліфікації на конкретній ОС, CPU-архітектурі, пристрої та firmware перед позначкою production-ready.
 
 
-## Сумісність mount у v0.2.10.16
+## Сумісність mount у v0.2.10.17
 
 - **Native EQDrive:** `oal.eqdrive` є окремим драйвером і не замінює `oal.skywatcher`. Discovery використовує лише read-only команди; початкова RA/Dec-модель консервативна (`sync-anchor`) і потребує одного Sync перед нативним celestial GOTO. Див. `docs/uk/EQDRIVE.md`.
 - **Classic ASCOM (Windows):** backend `ascom-classic` працює через `oas-ascom-host.exe`, встановлену ASCOM Platform і зареєстрований Telescope driver; GUI має **ASCOM Chooser...** та **ASCOM Properties...**. Це compatibility path для EQMOD-подібної роботи. Див. `docs/uk/ASCOM_CLASSIC.md`.
-- **SynScan network:** `synscan-app` використовує багатший SynScan App Protocol через UDP 11881; `synscan-wifi` — serial-protocol compatibility server через TCP 11882. Host — телефон/ПК із запущеним SynScan Pro. Див. `docs/uk/SYNSCAN_NETWORK.md`.
+- **SynScan network:** `synscan-wifi` напряму працює з mount/EQDrive Wi-Fi adapter через Motor Controller protocol UDP 11880 без SynScan Pro. `synscan-app` підключається до запущеного SynScan App/Pro через UDP 11881. Див. `docs/uk/SYNSCAN_NETWORK.md`.
 - **Вибір Gemini COM:** вибір порту в **Native serial discovery** тепер зберігає override та мігрує старий native Gemini backend binding на пристрій, знайдений на новому порту. CLI `--gemini-port` лишається пріоритетним для поточного процесу.
 
 ## Runtime-модель
@@ -412,7 +423,7 @@ OpenAstroLink node shutdown complete
 Windows HIL: на реальному обладнанні вже підтверджені native discovery/connection Gemini EAF, фактичний рух фокусера та рух під час autofocus. Окремо ще треба кваліфікувати збіжність і повторюваність autofocus на реальній оптичній цілі.
 
 
-## v0.2.10.16 — адаптивний plate solving для міського неба
+## v0.2.10.17 — адаптивний plate solving для міського неба
 
 Для міської засвітки та недостатньо точної полярки node більше не залежить від схеми `один довгий кадр -> один запуск ASTAP`. Нова operation `solver.adaptive` починає з короткого кадру, а за потреби переходить до серій коротких експозицій, вирівнює їх за зорями, складає, прибирає великомасштабний градієнт фону та повторює solve. Остання спроба завжди запускає solver навіть якщо локальна оцінка кількості зір песимістична.
 
@@ -420,7 +431,7 @@ Windows HIL: на реальному обладнанні вже підтвер�
 
 REST: `POST /api/v1/solve/adaptive`. Результат operation містить діагностику кожної спроби та `solverFrameId`, який можна відкрити через звичайний frame preview.
 
-### v0.2.10.16 — виправлення HIL discovery/state
+### v0.2.10.17 — виправлення HIL discovery/state
 
 - Перед кожною повторною спробою auto-connect виконується повторний native discovery, тому QHY, що з’явилася після старту node, може підключитися без перезапуску.
 - Native Gemini move тепер асинхронний на межі драйвера: `focuser.status` доступний під час руху й повертає поточну позицію та `moving`. Autofocus окремо чекає завершення фізичного руху перед експозицією.

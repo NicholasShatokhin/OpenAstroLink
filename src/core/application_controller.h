@@ -11,6 +11,7 @@
 #include "core/observatory_controller.h"
 #include "core/settings.h"
 #include <memory>
+#include <QThread>
 
 #ifdef OAS_HAVE_POSITIONING
 class QGeoPositionInfoSource;
@@ -54,7 +55,10 @@ public:
     bool disconnectMount(QString *error=nullptr) override;
     bool disconnectFocuser(QString *error=nullptr) override;
     bool disconnectAll(QString *error=nullptr) override;
-    bool restoreConfiguredDevices(QStringList *errors=nullptr);
+    bool restoreConfiguredDevices(QStringList *errors=nullptr, bool refreshNative=true);
+    QStringList missingAutoConnectNativeDrivers() const;
+    bool nativeDiscoveryRunning() const;
+    void refreshNativeDiscoveryAsync(const QStringList &driverIds={});
 
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
@@ -125,6 +129,10 @@ public:
     QJsonArray nativeDevicesJson() const;
     QJsonObject nativeCapabilitiesJson(const QString &driverId,const QString &deviceId,QString *error=nullptr) const;
 
+
+signals:
+    void nativeDiscoveryCompleted(const QStringList &driverIds);
+
 private:
     void disconnectDevices(bool clearAutoConnect);
     bool ensureResourcesAvailable(const QStringList &resources,QString *error=nullptr) const;
@@ -162,6 +170,9 @@ private:
 #ifdef OAS_HAVE_POSITIONING
     ::QGeoPositionInfoSource *positionSource_{};
 #endif
+    QThread *nativeDiscoveryThread_{};
+    QStringList pendingNativeDiscoveryDrivers_;
+    bool pendingNativeDiscoveryAll_{false};
     bool shuttingDown_{false};
 };
 }

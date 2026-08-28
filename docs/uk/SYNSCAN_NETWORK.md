@@ -1,47 +1,79 @@
-# Мережева сумісність із SynScan
+# Мережеві транспорти SynScan
 
-OpenAstroLink має два network compatibility path через запущений Sky-Watcher SynScan / SynScan Pro. Вони окремі від прямих нативних драйверів `oal.skywatcher` та `oal.eqdrive`.
+OpenAstroLink навмисно розділяє два різні network backend, тому що Wi-Fi
+адаптер монтування та застосунок SynScan App/Pro є різними protocol endpoint.
 
-## Рекомендований: SynScan App Protocol (`synscan-app`)
+## Прямий Wi-Fi монтування — `synscan-wifi`
 
-Багатший шлях використовує офіційний **SynScan App Protocol**, типовий UDP port 11881. Протокол близький за можливостями до ASCOM `ITelescopeV3` і дає position, asynchronous GOTO, tracking, sync, park/unpark та pulse guiding.
-
-Endpoint — це IP **телефона або ПК, на якому запущено SynScan Pro**, а не автоматично IP Wi-Fi адаптера монтування.
-
-Приклад:
+`synscan-wifi` підключається **безпосередньо до mount / EQDrive / SynScan Wi-Fi
+адаптера**. SynScan Pro для цього не потрібен.
 
 ```text
-Backend: synscan-app
-Endpoint: 192.168.4.2:11881
+OpenAstroLink -> UDP 11880 -> Wi-Fi адаптер mount/EQDrive -> motor controller
 ```
 
-Якщо SynScan Pro і OpenAstroLink працюють на одному Windows ПК, можна використовувати `127.0.0.1:11881`.
-
-Джерело: Sky-Watcher SynScan App Protocol, <https://inter-static.skywatcher.com/downloads/synscan_app_protocol_20250930.pdf>.
-
-## Serial-протокол поверх TCP (`synscan-wifi`)
-
-Другий, вужчий backend під'єднується до TCP-сервера **SynScan Communication Protocol** у SynScan Pro, типовий port 11882, і повторно використовує наявний SynScan serial RA/Dec codec OAL.
-
-Приклад:
+Payload — офіційний **Sky-Watcher Motor Controller Command Set**, тобто той
+низькорівневий клас команд, який використовується й EQMOD-сумісними
+контролерами.
 
 ```text
-Backend: synscan-wifi
-Endpoint: 192.168.4.2:11882
+Backend:  synscan-wifi
+Endpoint: auto
 ```
 
-Цей варіант корисний для compatibility/testing, але 11881 App Protocol бажаніший, коли доступні обидва, бо має багатший telescope API.
-
-## Чим це не є
-
-Ці backends керують mount **через застосунок SynScan**. Це не direct UDP-to-mount Motor Controller transport. Для прямого контролера слід використовувати відповідний native OAL driver, якщо він є.
-
-## Типова топологія
+або:
 
 ```text
-OpenAstroLink node ---- Wi-Fi/LAN ---- SynScan Pro (телефон/ПК)
-                                      |
-                                      +---- transport mount ---- mount
+Backend:  synscan-wifi
+Endpoint: 192.168.4.1:11880
 ```
 
-Фактичні порти видно в налаштуваннях SynScan Pro; endpoint OAL можна змінити відповідно.
+`auto` надсилає лише read-only запит версії motor controller на UDP 11880. Крім
+broadcast перевіряються типові AP gateway `192.168.4.1` та `192.168.0.1`, бо
+деякі адаптери не відповідають на broadcast discovery.
+
+Для прямого RA/DEC використовується консервативна sync-anchor модель: перед
+GOTO треба один раз виконати Sync на відомій точці неба. Поки напрямки осей і
+pier-side не пройшли HIL, одна native GOTO-команда обмежена невеликим кутом.
+
+Джерело: Sky-Watcher Motor Controller Command Set,
+<https://inter-static.skywatcher.com/downloads/skywatcher_motor_controller_command_set.pdf>.
+
+## Через SynScan Pro — `synscan-app`
+
+`synscan-app` — це higher-level compatibility path через **запущений SynScan
+App/Pro** на телефоні або ПК.
+
+```text
+OpenAstroLink -> UDP 11881 -> SynScan Pro (телефон/ПК) -> mount
+```
+
+Endpoint — IP **пристрою, де запущено SynScan Pro**, а не IP Wi-Fi адаптера
+монтування.
+
+```text
+Backend:  synscan-app
+Endpoint: auto
+```
+
+або:
+
+```text
+Backend:  synscan-app
+Endpoint: 192.168.0.100:11881
+```
+
+`auto` broadcast-ить безпечний `ServerVersion` на UDP 11881 і використовує
+адресу SynScan App/Pro, що відповіла. Цей backend дає багатший telescope API:
+position, asynchronous GOTO, tracking, sync, park/unpark та pulse guide, якщо
+їх підтримують застосунок і mount.
+
+Джерело: Sky-Watcher SynScan App Protocol,
+<https://inter-static.skywatcher.com/downloads/synscan_app_protocol_20250930.pdf>.
+
+## Порт 11882
+
+TCP 11882 — це **SynScan Communication Protocol server, який експортує SynScan
+App/Pro**. Це не direct Wi-Fi endpoint монтування. Починаючи з v0.2.10.18
+`synscan-wifi` більше не означає TCP 11882: прямий Wi-Fi використовує UDP
+11880.

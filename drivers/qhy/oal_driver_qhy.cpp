@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -33,6 +34,9 @@ struct CameraState {
     std::atomic_bool abortRequested{false};
     std::uint32_t sensorW{0}, sensorH{0};
     std::uint32_t nativeBpp{0};
+    double lastExposureUs{-1.0};
+    double lastGain{-1.0};
+    double lastOffset{-1.0};
     std::mutex operationMutex;
 };
 
@@ -69,12 +73,12 @@ bool start(void*,const char*){
     std::lock_guard<std::mutex> lock(state.mutex);if(state.sdkReady)return true;const auto rc=InitQHYCCDResource();state.sdkReady=rc==QHYCCD_SUCCESS;if(!state.sdkReady)log(3,rcError("InitQHYCCDResource",rc));return state.sdkReady;
 }
 void closeCamera(CameraState &c){
-    c.abortRequested=true;if(c.handle){CancelQHYCCDExposingAndReadout(c.handle);CloseQHYCCD(c.handle);c.handle=nullptr;}c.connected=false;c.sensorW=c.sensorH=c.nativeBpp=0;
+    c.abortRequested=true;if(c.handle){CancelQHYCCDExposingAndReadout(c.handle);CloseQHYCCD(c.handle);c.handle=nullptr;}c.connected=false;c.sensorW=c.sensorH=c.nativeBpp=0;c.lastExposureUs=c.lastGain=c.lastOffset=-1.0;
 }
 void stop(void*){
     std::lock_guard<std::mutex> lock(state.mutex);for(auto &x:state.cameras){std::lock_guard<std::mutex> op(x.second->operationMutex);closeCamera(*x.second);}if(state.sdkReady){ReleaseQHYCCDResource();state.sdkReady=false;}
 }
-const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.16","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
+const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.19","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
 bool anyCameraConnected(){
     std::lock_guard<std::mutex> lock(state.mutex);
     for(const auto &entry:state.cameras) if(entry.second && entry.second->connected.load()) return true;
@@ -84,6 +88,17 @@ bool anyCameraConnected(){
 const char *devices(void*){
     std::lock_guard<std::mutex> sdkLock(state.sdkLifecycleMutex);
     if(!state.sdkReady)return copyString("[]");
+
+    // Do not call ScanQHYCCD while a camera handle is active. Several Windows
+    // QHY SDK builds do not treat discovery as side-effect free; HIL showed an
+    // active QHY5III462C could disappear from ScanQHYCCD after repeated scans.
+    // Connected cameras are already authoritative device records.
+    if(anyCameraConnected()){
+        std::ostringstream cached;cached<<'[';bool first=true;
+        std::lock_guard<std::mutex> lock(state.mutex);
+        for(const auto &entry:state.cameras){const auto &c=*entry.second;if(!c.connected.load())continue;if(!first)cached<<',';first=false;const std::string dev="qhy:"+c.rawId;cached<<"{\"id\":"<<quote(dev)<<",\"type\":\"camera\",\"name\":"<<quote(c.rawId)<<",\"vendor\":\"QHYCCD\",\"transport\":{\"kind\":\"vendor-sdk\",\"hardwareId\":"<<quote(c.rawId)<<",\"activeHandle\":true}}";}
+        cached<<']';return copyString(cached.str());
+    }
 
     int count=int(ScanQHYCCD());
     const int previousCount=state.lastScanCount;
@@ -153,7 +168,12 @@ const char *caps(void*,const char *device){
 }
 const char *health(void*,const char *device){auto*c=camera(device?device:"");return copyString(std::string("{\"state\":\"")+(c->connected?"ok":"disconnected")+"\",\"connected\":"+(c->connected?"true":"false")+"}");}
 
-bool setOptional(CameraState &c, CONTROL_ID id, double value, std::string &err){if(IsQHYCCDControlAvailable(c.handle,id)!=QHYCCD_SUCCESS)return true;double mn=0,mx=0,step=0;if(GetQHYCCDParamMinMaxStep(c.handle,id,&mn,&mx,&step)==QHYCCD_SUCCESS&&(value<mn||value>mx)){err="Value outside QHY control range ["+std::to_string(mn)+","+std::to_string(mx)+"]";return false;}const auto rc=SetQHYCCDParam(c.handle,id,value);if(!qok(rc)){err=rcError("SetQHYCCDParam",rc);return false;}return true;}
+bool setOptional(CameraState &c, CONTROL_ID id, double value, std::string &err, double *actual=nullptr){
+    if(IsQHYCCDControlAvailable(c.handle,id)!=QHYCCD_SUCCESS){if(actual)*actual=value;return true;}
+    double mn=0,mx=0,step=0;if(GetQHYCCDParamMinMaxStep(c.handle,id,&mn,&mx,&step)==QHYCCD_SUCCESS&&(value<mn||value>mx)){err="Value outside QHY control range ["+std::to_string(mn)+","+std::to_string(mx)+"]";return false;}
+    const auto rc=SetQHYCCDParam(c.handle,id,value);if(!qok(rc)){err=rcError("SetQHYCCDParam",rc);return false;}
+    const double readback=GetQHYCCDParam(c.handle,id);if(actual)*actual=std::isfinite(readback)?readback:value;return true;
+}
 
 const char *invoke(void*,const char *device,const char *method,const char *request,const OalDriverCallV2*){
     const std::string dev=device?device:"",m=method?method:"",r=request?request:"{}";auto*c=camera(dev);
@@ -163,7 +183,9 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
         c->handle=OpenQHYCCD(const_cast<char*>(c->rawId.c_str()));if(!c->handle)return fail("OPEN_FAILED","OpenQHYCCD returned null for "+c->rawId);
         auto rc=SetQHYCCDStreamMode(c->handle,0);if(!qok(rc)){closeCamera(*c);return fail("QHY_ERROR",rcError("SetQHYCCDStreamMode(single)",rc));}
         rc=InitQHYCCD(c->handle);if(!qok(rc)){closeCamera(*c);return fail("QHY_ERROR",rcError("InitQHYCCD",rc));}
-        if(IsQHYCCDControlAvailable(c->handle,CONTROL_TRANSFERBIT)==QHYCCD_SUCCESS)SetQHYCCDParam(c->handle,CONTROL_TRANSFERBIT,16);
+        // Keep the camera/SDK default transfer depth. CONTROL_TRANSFERBIT is a
+        // capability selector on some QHY models, not a normal numeric control;
+        // forcing it through SetQHYCCDParam caused model-dependent behaviour.
         SetQHYCCDDebayerOnOff(c->handle,false);double chipW=0,chipH=0,pixW=0,pixH=0;std::uint32_t w=0,h=0,bpp=0;rc=GetQHYCCDChipInfo(c->handle,&chipW,&chipH,&w,&h,&pixW,&pixH,&bpp);if(!qok(rc)){closeCamera(*c);return fail("QHY_ERROR",rcError("GetQHYCCDChipInfo",rc));}
         c->sensorW=w;c->sensorH=h;c->nativeBpp=bpp;if(!qok(SetQHYCCDBinMode(c->handle,1,1))||!qok(SetQHYCCDResolution(c->handle,0,0,w,h))){closeCamera(*c);return fail("QHY_ERROR","Failed to configure full-frame 1x1 readout");}
         c->abortRequested=false;c->connected=true;event(dev,"device.connected");return ok("{\"hardwareId\":"+quote(c->rawId)+"}");
@@ -179,11 +201,25 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
         std::lock_guard<std::mutex> op(c->operationMutex);if(!c->connected||!c->handle)return fail("DEVICE_DISCONNECTED","QHY camera disconnected");c->abortRequested=false;
         const int binX=std::max(1,int(number(r,"binX",1))),binY=std::max(1,int(number(r,"binY",1)));auto rc=SetQHYCCDBinMode(c->handle,binX,binY);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDBinMode",rc));
         int bw=std::max(1,int(c->sensorW)/binX),bh=std::max(1,int(c->sensorH)/binY);int x=0,y=0,w=bw,h=bh;double v=0;if(objectNumber(r,"roi","x",v))x=std::clamp(int(v),0,bw-1);if(objectNumber(r,"roi","y",v))y=std::clamp(int(v),0,bh-1);if(objectNumber(r,"roi","width",v))w=std::clamp(int(v),1,bw-x);if(objectNumber(r,"roi","height",v))h=std::clamp(int(v),1,bh-y);rc=SetQHYCCDResolution(c->handle,x,y,w,h);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDResolution",rc));
-        std::string err;const double exposureSec=std::max(0.000001,number(r,"exposureSec",1.0)),gain=number(r,"gain",0),offset=number(r,"offset",0);if(!setOptional(*c,CONTROL_EXPOSURE,exposureSec*1e6,err)||!setOptional(*c,CONTROL_GAIN,gain,err)||!setOptional(*c,CONTROL_OFFSET,offset,err))return fail("QHY_CONTROL_ERROR",err);
-        rc=ExpQHYCCDSingleFrame(c->handle);if(rc==QHYCCD_ERROR)return fail("QHY_ERROR","ExpQHYCCDSingleFrame failed");if(c->abortRequested)return fail("CANCELLED","QHY exposure cancelled");
-        const auto length=GetQHYCCDMemLength(c->handle);if(!length)return fail("QHY_ERROR","GetQHYCCDMemLength returned zero");std::vector<unsigned char> bytes(length);std::uint32_t fw=0,fh=0,bpp=0,channels=0;rc=GetQHYCCDSingleFrame(c->handle,&fw,&fh,&bpp,&channels,bytes.data());if(!qok(rc))return c->abortRequested?fail("CANCELLED","QHY exposure cancelled"):fail("QHY_ERROR",rcError("GetQHYCCDSingleFrame",rc));if(c->abortRequested)return fail("CANCELLED","QHY exposure cancelled");
+        std::string err;const double exposureSec=std::max(0.000001,number(r,"exposureSec",1.0)),gain=number(r,"gain",0),offset=number(r,"offset",0);double actualExposureUs=exposureSec*1e6,actualGain=gain,actualOffset=offset;
+        if(!setOptional(*c,CONTROL_EXPOSURE,exposureSec*1e6,err,&actualExposureUs)||!setOptional(*c,CONTROL_GAIN,gain,err,&actualGain)||!setOptional(*c,CONTROL_OFFSET,offset,err,&actualOffset))return fail("QHY_CONTROL_ERROR",err);
+        if(std::abs(c->lastExposureUs-actualExposureUs)>0.5||std::abs(c->lastGain-actualGain)>1e-6||std::abs(c->lastOffset-actualOffset)>1e-6){
+            log(1,"capture controls: exposureUs="+std::to_string(actualExposureUs)+" gain="+std::to_string(actualGain)+" offset="+std::to_string(actualOffset));
+            c->lastExposureUs=actualExposureUs;c->lastGain=actualGain;c->lastOffset=actualOffset;
+        }
+        rc=ExpQHYCCDSingleFrame(c->handle);if(rc==QHYCCD_ERROR){CancelQHYCCDExposingAndReadout(c->handle);return fail("QHY_ERROR","ExpQHYCCDSingleFrame failed");}if(c->abortRequested){CancelQHYCCDExposingAndReadout(c->handle);return fail("CANCELLED","QHY exposure cancelled");}
+        const auto length=GetQHYCCDMemLength(c->handle);if(!length){CancelQHYCCDExposingAndReadout(c->handle);return fail("QHY_ERROR","GetQHYCCDMemLength returned zero");}std::vector<unsigned char> bytes(length);std::uint32_t fw=0,fh=0,bpp=0,channels=0;
+        std::atomic_bool readFinished{false},watchdogTimedOut{false};const auto watchdogMs=std::max<long long>(3000LL,static_cast<long long>(std::ceil(actualExposureUs/1000.0))+5000LL);
+        std::thread watchdog([&](){const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(watchdogMs);while(!readFinished.load()&&std::chrono::steady_clock::now()<deadline)std::this_thread::sleep_for(std::chrono::milliseconds(25));if(!readFinished.exchange(true)){watchdogTimedOut=true;CancelQHYCCDExposingAndReadout(c->handle);}});
+        rc=GetQHYCCDSingleFrame(c->handle,&fw,&fh,&bpp,&channels,bytes.data());readFinished=true;if(watchdog.joinable())watchdog.join();
+        // QHY's own single-frame examples explicitly terminate the exposure/
+        // readout cycle after every frame. Leaving the camera in the prior cycle
+        // caused later short exposures to return black frames or block in HIL.
+        const auto endRc=CancelQHYCCDExposingAndReadout(c->handle);if(endRc!=QHYCCD_SUCCESS)log(2,rcError("CancelQHYCCDExposingAndReadout(post-frame)",endRc));
+        if(watchdogTimedOut)return fail("CAPTURE_TIMEOUT","QHY readout exceeded watchdog timeout of "+std::to_string(watchdogMs)+" ms and was cancelled");
+        if(!qok(rc))return c->abortRequested?fail("CANCELLED","QHY exposure cancelled"):fail("QHY_ERROR",rcError("GetQHYCCDSingleFrame",rc));if(c->abortRequested)return fail("CANCELLED","QHY exposure cancelled");
         std::uint32_t fmt=OAL_PIXEL_UNKNOWN;if(channels==1&&bpp<=8)fmt=OAL_PIXEL_MONO8;else if(channels==1&&bpp<=16)fmt=OAL_PIXEL_MONO16;else if(channels==3&&bpp<=8)fmt=OAL_PIXEL_RGB8;else if(channels==3&&bpp<=16)fmt=OAL_PIXEL_RGB16;else return fail("UNSUPPORTED_PIXEL_FORMAT","Unsupported QHY frame format");
-        const auto now=std::chrono::system_clock::now();const auto ns=std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();const std::string frameId="qhy-"+c->rawId+"-"+std::to_string(ns);const std::uint32_t bytesPerSample=bpp<=8?1:2;OalFrameDescriptorV2 f{};f.structSize=sizeof(f);f.frameIdUtf8=frameId.c_str();f.width=fw;f.height=fh;f.strideBytes=fw*channels*bytesPerSample;f.pixelFormat=fmt;f.bitsPerSample=bpp;f.channels=channels;f.capturedUnixNs=ns;f.exposureSec=exposureSec;f.gain=gain;f.data=bytes.data();f.dataBytes=bytes.size();f.metadataJsonUtf8="{\"vendor\":\"QHYCCD\",\"rawSensor\":true}";const auto token=host.publishFrame?host.publishFrame(host.hostContext,"oal.qhy",dev.c_str(),&f):0;if(!token)return fail("FRAME_PUBLISH_FAILED","OAL host rejected QHY frame");event(dev,"camera.frameReady","{\"frameToken\":"+std::to_string(token)+"}");return ok("{\"frameToken\":"+std::to_string(token)+",\"frameId\":"+quote(frameId)+"}");
+        const auto now=std::chrono::system_clock::now();const auto ns=std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();const std::string frameId="qhy-"+c->rawId+"-"+std::to_string(ns);const std::uint32_t bytesPerSample=bpp<=8?1:2;OalFrameDescriptorV2 f{};f.structSize=sizeof(f);f.frameIdUtf8=frameId.c_str();f.width=fw;f.height=fh;f.strideBytes=fw*channels*bytesPerSample;f.pixelFormat=fmt;f.bitsPerSample=bpp;f.channels=channels;f.capturedUnixNs=ns;f.exposureSec=actualExposureUs/1e6;f.gain=actualGain;f.data=bytes.data();const std::size_t usedBytes=std::min<std::size_t>(bytes.size(),std::size_t(f.strideBytes)*std::size_t(f.height));f.dataBytes=usedBytes;const std::string metadata="{\"vendor\":\"QHYCCD\",\"rawSensor\":true,\"actualExposureUs\":"+std::to_string(actualExposureUs)+",\"actualGain\":"+std::to_string(actualGain)+",\"actualOffset\":"+std::to_string(actualOffset)+"}";f.metadataJsonUtf8=metadata.c_str();const auto token=host.publishFrame?host.publishFrame(host.hostContext,"oal.qhy",dev.c_str(),&f):0;if(!token)return fail("FRAME_PUBLISH_FAILED","OAL host rejected QHY frame");event(dev,"camera.frameReady","{\"frameToken\":"+std::to_string(token)+"}");return ok("{\"frameToken\":"+std::to_string(token)+",\"frameId\":"+quote(frameId)+"}");
     }
     return fail("NOT_IMPLEMENTED","Method is not implemented by native QHY driver");
 }
@@ -191,7 +227,7 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
 bool cancel(void*,const char *device,const char*){auto*c=camera(device?device:"");if(!c||!c->handle)return false;c->abortRequested=true;return CancelQHYCCDExposingAndReadout(c->handle)==QHYCCD_SUCCESS;}
 void releaseString(void*,const char*p){if(p)host.deallocate(host.hostContext,const_cast<char*>(p));}
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.16",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.19",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 } // namespace
 
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h){if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||h->structSize<sizeof(OalDriverHostV2))return nullptr;host=*h;return &api;}

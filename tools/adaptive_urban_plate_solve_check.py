@@ -11,7 +11,7 @@ def need(path,*tokens):
         if t not in text:
             raise SystemExit(f'FAIL {path}: missing {t}')
 
-need(Path('CMakeLists.txt'),'VERSION 0.2.10.16','adaptive_plate_solve.cpp','oal-adaptive-plate-solve-smoke')
+need(Path('CMakeLists.txt'),'VERSION 0.2.10.19','adaptive_plate_solve.cpp','oal-adaptive-plate-solve-smoke')
 need(Path('src/core/astro_types.h'),'AdaptiveSolveRequest','binX{1}','binY{1}')
 need(Path('src/algorithms/adaptive_plate_solve.cpp'),'equalized16','motion_.estimate','registeredFrames','GaussianBlur','warpAffine')
 need(Path('src/algorithms/astap_solver.cpp'),'frame.binY','bin changes the angular size')
@@ -22,7 +22,7 @@ need(Path('src/oal/oal_server.cpp'),'"/api/v1/solve/adaptive"','maxSingleExposur
 need(Path('src/gui/main_window.cpp'),'Adaptive urban capture + solve','solveBaseExposure_','r.maxSingleExposureSec=solveMaxExposure_->value()','std::min(solveBaseExposure_->value(),r.maxSingleExposureSec)','solveStackFrames_','setAdaptiveSolveBusy')
 need(Path('docs/PLATE_SOLVING.md'),'register frames on stars','mount RA/Dec','solverFrameId')
 need(Path('docs/uk/PLATE_SOLVING.md'),'міського','solverFrameId')
-need(Path('docs/openapi.yaml'),'/solve/adaptive:','version: 0.2.10.16')
+need(Path('docs/openapi.yaml'),'/solve/adaptive:','version: 0.2.10.19')
 need(Path('src/backends/opencv_camera.cpp'),'cv::INTER_AREA','f.binX=binX','f.binY=binY')
 need(Path('src/backends/simulated_devices.cpp'),'cv::INTER_AREA','frame.binX = binX','frame.binY = binY')
 need(Path('src/backends/oal_native_devices.cpp'),'actualBinX','expectedW','cannot silently corrupt plate scale')

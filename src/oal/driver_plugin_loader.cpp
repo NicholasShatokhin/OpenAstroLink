@@ -103,7 +103,7 @@ int OalDriverPluginLoader::scan(const QString &directory, QStringList *errors, b
     return count;
 }
 
-int OalDriverPluginLoader::scanDefaultPaths(QStringList *errors) {
+int OalDriverPluginLoader::scanDefaultPaths(QStringList *errors, bool discoverDevices) {
     clear();
     QStringList dirs;
     const QString env = qEnvironmentVariable("OAL_DRIVER_PATH");
@@ -129,10 +129,13 @@ int OalDriverPluginLoader::scanDefaultPaths(QStringList *errors) {
         scanDirectory(clean, errors, !first);
         first = false;
     }
-    // Perform hardware discovery once during node/controller startup.  After
-    // this point devices() is cache-only; explicit refresh is required for
-    // hot-plug discovery.  This keeps /node/backends and /state responsive.
-    refreshDevices(errors);
+    // Hardware enumeration can take seconds on serial devices (Gemini reset
+    // recovery, EQDrive baud probing, vendor camera SDK enumeration).  The
+    // headless node therefore loads driver code first and performs discovery
+    // asynchronously after HTTP/WebSocket listeners are already available.
+    // CLI tools keep the historical synchronous behavior by leaving the
+    // discoverDevices argument at its default true value.
+    if (discoverDevices) refreshDevices(errors);
     return int(loaded_.size());
 }
 
@@ -373,8 +376,16 @@ QJsonArray OalDriverPluginLoader::devices() const {
 }
 
 QJsonArray OalDriverPluginLoader::refreshDevices(QStringList *errors) {
-    QJsonArray out;
+    return refreshDevices(QStringList{}, errors);
+}
+
+QJsonArray OalDriverPluginLoader::refreshDevices(const QStringList &driverIds, QStringList *errors) {
+    const bool filtered = !driverIds.isEmpty();
+    QSet<QString> wanted; for (const auto &id : driverIds) wanted.insert(id);
+
+    QJsonArray refreshed;
     for (const auto &x : loaded_) {
+        if (filtered && !wanted.contains(x->id)) continue;
         const char *p = nullptr;
         // Device enumeration is driver-wide hardware I/O. Serialize it with the
         // normal driver call mutex so it cannot race a connect/capture/move.
@@ -391,17 +402,33 @@ QJsonArray OalDriverPluginLoader::refreshDevices(QStringList *errors) {
             o["driverId"] = x->id;
             o["driverName"] = x->name;
             o["driverVersion"] = x->version;
-            o["driverAbi"] = x->abiVersion;
-            o["native"] = x->abiVersion == 2;
-            out.append(o);
+            o["abiVersion"] = x->abiVersion;
+            refreshed.append(o);
         }
         if (p) {
             if (x->api2 && x->api2->releaseString) x->api2->releaseString(x->api2->context, p);
             else if (x->api1 && x->api1->releaseString) x->api1->releaseString(x->api1->context, p);
         }
     }
-    { QMutexLocker lock(&deviceCacheMutex_); deviceCache_ = out; }
-    return out;
+
+    QMutexLocker lock(&deviceCacheMutex_);
+    if (!filtered) {
+        deviceCache_ = refreshed;
+        return deviceCache_;
+    }
+
+    // Keep cached devices owned by drivers that were not rescanned and replace
+    // only the selected drivers. This is critical for a connected QHY camera or
+    // ASCOM-owned serial mount: reconnecting a missing Gemini must not enumerate
+    // every hardware backend in the process.
+    QJsonArray merged;
+    for (const auto &v : deviceCache_) {
+        const auto o = v.toObject();
+        if (!wanted.contains(o.value("driverId").toString())) merged.append(o);
+    }
+    for (const auto &v : refreshed) merged.append(v);
+    deviceCache_ = merged;
+    return deviceCache_;
 }
 
 QJsonObject OalDriverPluginLoader::capabilities(const QString &driverId, const QString &deviceId,

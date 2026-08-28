@@ -102,29 +102,53 @@ int main(int argc,char **argv){
         reconnectTimer.stop();
         controller.shutdown();
     });
-    if(!parser.isSet(noAuto)){
-        auto tryRestore=[&](){
-            QStringList errors;bool ok=controller.restoreConfiguredDevices(&errors);
-            for(const auto&e:errors)qWarning().noquote()<<e;
-            if(ok&&reconnectTimer.isActive())reconnectTimer.stop();
-            return ok;
-        };
-        if(!tryRestore()){
-            QObject::connect(&reconnectTimer,&QTimer::timeout,&app,[&](){
-                QStringList errors;if(controller.restoreConfiguredDevices(&errors)){reconnectTimer.stop();qInfo()<<"Persisted devices restored.";}
-                else for(const auto&e:errors)qWarning().noquote()<<e;
-            });
-            reconnectTimer.start();
-            qWarning()<<"One or more persisted devices are unavailable; retrying every 10 seconds while the node stays remotely configurable.";
-        }
-    }
 
+    // Bring the control plane up before any hardware enumeration. Serial reset
+    // recovery and vendor SDK discovery may take seconds, but the GUI must be
+    // able to connect immediately and watch devices appear asynchronously.
     QString error;
     if(!controller.startOalServer(httpPort,wsEnabled,wsPort,&error)){
         qCritical().noquote()<<"Cannot start OpenAstroLink node:" << error;
         return 2;
     }
     qInfo().noquote()<<QString("OpenAstroLink node ready: HTTP 0.0.0.0:%1, WebSocket %2").arg(httpPort).arg(wsEnabled?QString("0.0.0.0:%1").arg(wsPort):"disabled");
+
+    const auto tryRestoreFromCache=[&](){
+        if(parser.isSet(noAuto))return true;
+        QStringList errors;const bool ok=controller.restoreConfiguredDevices(&errors,false);
+        for(const auto&e:errors)qWarning().noquote()<<e;
+        if(ok&&reconnectTimer.isActive()){
+            reconnectTimer.stop();
+            qInfo()<<"Persisted devices restored.";
+        }
+        return ok;
+    };
+
+    QObject::connect(&controller,&oas::ApplicationController::nativeDiscoveryCompleted,&app,[&](const QStringList&){
+        const bool ok=tryRestoreFromCache();
+        if(!ok&&!reconnectTimer.isActive())reconnectTimer.start();
+    });
+
+    QObject::connect(&reconnectTimer,&QTimer::timeout,&app,[&](){
+        if(controller.nativeDiscoveryRunning())return;
+        const QStringList missing=controller.missingAutoConnectNativeDrivers();
+        if(missing.isEmpty()){
+            tryRestoreFromCache();
+            return;
+        }
+        controller.refreshNativeDiscoveryAsync(missing);
+    });
+
+    // Compatibility backends such as Classic ASCOM can reconnect immediately
+    // from persisted settings. Native bindings will reconnect as soon as the
+    // asynchronous discovery cache is populated.
+    const bool restoredImmediately=tryRestoreFromCache();
+    controller.refreshNativeDiscoveryAsync(); // initial all-driver scan, off the main event loop
+    if(!restoredImmediately&&!reconnectTimer.isActive()){
+        reconnectTimer.start();
+        qWarning()<<"One or more persisted devices are unavailable; native discovery continues in the background while the node stays remotely configurable.";
+    }
+
     if(!parser.isSet(noStellarium)){
         const bool enableStellarium=parser.isSet(stellariumOpt)||settings.stellariumEnabled();
         if(enableStellarium){

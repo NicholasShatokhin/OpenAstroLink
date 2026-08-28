@@ -35,8 +35,18 @@ static QSpinBox *ispin(int lo,int hi,int value){auto*w=new QSpinBox;w->setRange(
 static void populateBackendCombo(QComboBox *combo,const QStringList &items){
     combo->clear();auto *model=qobject_cast<QStandardItemModel*>(combo->model());int firstSelectable=-1;bool nativeHeader=false,compatHeader=false;
     auto header=[&](const QString&text,bool &flag){if(flag)return;flag=true;combo->addItem(text);const int row=combo->count()-1;if(model){auto*item=model->item(row);if(item){item->setEnabled(false);item->setSelectable(false);}}};
-    for(const auto &item:items){const bool native=item.startsWith("native:");if(native)header("── Native OpenAstroLink ──",nativeHeader);else header("── Compatibility / embedded ──",compatHeader);combo->addItem(item);if(firstSelectable<0)firstSelectable=combo->count()-1;}
+    for(const auto &item:items){const bool native=item.startsWith("native:");if(native)header("── Detected native devices ──",nativeHeader);else header("── Compatibility / embedded ──",compatHeader);combo->addItem(item);if(firstSelectable<0)firstSelectable=combo->count()-1;}
     if(firstSelectable>=0)combo->setCurrentIndex(firstSelectable);
+}
+static QStringList backendComboItems(const QComboBox *combo){
+    QStringList out;if(!combo)return out;
+    for(int i=0;i<combo->count();++i){const QString t=combo->itemText(i);if(!t.startsWith(QStringLiteral("── ")))out<<t;}
+    return out;
+}
+static void refreshBackendComboIfChanged(QComboBox *combo,const QStringList &items){
+    if(!combo||backendComboItems(combo)==items)return;
+    const QString old=combo->currentText();QSignalBlocker blocker(combo);populateBackendCombo(combo,items);
+    const int i=combo->findText(old);if(i>=0)combo->setCurrentIndex(i);
 }
 MainWindow::MainWindow(ObservatoryController*c,QWidget*p):QMainWindow(p),c_(c){setWindowTitle("OpenAstroSuite / OpenAstroLink");resize(1500,900);statusBar()->showMessage(QString("Core: %1 — %2").arg(c_->controlMode(),c_->endpointDescription()));auto*central=new QWidget;auto*root=new QHBoxLayout(central);auto*split=new QSplitter(Qt::Horizontal);root->addWidget(split);setCentralWidget(central);
     auto*left=new QWidget;auto*ll=new QVBoxLayout(left);auto*images=new QSplitter(Qt::Horizontal);rawImage_=new QLabel("No camera frame");astroImage_=new QLabel("No astrometry overlay");for(auto*l:{rawImage_,astroImage_}){l->setAlignment(Qt::AlignCenter);l->setMinimumSize(420,300);l->setStyleSheet("background:#111;color:#bbb;border:1px solid #444");}images->addWidget(rawImage_);images->addWidget(astroImage_);ll->addWidget(images,3);starScene_=new QGraphicsScene(this);auto*map=new QGraphicsView(starScene_);map->setMinimumHeight(220);map->setStyleSheet("background:#050510");ll->addWidget(map,1);log_=new QTextEdit;log_->setReadOnly(true);log_->setMaximumHeight(170);ll->addWidget(log_);split->addWidget(left);
@@ -61,15 +71,23 @@ QWidget *MainWindow::buildDevicesTab(){auto*w=new QWidget;auto*l=new QVBoxLayout
     connect(guideCameraBackend_,&QComboBox::currentTextChanged,this,[this](const QString&b){const bool native=b.startsWith("native:");guideCameraEndpoint_->setEnabled(!native);if(native){guideCameraEndpoint_->clear();guideCameraEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}else guideCameraEndpoint_->setPlaceholderText("Guide camera endpoint / index");});
     if(guideCameraBackend_->currentText().startsWith("native:")){guideCameraEndpoint_->clear();guideCameraEndpoint_->setEnabled(false);guideCameraEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}
     make("Mount",mountBackend_,mountEndpoint_,mountDeviceStatus_,c_->mountBackends(),&ObservatoryController::connectMount,&ObservatoryController::disconnectMount);mountEndpoint_->setPlaceholderText("COM3, /dev/ttyUSB0, URL, or INDI host:7624/Exact Device Name");
+    lastMountBackend_=mountBackend_->currentText();
     connect(mountBackend_,&QComboBox::currentTextChanged,this,[this](const QString&b){
+        if(!lastMountBackend_.isEmpty())mountEndpointsByBackend_[lastMountBackend_]=mountEndpoint_->text();
+        lastMountBackend_=b;
         const bool native=b.startsWith("native:");mountEndpoint_->setEnabled(!native);
         if(native){mountEndpoint_->clear();mountEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}
-        else if(b=="indi")mountEndpoint_->setPlaceholderText("127.0.0.1:7624/Exact INDI mount device name");
-        else if(b=="serial-lx200")mountEndpoint_->setPlaceholderText("/dev/ttyUSB0 or COM3");
-        else if(b=="synscan-app")mountEndpoint_->setPlaceholderText("IP of phone/PC running SynScan Pro, e.g. 192.168.4.2:11881");
-        else if(b=="synscan-wifi")mountEndpoint_->setPlaceholderText("SynScan App host:11882 (serial-protocol compatibility)");
-        else if(b=="ascom-classic")mountEndpoint_->setPlaceholderText("ASCOM Telescope ProgID, e.g. EQMOD.Telescope");
-        else mountEndpoint_->setPlaceholderText("Compatibility endpoint / URL");
+        else {
+            QString next=mountEndpointsByBackend_.value(b);
+            if(next.isEmpty()&&(b=="synscan-app"||b=="synscan-wifi"))next="auto";
+            mountEndpoint_->setText(next);
+            if(b=="indi")mountEndpoint_->setPlaceholderText("127.0.0.1:7624/Exact INDI mount device name");
+            else if(b=="serial-lx200")mountEndpoint_->setPlaceholderText("/dev/ttyUSB0 or COM3");
+            else if(b=="synscan-app")mountEndpoint_->setPlaceholderText("auto, or IP of PHONE/PC running SynScan Pro:11881 (not mount Wi-Fi IP)");
+            else if(b=="synscan-wifi")mountEndpoint_->setPlaceholderText("auto, or mount/EQDrive Wi-Fi adapter IP[:11880] (direct UDP, no SynScan Pro)");
+            else if(b=="ascom-classic")mountEndpoint_->setPlaceholderText("ASCOM Telescope ProgID, e.g. EQMOD.Telescope");
+            else mountEndpoint_->setPlaceholderText("Compatibility endpoint / URL");
+        }
     });
     if(mountBackend_->currentText().startsWith("native:")){mountEndpoint_->clear();mountEndpoint_->setEnabled(false);mountEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}
     auto*ascomChooser=new QPushButton("ASCOM Chooser...");auto*ascomSetup=new QPushButton("ASCOM Properties...");
@@ -89,7 +107,7 @@ QWidget *MainWindow::buildDevicesTab(){auto*w=new QWidget;auto*l=new QVBoxLayout
     if(focuserBackend_->currentText().startsWith("native:")){focuserEndpoint_->clear();focuserEndpoint_->setEnabled(false);focuserEndpoint_->setPlaceholderText("Transport is owned by the native OAL driver");}
 
     auto*serialBox=new QGroupBox("Native serial discovery");auto*serialForm=new QFormLayout(serialBox);
-    nativeSerialDriver_=new QComboBox;nativeSerialDriver_->addItem("Gemini EAF","oal.gemini");nativeSerialDriver_->addItem("Sky-Watcher / EqMount","oal.skywatcher");nativeSerialDriver_->addItem("EQDrive (ASTEP)","oal.eqdrive");nativeSerialPort_=new QComboBox;
+    nativeSerialDriver_=new QComboBox;nativeSerialDriver_->addItem("Gemini EAF","oal.gemini");nativeSerialDriver_->addItem("Sky-Watcher / EqMount","oal.skywatcher");nativeSerialDriver_->addItem("EQDrive native","oal.eqdrive");nativeSerialPort_=new QComboBox;
     auto reloadSerialPorts=[this](){
         const QString driverId=nativeSerialDriver_->currentData().toString();const QString selected=c_->nativeSerialPortOverride(driverId);nativeSerialPort_->clear();nativeSerialPort_->addItem("Auto — scan all serial ports",QString());int selectedIndex=0;
         for(const auto&v:c_->availableSerialPorts()){const auto p=v.toObject();const QString port=p.value("port").toString();QString label=port;const QString description=p.value("description").toString();const QString manufacturer=p.value("manufacturer").toString();if(!description.isEmpty())label+=" — "+description;else if(!manufacturer.isEmpty())label+=" — "+manufacturer;nativeSerialPort_->addItem(label,port);if(port==selected)selectedIndex=nativeSerialPort_->count()-1;}
@@ -163,6 +181,14 @@ void MainWindow::setCaptureBusy(bool busy){captureBusy_=busy;if(captureButton_)c
 void MainWindow::setAdaptiveSolveBusy(bool busy){adaptiveSolveBusy_=busy;if(adaptiveSolveButton_)adaptiveSolveButton_->setText(busy?"Cancel adaptive solve":"Adaptive urban capture + solve");if(captureButton_)captureButton_->setEnabled(!busy);if(captureSolveButton_)captureSolveButton_->setEnabled(!busy);if(solveButton_)solveButton_->setEnabled(!busy);if(busy)statusBar()->showMessage("Adaptive plate solve running — camera + solver locked; short frames are registered/stacked as needed");else statusBar()->showMessage(QString("Core: %1 — %2").arg(c_->controlMode(),c_->endpointDescription()));}
 void MainWindow::setAutofocusBusy(bool busy){autofocusBusy_=busy;if(autofocusButton_)autofocusButton_->setText(busy?"Cancel autofocus":"Run autofocus");if(focusMoveButton_)focusMoveButton_->setEnabled(!busy);if(busy)statusBar()->showMessage("Autofocus running — camera and focuser locked; mount controls remain available");else statusBar()->showMessage(QString("Core: %1 — %2").arg(c_->controlMode(),c_->endpointDescription()));}
 void MainWindow::updateDeviceStatusFromState(const QJsonObject&state){
+    // Native devices can appear after the GUI connected (USB hot-plug, serial
+    // reset recovery, delayed vendor-SDK enumeration). Keep the comboboxes in
+    // lock-step with the node catalogue carried by each state event instead of
+    // freezing the list that happened to exist at GUI startup.
+    refreshBackendComboIfChanged(cameraBackend_,c_->cameraBackends());
+    refreshBackendComboIfChanged(guideCameraBackend_,c_->cameraBackends());
+    refreshBackendComboIfChanged(mountBackend_,c_->mountBackends());
+    refreshBackendComboIfChanged(focuserBackend_,c_->focuserBackends());
     struct Ui{QString type;QString role;QComboBox*backend;QLineEdit*endpoint;QLabel*status;};
     const Ui ui[]={{"camera","main",cameraBackend_,cameraEndpoint_,cameraDeviceStatus_},{"camera","guide",guideCameraBackend_,guideCameraEndpoint_,guideCameraDeviceStatus_},{"mount","main",mountBackend_,mountEndpoint_,mountDeviceStatus_},{"focuser","main",focuserBackend_,focuserEndpoint_,focuserDeviceStatus_}};
     const auto devices=state.value("devices").toArray();

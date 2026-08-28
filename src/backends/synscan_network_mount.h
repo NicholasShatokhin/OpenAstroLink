@@ -1,13 +1,22 @@
 #pragma once
 #include "core/interfaces.h"
-#include <QTcpSocket>
+#include <QHostAddress>
+#include <QUdpSocket>
+#include <utility>
 
 namespace oas {
+
+// Direct SynScan Wi-Fi / EQDrive Wi-Fi transport.
+//
+// Despite the historic class name, this backend does NOT connect to SynScan
+// Pro.  It talks directly to the mount/Wi-Fi adapter using the Sky-Watcher
+// Motor Controller Command Set over UDP/11880.  SynScan Pro itself is exposed
+// separately by the synscan-app backend on UDP/11881.
 class SynScanNetworkMount final : public IMount {
 public:
     explicit SynScanNetworkMount(QString endpoint);
     QString id() const override{return "synscan-wifi:"+endpoint_;}
-    QString displayName() const override{return "SynScan network telescope";}
+    QString displayName() const override{return "Direct SynScan/EQDrive Wi-Fi mount";}
     QString backendName() const override{return "synscan-wifi";}
     ConnectionState connectionState() const override{return state_;}
     bool connectDevice(QString *error=nullptr) override;
@@ -20,12 +29,33 @@ public:
     bool park(bool enabled,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
 private:
-    bool parseEndpoint(QString &host,quint16 &port,QString *error) const;
-    bool exchange(const QByteArray &command,QByteArray &reply,int timeoutMs=3000,QString *error=nullptr);
-    bool fixedRate(bool raAxis,bool positive,int rate,QString *error);
+    bool resolveEndpoint(QHostAddress &host,quint16 &port,QString *error);
+    bool exchange(const QByteArray &command,QByteArray &reply,int timeoutMs=1800,QString *error=nullptr);
+    bool axisQuery(char opcode,int axis,QByteArray &payload,QString *error=nullptr);
+    bool axisCommand(char opcode,int axis,const QByteArray &payload={},QString *error=nullptr);
+    bool readAxis(int axis,qint32 &position,bool &running,bool &gotoMode,bool &initialized,QString *error=nullptr);
+    bool stopAxis(int axis,QString *error=nullptr);
+    bool waitStopped(int axis,int timeoutMs,QString *error=nullptr);
+    bool gotoAxisDelta(int axis,double deltaDeg,QString *error=nullptr);
+    double axisDeltaDeg(int axis,qint32 from,qint32 to) const;
+    std::pair<double,double> skyFromEncoder(qint32 p1,qint32 p2,qint64 nowMs) const;
+
     QString endpoint_;
     ConnectionState state_{ConnectionState::Disconnected};
-    QTcpSocket socket_;
-    int model_{-1};
+    QUdpSocket socket_;
+    QHostAddress host_;
+    quint16 port_{11880};
+    quint32 countsPerRev1_{0},countsPerRev2_{0};
+    quint32 timerFreq_{0};
+    QString firmware1_,firmware2_;
+    bool coordinateSynced_{false};
+    qint32 syncPos1_{0},syncPos2_{0};
+    double syncRaDeg_{0.0},syncDecDeg_{0.0};
+    qint64 syncUtcMs_{0};
+    bool trackingRequested_{false};
+    bool parked_{false};
+    double raSkyPerAxis_{-1.0};
+    double decSkyPerAxis_{1.0};
+    double safetyGotoLimitDeg_{15.0};
 };
 }

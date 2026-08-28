@@ -48,9 +48,25 @@ int main() {
     const auto eqspeed = eqdrive::parseSpeed("Speed 15.1 0.17 OK\r");
     assert(eqspeed && near(eqspeed->first, 15.1) && near(eqspeed->second, 0.17));
     assert(eqdrive::responseOk("Slew OK\r", "Slew"));
+    assert(eqdrive::line("St") == "St\r");
+    const auto eqdirs = eqdrive::parseAxisDirections("Cg - 1.0 450.000000 800.000000 200 0.50 0 0 0 15 0 0 + 1.0 162.500000 800.000000 200 0.50 0 0 0 15 0 0\r");
+    assert(eqdirs.first == -1 && eqdirs.second == 1);
 
     assert(skywatcher_mc::instantStop(1) == ":L1\r");
     assert(skywatcher_mc::initDone(2) == ":F2\r");
+    assert(skywatcher_mc::encodeU24(0x123456u) == "563412");
+    assert(skywatcher_mc::decodeU24("563412").value() == 0x123456u);
+    assert(skywatcher_mc::decodePosition("=000080\r").value() == 0);
+    assert(skywatcher_mc::getVersion(1) == ":e1\r");
+    assert(skywatcher_mc::getCountsPerRev(2) == ":a2\r");
+    assert(skywatcher_mc::setMotionMode(1, true, false, false) == ":G121\r"); // reverse
+    assert(skywatcher_mc::setMotionMode(1, true, false, true) == ":G120\r");  // forward
+    const auto mcStopped = skywatcher_mc::parseStatus("=001\r");
+    assert(mcStopped.valid && !mcStopped.running && mcStopped.initialized && mcStopped.gotoMode);
+    const auto mcGotoRunning = skywatcher_mc::parseStatus("=011\r");
+    assert(mcGotoRunning.valid && mcGotoRunning.running && mcGotoRunning.gotoMode && mcGotoRunning.initialized);
+    const auto mcSlewRunning = skywatcher_mc::parseStatus("=111\r");
+    assert(mcSlewRunning.valid && mcSlewRunning.running && !mcSlewRunning.gotoMode && mcSlewRunning.initialized);
 
     std::cout << "Native telescope protocol smoke tests passed.\n";
     return 0;

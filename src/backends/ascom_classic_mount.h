@@ -21,6 +21,7 @@ public:
     bool setTracking(bool enabled,QString *error=nullptr) override;
     bool park(bool enabled,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
+    QString destinationPierSide(const EquatorialCoord &target,QString *error=nullptr) override;
     static bool chooseTelescope(const QString &current,QString &selected,QString *error=nullptr);
     static bool setupTelescope(const QString &progId,QString *error=nullptr);
     static QString hostExecutable();

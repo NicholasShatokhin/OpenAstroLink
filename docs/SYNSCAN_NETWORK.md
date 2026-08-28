@@ -1,47 +1,85 @@
-# SynScan network compatibility
+# SynScan network transports
 
-OpenAstroLink provides two network compatibility paths through a running Sky-Watcher SynScan / SynScan Pro application. These are separate from the direct native `oal.skywatcher` and `oal.eqdrive` drivers.
+OpenAstroLink deliberately exposes two different network backends because the
+Sky-Watcher Wi-Fi adapter and the SynScan App/Pro application are different
+protocol endpoints.
 
-## Recommended: SynScan App Protocol (`synscan-app`)
+## Direct mount Wi-Fi — `synscan-wifi`
 
-The richer path uses the official **SynScan App Protocol** on UDP port 11881 by default. The protocol mirrors much of ASCOM `ITelescopeV3` and supports position, asynchronous GOTO, tracking, sync, park/unpark and pulse guiding.
+`synscan-wifi` connects **directly to the mount / EQDrive / SynScan Wi-Fi
+adapter**. SynScan Pro is not required.
 
-The endpoint is the IP address of the **phone or PC running SynScan Pro**, not automatically the mount Wi-Fi adapter address.
-
-Example:
-
-```text
-Backend: synscan-app
-Endpoint: 192.168.4.2:11881
-```
-
-When SynScan Pro and OpenAstroLink run on the same Windows machine, `127.0.0.1:11881` is appropriate.
-
-Reference: Sky-Watcher SynScan App Protocol (current developer documentation), <https://inter-static.skywatcher.com/downloads/synscan_app_protocol_20250930.pdf>.
-
-## Serial-protocol-over-TCP compatibility (`synscan-wifi`)
-
-A second, narrower backend connects to SynScan Pro's **SynScan Communication Protocol** TCP server, default port 11882, and reuses OAL's existing SynScan serial RA/Dec codec.
-
-Example:
+Transport:
 
 ```text
-Backend: synscan-wifi
-Endpoint: 192.168.4.2:11882
+OpenAstroLink -> UDP 11880 -> mount/EQDrive Wi-Fi adapter -> motor controller
 ```
 
-This path is useful for compatibility/testing but the 11881 App Protocol is preferred when both are available because its telescope API is richer.
+The payload is the official Sky-Watcher **Motor Controller Command Set**. The
+same low-level command family is used by EQMOD-compatible controllers.
 
-## What this is not
-
-These two backends control a mount **through the SynScan application**. They are not direct UDP-to-mount Motor Controller transports. A direct native controller should use the corresponding native OAL driver when available.
-
-## Typical topology
+Examples:
 
 ```text
-OpenAstroLink node ---- Wi-Fi/LAN ---- SynScan Pro (phone/PC)
-                                      |
-                                      +---- mount transport ---- mount
+Backend:  synscan-wifi
+Endpoint: auto
 ```
 
-The SynScan Pro screen exposes the actual configured ports; OAL endpoints can be changed accordingly.
+or:
+
+```text
+Backend:  synscan-wifi
+Endpoint: 192.168.4.1:11880
+```
+
+`auto` sends only a read-only motor-controller firmware query on UDP 11880 and
+accepts a syntactically valid controller response. The two common AP gateway
+addresses `192.168.4.1` and `192.168.0.1` are also tried because some adapters
+do not answer broadcast discovery.
+
+Direct RA/DEC coordinates use a conservative sync-anchor model. Sync once on a
+known sky position before direct GOTO. Until axis direction/pier handling is HIL
+qualified, one direct native GOTO is limited to a small angular delta.
+
+Reference: Sky-Watcher Motor Controller Command Set,
+<https://inter-static.skywatcher.com/downloads/skywatcher_motor_controller_command_set.pdf>.
+
+## Through SynScan Pro — `synscan-app`
+
+`synscan-app` is the higher-level compatibility path through a **running
+SynScan App/Pro** on a phone or PC.
+
+Transport:
+
+```text
+OpenAstroLink -> UDP 11881 -> SynScan Pro (phone/PC) -> mount
+```
+
+The endpoint is the IP of the **device running SynScan Pro**, not the mount
+Wi-Fi adapter.
+
+```text
+Backend:  synscan-app
+Endpoint: auto
+```
+
+or:
+
+```text
+Backend:  synscan-app
+Endpoint: 192.168.0.100:11881
+```
+
+`auto` broadcasts the harmless `ServerVersion` request on UDP 11881 and uses
+the responding SynScan App/Pro host. This backend exposes the richer SynScan
+App telescope API: position, asynchronous GOTO, tracking, sync, park/unpark and
+pulse guide when the app/mount supports them.
+
+Reference: Sky-Watcher SynScan App Protocol,
+<https://inter-static.skywatcher.com/downloads/synscan_app_protocol_20250930.pdf>.
+
+## Port 11882
+
+TCP 11882 is the **SynScan Communication Protocol server exported by SynScan
+App/Pro**. It is not the direct mount-Wi-Fi endpoint. OpenAstroLink v0.2.10.18
+no longer labels this path `synscan-wifi`; direct Wi-Fi uses UDP 11880 instead.

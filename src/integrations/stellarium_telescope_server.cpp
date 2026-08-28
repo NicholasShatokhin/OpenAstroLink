@@ -108,7 +108,7 @@ void StellariumTelescopeServer::processBuffer(QTcpSocket *socket) {
         if (!controller_->slewMount(target, &error))
             emit logMessage("Stellarium GOTO rejected: " + error);
         else
-            emit logMessage(QString("Stellarium GOTO: RA=%1 deg DEC=%2 deg")
+            emit logMessage(QString("Stellarium GOTO decoded/forwarded unchanged: RA=%1 deg DEC=%2 deg")
                             .arg(target.raDeg, 0, 'f', 6).arg(target.decDeg, 0, 'f', 6));
     }
 }

@@ -40,7 +40,7 @@ public:
     // Scan one directory. ABI-v2 *.manifest.json entries are preferred. Any
     // unclaimed shared libraries are then offered the legacy ABI-v1 loader.
     int scan(const QString &directory, QStringList *errors=nullptr, bool append=false);
-    int scanDefaultPaths(QStringList *errors=nullptr);
+    int scanDefaultPaths(QStringList *errors=nullptr, bool discoverDevices=true);
     void clear();
 
     QJsonArray drivers() const;
@@ -50,6 +50,9 @@ public:
     QJsonArray devices() const;
     // Explicitly rescan all loaded native drivers and update the device cache.
     QJsonArray refreshDevices(QStringList *errors=nullptr);
+    // Rescan only the requested driver IDs and merge their results into the cached device list.
+    // This avoids touching unrelated vendor SDKs/serial ports during reconnect of one missing device.
+    QJsonArray refreshDevices(const QStringList &driverIds, QStringList *errors=nullptr);
     QJsonObject capabilities(const QString &driverId, const QString &deviceId,
                              QString *error=nullptr) const;
     QJsonObject health(const QString &driverId, const QString &deviceId,

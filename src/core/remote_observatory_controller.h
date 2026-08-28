@@ -104,6 +104,7 @@ private:
     QUrl api(const QString &path) const;
     bool accepted(const HttpJsonClient::Reply &reply,QJsonValue *data=nullptr,QString *error=nullptr) const;
     bool refreshMetadata(QString *error=nullptr) const;
+    void updateBackendCatalogFromState(const QJsonObject &state) const;
     void openEventStream(const QJsonObject &nodeInfo);
     static SolveResult parseSolve(const QJsonObject &o);
     static AutofocusResult parseAutofocus(const QJsonObject &o);

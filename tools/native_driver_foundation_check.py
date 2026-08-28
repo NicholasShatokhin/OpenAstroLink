@@ -16,7 +16,7 @@ need(Path('src/core/application_controller.cpp'),'Native OAL driver registry','n
 need(Path('drivers/reference_simulated/oal_driver_simulated.cpp'),'oalCreateDriverV2','sim-camera','sim-mount','sim-focuser','publishFrame')
 need(Path('drivers/qhy/oal_driver_qhy.cpp'),'oalCreateDriverV2','oal.qhy','publishFrame','QHYCCD SDK','minSec','maxSec','\\"streaming\\":{\\"supported\\":false')
 need(Path('src/oal/oal_server.cpp'),'/api/v1/drivers','nativeCapabilitiesJson')
-need(Path('src/gui/main_window.cpp'),'Native OpenAstroLink','Compatibility / embedded')
+need(Path('src/gui/main_window.cpp'),'Detected native devices','Compatibility / embedded')
 need(Path('schemas/driver-manifest-v2.schema.json'),'out-of-process','permissions','deviceClasses')
 
 for m in [root/'drivers/reference_simulated/oal_driver_simulated.manifest.json',root/'drivers/qhy/oal_driver_qhy.manifest.json']:
