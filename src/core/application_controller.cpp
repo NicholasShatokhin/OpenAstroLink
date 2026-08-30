@@ -50,6 +50,32 @@ QJsonObject solveQualityJson(const SolveFrameQuality &q){
     return {{"detectedStars",q.detectedStars},{"background",q.background},{"noiseSigma",q.noiseSigma},
             {"p99",q.p99},{"saturationFraction",q.saturationFraction},{"medianHfrPx",q.medianHfrPx}};
 }
+// OpenCV names Bayer conversion constants from the opposite corner relative
+// to the conventional 2x2 CFA tile label when producing BGR. The mapping
+// below is verified with synthetic RGGB/BGGR/GRBG/GBRG mosaics.
+int openCvBayerCode(BayerPattern pattern){
+    switch(pattern){
+    case BayerPattern::RGGB:return cv::COLOR_BayerBG2BGR;
+    case BayerPattern::BGGR:return cv::COLOR_BayerRG2BGR;
+    case BayerPattern::GRBG:return cv::COLOR_BayerGB2BGR;
+    case BayerPattern::GBRG:return cv::COLOR_BayerGR2BGR;
+    default:return -1;
+    }
+}
+BayerPattern resolvedBayerPattern(const CameraFrame &frame,const LiveViewRequest &request){
+    if(request.bayerPattern!=BayerPattern::Auto)return request.bayerPattern;
+    return bayerPatternFromString(frame.bayerPattern,BayerPattern::Auto);
+}
+bool processLivePreview(CameraFrame &frame,const LiveViewRequest &request,QString *note=nullptr){
+    if(!request.debayer||frame.image.empty())return true;
+    if(frame.image.channels()==3){if(note)*note="camera already supplies RGB";return true;}
+    if(frame.image.channels()!=1){if(note)*note="debayer skipped: preview is not a one-channel CFA frame";return true;}
+    const BayerPattern pattern=resolvedBayerPattern(frame,request);const int code=openCvBayerCode(pattern);
+    if(code<0){if(note)*note="debayer requested but CFA pattern is unknown; choose RGGB/BGGR/GRBG/GBRG manually";return true;}
+    try{cv::Mat color;cv::cvtColor(frame.image,color,code);frame.image=std::move(color);if(note)*note=QString("preview debayer %1").arg(bayerPatternName(pattern));return true;}
+    catch(const cv::Exception &e){if(note)*note=QString("debayer failed: %1").arg(e.what());return false;}
+}
+
 CameraFrame softwareBinForSolver(CameraFrame frame,int requestedBinX,int requestedBinY){
     if(frame.image.empty())return frame;
     const int actualX=std::max(1,frame.binX),actualY=std::max(1,frame.binY);
@@ -227,8 +253,22 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
                 QTimer::singleShot(250,this,[this,driver](){if(!shuttingDown_)refreshNativeDiscoveryAsync(QStringList{driver});});
             }
         }
-        if(type=="focuser.moveStarted"||type=="focuser.position"||
-           type=="device.connected"||type=="device.disconnected")
+        if(type=="device.disconnected"&&!device.isEmpty()){
+            const QString key=nativeBackendKey(driver,device);
+            QTimer::singleShot(0,this,[this,key,driver,device](){
+                if(shuttingDown_)return;
+                auto cancelResource=[this](const QString&r){QString owner;if(operations_.isResourceLocked(r,&owner)&&!owner.isEmpty())operations_.cancel(owner,nullptr);};
+                if(camera_&&camera_->backendName()==key){cancelResource("camera");camera_.reset();emit logMessage("Main camera physically disconnected: "+driver+"/"+device);}
+                if(guideCamera_&&guideCamera_->backendName()==key){cancelResource("camera.guide");guideCamera_.reset();emit logMessage("Guide camera physically disconnected: "+driver+"/"+device);}
+                if(mount_&&mount_->backendName()==key){cancelResource("mount");mount_.reset();emit logMessage("Mount physically disconnected: "+driver+"/"+device);}
+                if(focuser_&&focuser_->backendName()==key){cancelResource("focuser");focuser_.reset();emit logMessage("Focuser physically disconnected: "+driver+"/"+device);}
+                emitState();
+                // Refresh only the affected driver after transport loss so the
+                // Devices tab drops the stale descriptor while the persisted
+                // auto-connect binding remains available for a later reconnect.
+                QTimer::singleShot(350,this,[this,driver](){if(!shuttingDown_)refreshNativeDiscoveryAsync(QStringList{driver});});
+            });
+        }else if(type=="focuser.moveStarted"||type=="focuser.position"||type=="device.connected")
             QTimer::singleShot(0,this,[this](){if(!shuttingDown_)emitState();});
     });
     const auto loadedNativeDrivers=driverLoader_->drivers();
@@ -266,6 +306,33 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
         // Emit a full snapshot only at operation start and terminal transitions.
         if(state!="running"||o.value("phase").toString()=="starting")emitState();
     });
+
+    // Native vendor/serial APIs do not all provide hot-remove callbacks. Poll
+    // ONLY currently connected native devices from a background thread using
+    // each driver's lightweight healthJson. Driver call locks serialize health
+    // probes with captures/moves, keeping the Qt/HTTP thread non-blocking.
+    nativeHealthTimer_=new QTimer(this);nativeHealthTimer_->setInterval(1800);
+    connect(nativeHealthTimer_,&QTimer::timeout,this,[this](){
+        if(shuttingDown_||nativeHealthThread_||!driverLoader_)return;
+        struct Key{QString driver;QString device;QString resource;};QList<Key> keys;
+        auto add=[&](const auto &ptr,const QString &resource){
+            if(!ptr)return;QString owner;if(operations_.isResourceLocked(resource,&owner))return;
+            QString d,id;if(parseNativeBackendKey(ptr->backendName(),d,id))keys.append({d,id,resource});
+        };
+        // A health probe must never be allowed to slip between frames of a
+        // long-lived camera/focuser/mount operation. Vendor SDK calls that are
+        // individually valid can still disturb an active acquisition state
+        // machine (observed with QHYCCD). Idle-only probing is both safer and
+        // sufficient for physical hot-remove detection.
+        add(camera_,"camera");add(guideCamera_,"camera.guide");add(mount_,"mount");add(focuser_,"focuser");
+        if(keys.isEmpty())return;
+        const auto loader=driverLoader_;QPointer<ApplicationController> self(this);
+        auto *thread=QThread::create([loader,keys](){for(const auto &k:keys){QString ignored;loader->health(k.driver,k.device,&ignored);}});
+        nativeHealthThread_=thread;
+        connect(thread,&QThread::finished,this,[this,thread](){if(nativeHealthThread_==thread)nativeHealthThread_=nullptr;thread->deleteLater();});
+        thread->start();
+    });
+    nativeHealthTimer_->start();
 }
 ApplicationController::~ApplicationController(){shutdown();}
 void ApplicationController::shutdown(){
@@ -290,6 +357,8 @@ void ApplicationController::shutdown(){
     // driver, let it finish before unloading plugin code. Discovery now uses
     // bounded short probes, so this should normally be well below a second or
     // two and avoids a use-after-unload race on shutdown.
+    if(nativeHealthTimer_)nativeHealthTimer_->stop();
+    if(nativeHealthThread_&&nativeHealthThread_->isRunning()){nativeHealthThread_->quit();nativeHealthThread_->wait(6000);}
     if(nativeDiscoveryThread_&&nativeDiscoveryThread_->isRunning()){
         nativeDiscoveryThread_->quit();
         nativeDiscoveryThread_->wait(6000);
@@ -639,13 +708,20 @@ void ApplicationController::refreshNativeDiscoveryAsync(const QStringList &drive
     });
     thread->start();
 }
-void ApplicationController::commitCapturedFrame(const CameraFrame&f){
-    previousFrame_=lastFrame_;lastFrame_=f;emit frameCaptured(toQImage(f.image),f.id);
-    QString stats;
-    if(!f.image.empty()&&f.image.channels()==1){double mn=0,mx=0;cv::minMaxLoc(f.image,&mn,&mx);const auto mean=cv::mean(f.image);stats=QString(" min=%1 max=%2 mean=%3").arg(mn,0,'f',1).arg(mx,0,'f',1).arg(mean[0],0,'f',1);}
-    emit logMessage(QString("Captured %1 × %2 frame %3 exp=%4s gain=%5%6%7").arg(f.image.cols).arg(f.image.rows).arg(f.id).arg(f.exposureSec,0,'g',6).arg(f.gain).arg(stats).arg(f.scienceFilePath.isEmpty()?QString():QString(" science=%1").arg(f.scienceFilePath)));
-    if(oalWsServer_)oalWsServer_->broadcast("frameReady",QJsonObject{{"frameId",f.id},{"capturedUtc",f.capturedUtc.toString(Qt::ISODateWithMs)},{"width",f.image.cols},{"height",f.image.rows},{"exposureSec",f.exposureSec},{"gain",f.gain}});
-    emitState();
+void ApplicationController::commitCapturedFrame(const CameraFrame&f,bool emitFullState,bool verbose){
+    previousFrame_=lastFrame_;lastFrame_=f;previewFrameCache_.push_back(f);while(previewFrameCache_.size()>8)previewFrameCache_.pop_front();emit frameCaptured(toQImage(f.image),f.id);
+    if(verbose){
+        QString stats;
+        if(!f.image.empty()&&f.image.channels()==1){double mn=0,mx=0;cv::minMaxLoc(f.image,&mn,&mx);const auto mean=cv::mean(f.image);stats=QString(" min=%1 max=%2 mean=%3").arg(mn,0,'f',1).arg(mx,0,'f',1).arg(mean[0],0,'f',1);}
+        emit logMessage(QString("Captured %1 × %2 frame %3 exp=%4s gain=%5%6%7").arg(f.image.cols).arg(f.image.rows).arg(f.id).arg(f.exposureSec,0,'g',6).arg(f.gain).arg(stats).arg(f.scienceFilePath.isEmpty()?QString():QString(" science=%1").arg(f.scienceFilePath)));
+    }
+    if(oalWsServer_)oalWsServer_->broadcast("frameReady",QJsonObject{{"frameId",f.id},{"capturedUtc",f.capturedUtc.toString(Qt::ISODateWithMs)},{"width",f.image.cols},{"height",f.image.rows},{"exposureSec",f.exposureSec},{"gain",f.gain},{"live",f.id.startsWith("live-")}});
+    if(emitFullState)emitState();
+}
+void ApplicationController::publishOperationalPreview(const CameraFrame&frame,const QString&purpose){
+    CameraFrame f=frame;f.scienceFilePath.clear();f.id=QString("%1-preview-%2").arg(purpose,f.id);
+    previewFrameCache_.push_back(f);while(previewFrameCache_.size()>8)previewFrameCache_.pop_front();emit frameCaptured(toQImage(f.image),f.id);
+    if(oalWsServer_)oalWsServer_->broadcast("frameReady",QJsonObject{{"frameId",f.id},{"capturedUtc",f.capturedUtc.toString(Qt::ISODateWithMs)},{"width",f.image.cols},{"height",f.image.rows},{"exposureSec",f.exposureSec},{"gain",f.gain},{"operationalPreview",true},{"purpose",purpose}});
 }
 bool ApplicationController::capture(const ExposureRequest&r,CameraFrame*out,QString*err){if(!ensureResourcesAvailable({"camera"},err))return false;if(!camera_){if(err)*err="No camera connected";return false;}CameraFrame f;if(!camera_->capture(r,f,err))return false;commitCapturedFrame(f);if(out)*out=f;return true;}
 QString ApplicationController::startCapture(const ExposureRequest&r,QString*error){
@@ -676,6 +752,61 @@ QString ApplicationController::startGuideCapture(const ExposureRequest&r,QString
         out.success=true;out.result=QJsonObject{{"frameId",frame.id},{"width",frame.image.cols},{"height",frame.image.rows},{"exposureSec",frame.exposureSec},{"role","guide"}};ctx.reportProgress(1.0,"completed");return out;
     });
     emit logMessage(QString("Guide exposure operation accepted: %1 (%2 s)").arg(id).arg(r.exposureSec,0,'f',4));return id;
+}
+QString ApplicationController::startLiveView(const LiveViewRequest&request,QString*error){
+    if(!camera_){if(error)*error="No camera connected";return{};}
+    // Do not use repeated still captures as a fake live view on a DSLR: that
+    // would actuate the shutter continuously. Canon gets a dedicated EVF path
+    // in a later driver revision.
+    if(camera_->backendName().startsWith("native:oal.canon/")){if(error)*error="Canon live view requires the EDSDK EVF transport; repeated still captures are intentionally disabled to protect the shutter. Use QHY/ASI for finder alignment in this release.";return{};}
+    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,10.0);
+    // CFA pixels must remain on their native 1x1 lattice for software debayer.
+    // Drivers that already return RGB are harmlessly passed through, but forcing
+    // 1x1 here keeps raw QHY/ZWO previews color-correct across vendors.
+    if(r.debayer&&(r.binX!=1||r.binY!=1)){r.binX=r.binY=1;emit logMessage("Live View debayer enabled: forcing 1x1 readout so the Bayer mosaic remains valid");}
+    auto cam=camera_;
+    const QString id=operations_.submit("camera.live-view",{"camera"},true,[this,cam,r](OperationContext&ctx){
+        OperationOutcome out;int frames=0;QElapsedTimer elapsed;elapsed.start();
+        const qint64 targetPeriodMs=qint64(std::lround(1000.0/r.targetFps));
+        // QHY has a real SDK streaming mode. Use it instead of repeated
+        // ExpQHYCCDSingleFrame/GetQHYCCDSingleFrame calls; HIL showed that
+        // short repeated single-frame cycles can wedge the QHY5III462C and
+        // poison the next normal exposure. The driver restores single-frame
+        // mode on stop.
+        auto native=std::dynamic_pointer_cast<NativeOalCamera>(cam);
+        const bool nativeStream=native&&native->nativeLiveSupported();
+        if(nativeStream){
+            QString startError;if(!native->startNativeLive(r,&startError)){out.problem={{"code","LIVE_VIEW_START_FAILED"},{"message",startError}};return out;}
+            const auto stopStream=[&](){QString stopError;if(!native->stopNativeLive(&stopError)&&!stopError.isEmpty())QMetaObject::invokeMethod(this,[this,stopError](){emit logMessage("Live View cleanup warning: "+stopError);},Qt::QueuedConnection);};
+            while(!ctx.isCancellationRequested()){
+                QElapsedTimer cycle;cycle.start();CameraFrame frame;QString err;
+                const int timeoutMs=int(std::clamp<qint64>(qint64(std::ceil(r.exposureSec*3000.0))+1000,1000,5000));
+                if(!native->nextNativeLiveFrame(frame,timeoutMs,&err)){if(ctx.isCancellationRequested()){stopStream();out.cancelled=true;return out;}stopStream();out.problem={{"code","LIVE_VIEW_FRAME_FAILED"},{"message",err}};return out;}
+                if(ctx.isCancellationRequested()){stopStream();out.cancelled=true;return out;}
+                QString previewNote;if(!processLivePreview(frame,r,&previewNote)){stopStream();out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
+                frame.id="live-"+frame.id;frame.scienceFilePath.clear();++frames;
+                QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame,false,false);},Qt::BlockingQueuedConnection);
+                const double actualFps=elapsed.elapsed()>0?1000.0*double(frames)/double(elapsed.elapsed()):0.0;
+                ctx.reportProgress(0.0,"live",{{"frames",frames},{"actualFps",actualFps},{"targetFps",r.targetFps},{"frameId",frame.id},{"transport","native-stream"}});
+                qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}
+            }
+            stopStream();out.cancelled=true;return out;
+        }
+        ThreadMarshalledCamera proxy(this,cam);
+        while(!ctx.isCancellationRequested()){
+            QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.binX=r.binX;e.binY=r.binY;e.saveRaw=false;CameraFrame frame;QString err;
+            if(!proxy.capture(e,frame,&err)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","LIVE_VIEW_CAPTURE_FAILED"},{"message",err}};return out;}
+            if(ctx.isCancellationRequested()){out.cancelled=true;return out;}
+            QString previewNote;if(!processLivePreview(frame,r,&previewNote)){out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
+            frame.id="live-"+frame.id;frame.scienceFilePath.clear();++frames;
+            QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame,false,false);},Qt::BlockingQueuedConnection);
+            const double actualFps=elapsed.elapsed()>0?1000.0*double(frames)/double(elapsed.elapsed()):0.0;
+            ctx.reportProgress(0.0,"live",{{"frames",frames},{"actualFps",actualFps},{"targetFps",r.targetFps},{"frameId",frame.id},{"transport","repeated-capture"}});
+            qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}
+        }
+        out.cancelled=true;return out;
+    });
+    emit logMessage(QString("Live View operation accepted: %1 — %2 s, gain %3, target %4 fps, debayer=%5 %6").arg(id).arg(r.exposureSec,0,'g',5).arg(r.gain).arg(r.targetFps,0,'g',3).arg(r.debayer?"ON":"OFF").arg(bayerPatternName(r.bayerPattern)));return id;
 }
 SolveResult ApplicationController::solveLast(const SolveHint&h){if(lastFrame_.image.empty()){lastSolve_.message="No captured frame";lastSolve_.success=false;}else lastSolve_=solver_->solve(lastFrame_,profile_,h);auto j=solveToJson(lastSolve_);QJsonArray stars;for(const auto&s:lastSolve_.imageStars)stars.append(QJsonObject{{"x",s.positionPx.x},{"y",s.positionPx.y},{"flux",s.flux},{"peak",s.peak},{"hfrPx",s.hfrPx}});j["imageStars"]=stars;emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();return lastSolve_;}
 QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&request,QString*error){
@@ -734,7 +865,7 @@ QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&req
     });
     emit logMessage(QString("Adaptive plate-solve operation accepted: %1 — base %2 s, %3x%4 effective bin, max %5 s, capture budget %6 s").arg(id).arg(r.exposure.exposureSec,0,'f',3).arg(r.exposure.binX).arg(r.exposure.binY).arg(r.maxSingleExposureSec,0,'f',3).arg(r.maxCapturePhaseSec,0,'f',0));return id;
 }
-AutofocusResult ApplicationController::autofocus(const AutofocusRequest&r){AutofocusResult x;QString busy;if(!ensureResourcesAvailable({"camera","focuser"},&busy)){x.message=busy;}else if(!camera_||!focuser_){x.message="Camera and focuser must be connected";}else x=autofocusEngine_.run(*camera_,*focuser_,r,[this](const FocusSample&s){QJsonObject j{{"position",s.position},{"score",s.score},{"spread",s.spread}};emit autofocusProgress(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusProgress",j);});auto j=autofocusToJson(x);emit autofocusCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusResult",j);emit logMessage(x.message);emitState();return x;}
+AutofocusResult ApplicationController::autofocus(const AutofocusRequest&r){AutofocusResult x;QString busy;if(!ensureResourcesAvailable({"camera","focuser"},&busy)){x.message=busy;}else if(!camera_||!focuser_){x.message="Camera and focuser must be connected";}else x=autofocusEngine_.run(*camera_,*focuser_,r,[this](const FocusSample&s){QJsonObject j{{"position",s.position},{"score",s.score},{"spread",s.spread},{"detectedStars",s.detectedStars}};emit autofocusProgress(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusProgress",j);},{},[this](const CameraFrame&f,int){publishOperationalPreview(f,"af");});auto j=autofocusToJson(x);emit autofocusCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusResult",j);emit logMessage(x.message);emitState();return x;}
 QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*error){
     if(!camera_||!focuser_){if(error)*error="Camera and focuser must be connected";return{};}
     auto cam=camera_;auto foc=focuser_;const int coarseCount=std::max(1,r.rangeSteps/std::max(1,r.coarseStep)+1);const int fineHalf=std::max(r.coarseStep*2,r.fineStep*3);const int fineCount=std::max(1,(2*fineHalf)/std::max(1,r.fineStep)+1);const int expected=coarseCount+fineCount;
@@ -742,10 +873,10 @@ QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*e
         ThreadMarshalledCamera cameraProxy(this,cam);ThreadMarshalledFocuser focuserProxy(this,foc);int sampleNo=0;
         ctx.reportProgress(0.0,"starting");
         auto result=autofocusEngine_.run(cameraProxy,focuserProxy,r,[this,&ctx,&sampleNo,expected](const FocusSample&s){
-            ++sampleNo;QJsonObject j{{"position",s.position},{"score",s.score},{"spread",s.spread},{"sample",sampleNo},{"expectedSamples",expected}};
+            ++sampleNo;QJsonObject j{{"position",s.position},{"score",s.score},{"spread",s.spread},{"detectedStars",s.detectedStars},{"sample",sampleNo},{"expectedSamples",expected}};
             ctx.reportProgress(std::min(0.95,double(sampleNo)/std::max(1,expected)),"focus.scan",j);
             QMetaObject::invokeMethod(this,[this,j](){emit autofocusProgress(j);if(oalWsServer_)oalWsServer_->broadcast("autofocusProgress",j);},Qt::QueuedConnection);
-        },[&ctx](){return ctx.isCancellationRequested();});
+        },[&ctx](){return ctx.isCancellationRequested();},[this](const CameraFrame&f,int position){QMetaObject::invokeMethod(this,[this,f,position](){publishOperationalPreview(f,"af");},Qt::BlockingQueuedConnection);});
         OperationOutcome out;out.result=autofocusToJson(result);
         if(ctx.isCancellationRequested()||result.message=="Autofocus cancelled"){focuserProxy.halt(nullptr);out.cancelled=true;return out;}
         if(result.success){out.success=true;ctx.reportProgress(1.0,"completed");}
@@ -755,13 +886,17 @@ QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*e
     emit logMessage("Autofocus operation accepted: "+id);return id;
 }
 bool ApplicationController::cancelOperation(const QString&id,QString*error){
-    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningAdaptiveSolve=kind=="solver.adaptive"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";
+    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningAdaptiveSolve=kind=="solver.adaptive"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";const bool runningLiveView=kind=="camera.live-view"&&before.value("state").toString()=="running";
     if(!operations_.cancel(id,error))return false;
     if(runningExposure&&camera_&&camera_->canAbortExposure()){QString abortError;if(!camera_->abortExposure(&abortError)&&!abortError.isEmpty())emit logMessage("Exposure abort warning: "+abortError);}
     else if(runningExposure&&camera_)emit logMessage("Exposure cancellation requested; this camera backend cannot interrupt an in-progress capture, so the frame will be discarded when readout returns");
     if(runningAdaptiveSolve&&camera_&&camera_->canAbortExposure()){QString abortError;if(!camera_->abortExposure(&abortError)&&!abortError.isEmpty())emit logMessage("Adaptive solve exposure abort warning: "+abortError);}
     else if(runningAdaptiveSolve&&camera_)emit logMessage("Adaptive solve cancellation requested; current short exposure cannot be interrupted by this backend");
     if(runningGuideExposure&&guideCamera_&&guideCamera_->canAbortExposure())guideCamera_->abortExposure(nullptr);
+    // Native QHY Live View is a continuous SDK stream, not a single exposure.
+    // Let its worker leave the frame loop and call StopQHYCCDLive itself; using
+    // CancelQHYCCDExposingAndReadout here corrupts the subsequent still mode.
+    if(runningLiveView&&camera_&&!camera_->backendName().startsWith("native:oal.qhy/")&&camera_->canAbortExposure())camera_->abortExposure(nullptr);
     return true;
 }
 QJsonObject ApplicationController::operation(const QString&id,QString*error)const{auto o=operations_.operationJson(id);if(o.isEmpty()&&error)*error="Operation not found";return o;}
@@ -810,8 +945,9 @@ bool ApplicationController::focuserStatus(FocuserStatus&s,QString*e)const{if(!fo
 bool ApplicationController::moveFocuser(int p,QString*e){if(!ensureResourcesAvailable({"focuser"},e))return false;if(!focuser_){if(e)*e="No focuser connected";return false;}bool ok=focuser_->moveAbsolute(p,e);emitState();return ok;}
 bool ApplicationController::haltFocuser(QString*e){QString owner;if(operations_.isResourceLocked("focuser",&owner))operations_.cancel(owner,nullptr);if(!focuser_){if(e)*e="No focuser connected";return false;}bool ok=focuser_->halt(e);if(ok)emit logMessage("Focuser halt requested");return ok;}
 bool ApplicationController::setMountTracking(bool v,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->setTracking(v,e);if(ok)emit logMessage(QString("Mount tracking %1").arg(v?"ON":"OFF"));emitState();return ok;}
-bool ApplicationController::parkMount(bool v,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->park(v,e);if(ok)emit logMessage(QString("Mount %1").arg(v?"parked":"unparked"));emitState();return ok;}
+bool ApplicationController::parkMount(bool v,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->park(v,e);if(ok)emit logMessage(v?"Mount parking slew started":"Mount unpark/parking-stop accepted");emitState();return ok;}
 bool ApplicationController::pulseGuide(GuideDirection d,int ms,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}return mount_->pulseGuide(d,ms,e);}
+bool ApplicationController::manualMountSlew(int a1,int a2,int rate,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}const bool ok=mount_->manualSlew(std::clamp(a1,-1,1),std::clamp(a2,-1,1),std::clamp(rate,0,9),e);if(ok){emit logMessage(QString("Manual mount slew: axis1=%1 axis2=%2 rate=%3").arg(a1).arg(a2).arg(rate));emitState();}return ok;}
 GuidingStatus ApplicationController::startGuiding(){if(lastSolve_.success)guiding_.setTarget({lastSolve_.raDeg,lastSolve_.decDeg});auto s=guiding_.status();auto j=QJsonObject{{"active",s.active},{"raErrorArcsec",s.raErrorArcsec},{"decErrorArcsec",s.decErrorArcsec},{"rmsArcsec",s.rmsArcsec}};emit guidingChanged(j);if(oalWsServer_)oalWsServer_->broadcast("guidingUpdate",j);return s;}
 GuidingStatus ApplicationController::stopGuiding(){guiding_.stop();auto s=guiding_.status();auto j=QJsonObject{{"active",s.active},{"raErrorArcsec",s.raErrorArcsec},{"decErrorArcsec",s.decErrorArcsec},{"rmsArcsec",s.rmsArcsec}};emit guidingChanged(j);if(oalWsServer_)oalWsServer_->broadcast("guidingUpdate",j);return s;}
 GuidingStatus ApplicationController::guideUsingLastSolve(){QString busy;if(!ensureResourcesAvailable({"mount"},&busy)){emit logMessage("Guide update skipped: "+busy);return guiding_.status();}auto s=guiding_.update({lastSolve_.raDeg,lastSolve_.decDeg},mount_.get());auto j=QJsonObject{{"active",s.active},{"raErrorArcsec",s.raErrorArcsec},{"decErrorArcsec",s.decErrorArcsec},{"rmsArcsec",s.rmsArcsec}};emit guidingChanged(j);if(oalWsServer_)oalWsServer_->broadcast("guidingUpdate",j);return s;}
@@ -840,7 +976,7 @@ quint16 ApplicationController::stellariumPort()const{return stellariumServer_&&s
 void ApplicationController::refreshState(){emitState();}
 QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const QString&role,const DeviceBinding&binding){if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"role",role},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")}});}};add(camera_,"camera","main",settings_.cameraBinding());add(guideCamera_,"camera","guide",settings_.guideCameraBinding());add(mount_,"mount","main",settings_.mountBinding());add(focuser_,"focuser","main",settings_.focuserBinding());return a;}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();j["canAbortExposure"]=camera_->canAbortExposure();}return j;}
-bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
+bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}for(auto it=previewFrameCache_.rbegin();it!=previewFrameCache_.rend();++it)if(it->id==id){frame=*it;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
 QJsonObject ApplicationController::stateJson()const{auto strings=[](const QStringList&xs){QJsonArray a;for(const auto&x:xs)a.append(x);return a;};QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"backends",QJsonObject{{"camera",strings(cameraBackends())},{"mount",strings(mountBackends())},{"focuser",strings(focuserBackends())},{"solver",strings(solverBackends())}}},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr)){QJsonObject mj{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateFrame",equatorialFrameName(m.coordinate.frame)},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide},{"geometryType",m.geometryType}};if(m.axes.valid){mj["axis1Deg"]=m.axes.axis1Deg;mj["axis2Deg"]=m.axes.axis2Deg;mj["axesValid"]=true;}else mj["axesValid"]=false;j["mount"]=mj;}FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
 QJsonObject ApplicationController::nodeInfoJson()const{
     return {{"nodeId",QCoreApplication::applicationName()+"@"+QSysInfo::machineHostName()},
@@ -924,5 +1060,5 @@ QJsonArray ApplicationController::nativeDriversJson()const{return driverLoader_?
 QJsonArray ApplicationController::nativeDevicesJson()const{return driverLoader_?driverLoader_->devices():QJsonArray{};}
 QJsonObject ApplicationController::nativeCapabilitiesJson(const QString&driverId,const QString&deviceId,QString*error)const{return driverLoader_?driverLoader_->capabilities(driverId,deviceId,error):QJsonObject{};}
 void ApplicationController::emitState(){if(shuttingDown_)return;auto j=stateJson();emit stateChanged(j);if(oalWsServer_)oalWsServer_->broadcast("state",j);}
-QImage ApplicationController::toQImage(const cv::Mat&i){if(i.empty())return{};cv::Mat rgb;if(i.channels()==1){cv::Mat u8;if(i.depth()==CV_16U){double mn,mx;cv::minMaxLoc(i,&mn,&mx);i.convertTo(u8,CV_8U,255.0/std::max(1.0,mx-mn),-mn*255.0/std::max(1.0,mx-mn));}else i.convertTo(u8,CV_8U);cv::cvtColor(u8,rgb,cv::COLOR_GRAY2RGB);}else cv::cvtColor(i,rgb,cv::COLOR_BGR2RGB);return QImage(rgb.data,rgb.cols,rgb.rows,int(rgb.step),QImage::Format_RGB888).copy();}
+QImage ApplicationController::toQImage(const cv::Mat&i){if(i.empty())return{};cv::Mat rgb;if(i.channels()==1){cv::Mat u8;if(i.depth()==CV_16U){double mn,mx;cv::minMaxLoc(i,&mn,&mx);i.convertTo(u8,CV_8U,255.0/std::max(1.0,mx-mn),-mn*255.0/std::max(1.0,mx-mn));}else i.convertTo(u8,CV_8U);cv::cvtColor(u8,rgb,cv::COLOR_GRAY2RGB);}else{cv::Mat bgr8;if(i.depth()==CV_16U)i.convertTo(bgr8,CV_8U,255.0/65535.0);else if(i.depth()!=CV_8U){double mn=0,mx=0;cv::minMaxLoc(i.reshape(1),&mn,&mx);i.convertTo(bgr8,CV_8U,255.0/std::max(1.0,mx));}else bgr8=i;cv::cvtColor(bgr8,rgb,cv::COLOR_BGR2RGB);}return QImage(rgb.data,rgb.cols,rgb.rows,int(rgb.step),QImage::Format_RGB888).copy();}
 } // namespace oas

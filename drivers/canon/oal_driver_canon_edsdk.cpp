@@ -32,6 +32,7 @@ struct CameraState {
     EdsCameraRef camera{nullptr};
     std::atomic_bool connected{false};
     std::atomic_bool abortRequested{false};
+    std::atomic_bool transportLost{false};
     std::mutex opMutex;
     std::mutex eventMutex;
     std::condition_variable eventCv;
@@ -102,6 +103,22 @@ EdsError EDSCALLBACK cameraAdded(EdsVoid *){
     state.cameraAddedEvent=true;
     log(1,"Canon EDSDK camera-added event received; requesting automatic native rediscovery");
     emitEvent("", "device.discoveryHint", "{\"reason\":\"camera-added\"}");
+    return EDS_ERR_OK;
+}
+
+EdsError EDSCALLBACK stateEvent(EdsStateEvent event,EdsUInt32,EdsVoid *context){
+    auto *c=static_cast<CameraState*>(context);
+    if(!c)return EDS_ERR_OK;
+    if(event==kEdsStateEvent_Shutdown){
+        const bool wasConnected=c->connected.exchange(false);
+        c->transportLost=true;
+        c->abortRequested=true;
+        c->eventCv.notify_all();
+        if(wasConnected){
+            log(1,"Canon EDSDK shutdown/transport-loss event received for "+c->name);
+            emitEvent(c->id,"device.disconnected","{\"reason\":\"edsdk-shutdown\",\"physical\":true}");
+        }
+    }
     return EDS_ERR_OK;
 }
 
@@ -177,16 +194,19 @@ bool openCamera(CameraState &c,std::string &error){
     };
     rc=EdsSetObjectEventHandler(c.camera,kEdsObjectEvent_All,&objectEvent,&c);
     if(rc!=EDS_ERR_OK)return failOpen("EdsSetObjectEventHandler",rc);
+    rc=EdsSetCameraStateEventHandler(c.camera,kEdsStateEvent_All,&stateEvent,&c);
+    if(rc!=EDS_ERR_OK)return failOpen("EdsSetCameraStateEventHandler",rc);
     EdsUInt32 saveTo=kEdsSaveTo_Host;
     rc=EdsSetPropertyData(c.camera,kEdsPropID_SaveTo,0,sizeof(saveTo),&saveTo);
     if(rc!=EDS_ERR_OK)return failOpen("EdsSetPropertyData(SaveTo=Host)",rc);
     EdsCapacity capacity{}; capacity.numberOfFreeClusters=0x7fffffff; capacity.bytesPerSector=0x1000; capacity.reset=1;
     rc=EdsSetCapacity(c.camera,capacity);
     if(rc!=EDS_ERR_OK)return failOpen("EdsSetCapacity",rc);
-    log(1,"Canon EDSDK session ready: object-transfer handler registered; SaveTo=Host; host capacity published");
-    c.abortRequested=false;c.connected=true; emitEvent(c.id,"device.connected"); return true;
+    log(1,"Canon EDSDK session ready: object/state handlers registered; SaveTo=Host; host capacity published");
+    c.abortRequested=false;c.transportLost=false;c.connected=true; emitEvent(c.id,"device.connected"); return true;
 }
 void closeCamera(CameraState &c){
+    const bool wasConnected=c.connected.exchange(false);
     c.abortRequested=true;
     {
         std::lock_guard<std::mutex> lk(c.eventMutex);
@@ -194,7 +214,7 @@ void closeCamera(CameraState &c){
         c.pendingItems.clear();
     }
     if(c.camera){EdsCloseSession(c.camera);EdsRelease(c.camera);c.camera=nullptr;}
-    c.connected=false; emitEvent(c.id,"device.disconnected");
+    if(wasConnected)emitEvent(c.id,"device.disconnected");
 }
 
 EdsDirectoryItemRef waitForItem(CameraState &c,std::chrono::milliseconds timeout,const OalDriverCallV2 *call){
@@ -417,7 +437,7 @@ QImage previewFromStoredOriginal(const std::filesystem::path &path, std::string 
     return best.convertToFormat(QImage::Format_RGB888);
 }
 
-const char *manifest(void*){return copyString(R"json({"driverId":"oal.canon","name":"OpenAstroLink native Canon EOS driver (EDSDK)","version":"0.2.10.30","abiVersion":2,"threadModel":"per-device-serial","transport":"Canon EDSDK"})json");}
+const char *manifest(void*){return copyString(R"json({"driverId":"oal.canon","name":"OpenAstroLink native Canon EOS driver (EDSDK)","version":"0.2.10.32","abiVersion":2,"threadModel":"per-device-serial","transport":"Canon EDSDK"})json");}
 bool start(void*,const char*cfg){
     const EdsError initRc=EdsInitializeSDK();
     if(initRc!=EDS_ERR_OK){log(2,edsError("EdsInitializeSDK",initRc));return false;}
@@ -536,7 +556,11 @@ const char *invoke(void*,const char*id,const char*method,const char*req,const Oa
     }
     log(1,"Canon capture requested="+std::to_string(requestedSec)+" s actual="+std::to_string(actualSec)+" s ISO="+(actualGain>0?std::to_string(actualGain):std::string("camera-current"))+" focusPolicy=non-af");
     auto *item=waitForItem(*c,std::chrono::milliseconds(std::max(15000,int(actualSec*1000)+15000)),call);
-    if(!item)return fail("capture-timeout","Canon did not publish a transfer object before timeout");
+    if(!item){
+        if(c->transportLost||!c->connected)return fail("DEVICE_DISCONNECTED","Canon camera was switched off or USB transport was lost during exposure");
+        if(c->abortRequested)return fail("cancelled","Canon exposure cancelled");
+        return fail("capture-timeout","Canon did not publish a transfer object before timeout");
+    }
     EdsDirectoryItemInfo info{};
     EdsError infoRc = EdsGetDirectoryItemInfo(item, &info);
     if (infoRc != EDS_ERR_OK) { EdsRelease(item); return fail("download-failed", edsError("EdsGetDirectoryItemInfo", infoRc)); }
@@ -564,6 +588,6 @@ const char *invoke(void*,const char*id,const char*method,const char*req,const Oa
 }
 bool cancel(void*,const char*id,const char*){std::lock_guard<std::mutex>lk(state.mutex);auto it=state.cameras.find(id?id:"");if(it==state.cameras.end())return false;it->second->abortRequested=true;if(it->second->camera){EdsSendCommand(it->second->camera,kEdsCameraCommand_BulbEnd,0);releaseShutter(*it->second);}it->second->eventCv.notify_all();return true;}
 void releaseString(void*,const char*p){if(p)host.deallocate(host.hostContext,const_cast<char*>(p));}
-OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,"oal.canon","OpenAstroLink native Canon EOS driver (EDSDK)","0.2.10.30",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,"oal.canon","OpenAstroLink native Canon EOS driver (EDSDK)","0.2.10.32",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 }
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2*h){if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||!h->allocate||!h->deallocate)return nullptr;host=*h;return &api;}

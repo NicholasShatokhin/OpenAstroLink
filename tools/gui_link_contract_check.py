@@ -13,5 +13,5 @@ defined = set(re.findall(r'MainWindow::(\w+)\s*\(', c))
 missing = sorted(declared - defined)
 assert not missing, f'MainWindow methods declared but not defined: {missing}'
 assert 'void MainWindow::refreshFocuserStatus()' in c
-assert 'VERSION 0.2.10.30' in (root / 'CMakeLists.txt').read_text(encoding='utf-8')
+assert 'VERSION 0.2.10.35' in (root / 'CMakeLists.txt').read_text(encoding='utf-8')
 print(f'PASS: MainWindow link contract ({len(declared)} methods checked)')

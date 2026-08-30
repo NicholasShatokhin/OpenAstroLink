@@ -18,7 +18,7 @@ expect('src/core/mount_geometry.cpp','MountGeometryModel::skyFromAxes','axis-to-
 expect('src/backends/oal_native_devices.cpp','mount.gotoAxes','Native raw-axis GOTO is used')
 expect('src/backends/synscan_network_mount.cpp','geometry_.axesForSky','Direct Wi-Fi uses core mount geometry')
 expect('src/gui/main_window.cpp','Set current mechanical axes as Park','Set-current park UI exists')
-expect('src/gui/main_window.cpp','Restore default mechanical Park (90°, 0°)','Default 90/0 park UI exists')
+expect('src/gui/main_window.cpp','Clear mechanical Park calibration (disable Park)','Unsafe default 90/0 park replaced by explicit calibration clear')
 expect('src/gui/main_window.cpp','Mechanical axes: Axis1=','Mechanical axes visible in GUI')
 expect('src/core/application_controller.cpp','"geometryType",m.geometryType','Geometry present in state JSON')
 expect('src/oal/oal_server.cpp','"axesValid",s.axes.valid','Mechanical axes present in mount API')

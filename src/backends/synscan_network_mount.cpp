@@ -109,7 +109,20 @@ bool SynScanNetworkMount::gotoAxisDelta(int axis,double deltaDeg,QString*error){
     if(error)*error=QString("Axis %1 accepted the direct Wi-Fi GOTO command sequence but did not start moving; check controller mode/park state and native motion encoding").arg(axis);
     return false;
 }
-bool SynScanNetworkMount::slewTo(const EquatorialCoord&t,QString*error){if(parked_){if(error)*error="Direct Wi-Fi mount is parked in OpenAstroLink; unpark it first";return false;}qint32 p1=0,p2=0;bool r=false,g=false,i=false;if(!readAxis(1,p1,r,g,i,error)||!readAxis(2,p2,r,g,i,error))return false;const auto current=axesFromEncoder(p1,p2);MechanicalAxes target;if(!geometry_.axesForSky(t,current,target,QDateTime::currentDateTimeUtc(),error))return false;const double d1=wrap180(target.axis1Deg-current.axis1Deg),d2=wrap180(target.axis2Deg-current.axis2Deg);if(std::max(std::abs(d1),std::abs(d2))>safetyGotoLimitDeg_){if(error)*error=QString("Direct Wi-Fi native GOTO is HIL-limited to %1° mechanical-axis delta; requested dAxis1=%2° dAxis2=%3°").arg(safetyGotoLimitDeg_).arg(d1,0,'f',3).arg(d2,0,'f',3);return false;}trackingRequested_=false;if(!gotoAxisDelta(1,d1,error)){abortMotion(nullptr);return false;}if(!gotoAxisDelta(2,d2,error)){abortMotion(nullptr);return false;}return true;}
+bool SynScanNetworkMount::setManualRate(int axis,int direction,int rateLevel,QString*error){
+    direction=std::clamp(direction,-1,1);rateLevel=std::clamp(rateLevel,0,9);
+    if(direction==0||rateLevel==0)return stopAxis(axis,error);
+    const double cpr=axis==1?double(countsPerRev1_):double(countsPerRev2_);
+    if(cpr<=0||timerFreq_==0){if(error)*error="Direct Wi-Fi mount did not report timer/axis scale required for manual slew";return false;}
+    static const double mult[10]={0,1,8,16,32,64,128,400,600,800};
+    const double rateDegPerHour=mult[rateLevel]*kSiderealDegPerHour;
+    const quint32 period=quint32(std::clamp(std::round(double(timerFreq_)*360.0/(cpr*rateDegPerHour/3600.0)),6.0,double(0xFFFFFF)));
+    if(!stopAxis(axis,nullptr)||!waitStopped(axis,2500,error))return false;QByteArray r;auto send=[&](const std::string&cmd){return exchange(ba(cmd),r,1800,error);};
+    if(!send(oal::skywatcher_mc::setMotionMode(axis,false,rateLevel>=7,direction>0)))return false;
+    if(!send(oal::skywatcher_mc::setStepPeriod(axis,period)))return false;
+    return send(oal::skywatcher_mc::startMotion(axis));
+}
+bool SynScanNetworkMount::slewTo(const EquatorialCoord&t,QString*error){if(parked_){if(error)*error="Direct Wi-Fi mount is parked in OpenAstroLink; unpark it first";return false;}qint32 p1=0,p2=0;bool r=false,g=false,i=false;if(!readAxis(1,p1,r,g,i,error)||!readAxis(2,p2,r,g,i,error))return false;const auto current=axesFromEncoder(p1,p2);MechanicalAxes target;if(!geometry_.axesForSky(t,current,target,QDateTime::currentDateTimeUtc(),error))return false;const double d1=wrap180(target.axis1Deg-current.axis1Deg),d2=wrap180(target.axis2Deg-current.axis2Deg);trackingRequested_=false;if(!gotoAxisDelta(1,d1,error)){abortMotion(nullptr);return false;}if(!gotoAxisDelta(2,d2,error)){abortMotion(nullptr);return false;}return true;}
 bool SynScanNetworkMount::abortMotion(QString*error){QString e1,e2;const bool a=stopAxis(1,&e1),b=stopAxis(2,&e2);trackingRequested_=false;if(!a||!b){if(error)*error=!e1.isEmpty()?e1:e2;return false;}return true;}
 bool SynScanNetworkMount::syncTo(const EquatorialCoord&t,QString*error){qint32 p1=0,p2=0;bool r=false,g=false,i=false;if(!readAxis(1,p1,r,g,i,error)||!readAxis(2,p2,r,g,i,error))return false;return geometry_.sync(t,axesFromEncoder(p1,p2),QDateTime::currentDateTimeUtc(),error);}
 bool SynScanNetworkMount::setTracking(bool enabled,QString*error){if(!enabled){trackingRequested_=false;return stopAxis(1,error);}if(countsPerRev1_==0||timerFreq_==0){if(error)*error="Direct Wi-Fi mount did not report the timer/axis scale required for tracking";return false;}if(!stopAxis(1,nullptr)||!waitStopped(1,2500,error))return false;const double cpr=countsPerRev1_;const quint32 period=quint32(std::clamp(std::round(double(timerFreq_)*360.0/(cpr*kSiderealDegPerHour/3600.0)),6.0,double(0xFFFFFF)));QByteArray r;auto send=[&](const std::string&cmd){return exchange(ba(cmd),r,1800,error);}; // low-speed continuous slew mode: payload 10/11
@@ -119,4 +132,5 @@ bool SynScanNetworkMount::park(bool enabled,QString*error){
     qint32 p1=0,p2=0;bool r=false,g=false,i=false;if(!readAxis(1,p1,r,g,i,error)||!readAxis(2,p2,r,g,i,error))return false;const auto current=axesFromEncoder(p1,p2);const auto target=geometry_.parkAxes();const double d1=wrap180(target.axis1Deg-current.axis1Deg),d2=wrap180(target.axis2Deg-current.axis2Deg);trackingRequested_=false;if(!gotoAxisDelta(1,d1,error)){abortMotion(nullptr);return false;}if(!gotoAxisDelta(2,d2,error)){abortMotion(nullptr);return false;}parked_=true;return true;
 }
 bool SynScanNetworkMount::pulseGuide(GuideDirection,int,QString*error){if(error)*error="Direct SynScan/EQDrive Wi-Fi pulse guide is not enabled until native tracking direction is HIL-qualified";return false;}
+bool SynScanNetworkMount::manualSlew(int a1,int a2,int rate,QString*error){trackingRequested_=false;QString e;if(!setManualRate(1,a1,rate,&e)){if(error)*error=e;return false;}if(!setManualRate(2,a2,rate,&e)){stopAxis(1,nullptr);if(error)*error=e;return false;}return true;}
 }

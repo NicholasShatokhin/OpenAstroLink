@@ -1,4 +1,12 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.25
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.35
+
+
+## v0.2.10.35 — HIL follow-up
+
+- QHY native Live→Stop→Capture та FITS science spool підтверджені HIL.
+- Опційний preview-only debayer camera-neutral: QHY Auto читає SDK `CAM_COLOR`, ZWO Auto — ASI Bayer metadata, а явні CFA-патерни підтримують інші одноканальні Bayer-джерела.
+- Доступні autofocus preview та ручний focus jog; Scene AF peak selection посилено після денного HIL.
+- Mount target input синхронізує J2000/JNow/Az-Alt/Galactic, а J2000 лишається канонічним для GOTO/Sync.
 
 Позначки: ✅ реалізовано; 🟡 реалізовано/частково реалізовано, але потрібен HIL або production qualification; 🧪 experimental; ⏳ ще не реалізовано.
 
@@ -32,7 +40,7 @@
 
 | Driver | Стан | Примітка |
 |---|---|---|
-| QHY | 🟡 активний HIL | Discovery/connect/capture вже працювали; явний Refresh тепер hard-reload-ить неактивний QHY driver DLL/SDK після нульового scan. Потрібен HIL Windows hot-plug та повторних capture |
+| QHY | 🟡 активний HIL | QHY5III462C discovery/connect/single capture підтверджені; користувацькі кадри зберігаються у FITS. У v0.2.10.34 Finder Live View переведено на native QHYCCD continuous stream, а health-probe виконується лише в idle та вимагає три послідовні помилки перед disconnect. Наступний Windows HIL: Live→Stop→Capture і повторний reconnect |
 | Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
 | ZWO ASI | 🟡 | Native ASI SDK, multi-camera; HIL pending |
 | ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
@@ -71,7 +79,7 @@
 - Native EQDrive та direct SynScan/EQDrive Wi-Fi використовують `MountGeometryModel` у OAL Core; hardware driver відповідає за raw axes/motion.
 - GEM: UTC/longitude → local sidereal time → hour angle → pier branch → mechanical axes; один Sync визначає encoder offset/signs конкретної установки.
 - Mechanical Park default Axis1=90°, Axis2=0°, configurable; GUI може зберегти поточні mechanical axes як Park. Classic ASCOM зберігає Park semantics свого ASCOM-драйвера.
-- Automatic meridian flip за замовчуванням вимкнений; native/direct celestial GOTO лишається в supervised 15° mechanical-axis envelope до long-slew HIL.
+- Automatic meridian flip за замовчуванням вимкнений. Тимчасовий 15° test envelope для native/direct GOTO знято; довгі переходи використовують shortest-axis envelope і мають виконуватися під наглядом до повної HIL-кваліфікації pier/limits.
 - Alt-Az coordinate conversion уже є; production two-axis tracking/derotator control ще попереду.
 - Classic ASCOM operation slew логуватиме RA/DEC/pier/tracking під час руху.
 - Явний Refresh може hard-reload неактивний QHY OAL driver DLL/SDK після zero-device scan; periodic vendor polling вимкнений.

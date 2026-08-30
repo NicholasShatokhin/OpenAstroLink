@@ -47,7 +47,7 @@ ASTEP віддає механічні градуси осей, а не небе�
 4. після цього RA/DEC status/GOTO обчислюються від axis/sky anchor.
 
 До Sync `coordinateValid=false`. Перший HIL-реліз обмежує один native GOTO
-параметром `maxNativeGotoDeg` (default 15 deg). Ціль перетворюється в абсолютну
+параметром `maxNativeGotoDeg` (default 180 deg; фактично shortest-axis envelope). Ціль перетворюється в абсолютну
 ASTEP-команду `Goto <axis1> <axis2>`. Налаштування Direction/Reversed уже
 застосовує firmware EQDrive; OAL читає та показує їх, але не інвертує вдруге
 навмання.

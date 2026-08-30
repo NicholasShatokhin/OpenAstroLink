@@ -6,12 +6,59 @@
 #include <QDateTime>
 #include <QJsonArray>
 #include <QUrl>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <opencv2/core.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
 namespace oas {
+namespace {
+QByteArray fitsCard(const QString &key,const QString &value){
+    QByteArray c=(key.leftJustified(8,' ')+"= "+value).toLatin1();
+    c=c.left(80);if(c.size()<80)c.append(QByteArray(80-c.size(),' '));return c;
+}
+QByteArray fitsCommentCard(const QString &text){QByteArray c=text.toLatin1().left(80);if(c.size()<80)c.append(QByteArray(80-c.size(),' '));return c;}
+bool writeFitsScienceFrame(const cv::Mat &image,const QString &path,const CameraFrame &frame,QString *error){
+    if(image.empty()||(image.depth()!=CV_8U&&image.depth()!=CV_16U)||(image.channels()!=1&&image.channels()!=3)){
+        if(error)*error="FITS science writer supports 8/16-bit mono or RGB frames";return false;
+    }
+    QFile f(path);if(!f.open(QIODevice::WriteOnly)){if(error)*error="Could not create science frame: "+path;return false;}
+    QByteArray h;
+    h+=fitsCard("SIMPLE","                    T");
+    h+=fitsCard("BITPIX",image.depth()==CV_8U?"                    8":"                   16");
+    h+=fitsCard("NAXIS",image.channels()==1?"                    2":"                    3");
+    h+=fitsCard("NAXIS1",QString::number(image.cols).rightJustified(20,' '));
+    h+=fitsCard("NAXIS2",QString::number(image.rows).rightJustified(20,' '));
+    if(image.channels()==3)h+=fitsCard("NAXIS3","                    3");
+    if(image.depth()==CV_16U){h+=fitsCard("BSCALE","                    1");h+=fitsCard("BZERO","                32768");}
+    h+=fitsCard("DATE-OBS",QString("'%1'").arg(frame.capturedUtc.toUTC().toString("yyyy-MM-dd'T'HH:mm:ss.zzz")).leftJustified(20,' '));
+    h+=fitsCard("EXPTIME",QString::number(frame.exposureSec,'f',6).rightJustified(20,' '));
+    h+=fitsCard("GAIN",QString::number(frame.gain).rightJustified(20,' '));
+    h+=fitsCard("XBINNING",QString::number(frame.binX).rightJustified(20,' '));
+    h+=fitsCard("YBINNING",QString::number(frame.binY).rightJustified(20,' '));
+    h+=fitsCommentCard("END");
+    const int hp=(2880-(h.size()%2880))%2880;if(hp)h.append(QByteArray(hp,' '));
+    if(f.write(h)!=h.size()){if(error)*error="Could not write FITS header";return false;}
+    auto writeSample=[&](int y,int x,int ch)->bool{
+        if(image.depth()==CV_8U){const uchar *row=image.ptr<uchar>(y);char b=char(row[x*image.channels()+ch]);return f.write(&b,1)==1;}
+        const ushort *row=image.ptr<ushort>(y);const qint16 signedValue=qint16(int(row[x*image.channels()+ch])-32768);char b[2]={char((quint16(signedValue)>>8)&0xff),char(quint16(signedValue)&0xff)};return f.write(b,2)==2;
+    };
+    // FITS color cube is planar; mono is a single plane.
+    for(int ch=0;ch<image.channels();++ch)for(int y=0;y<image.rows;++y)for(int x=0;x<image.cols;++x)if(!writeSample(y,x,ch)){if(error)*error="Could not write FITS image data";return false;}
+    const qint64 dataBytes=qint64(image.rows)*image.cols*image.channels()*(image.depth()==CV_8U?1:2);
+    const int dp=int((2880-(dataBytes%2880))%2880);if(dp)f.write(QByteArray(dp,0));f.close();return true;
+}
+QString defaultSciencePath(const QString &driverId,const CameraFrame &frame){
+    QString vendor=driverId.section('.',1,1).toUpper();if(vendor.isEmpty())vendor="Camera";
+    QString root=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(root.isEmpty())root=QDir::homePath();
+    QDir dir(QDir(root).filePath("OpenAstroLink/"+vendor));dir.mkpath(".");
+    const QString stamp=frame.capturedUtc.toLocalTime().toString("yyyyMMdd_HHmmss_zzz");return dir.filePath(vendor+"_"+stamp+".fits");
+}
+}
 
 QString nativeBackendKey(const QString &driverId, const QString &deviceId) {
     return "native:" + driverId + "/" + QString::fromUtf8(QUrl::toPercentEncoding(deviceId));
@@ -62,6 +109,8 @@ bool NativeOalCamera::connectDevice(QString *error) {
     state_ = ConnectionState::Connecting;
     if (!invokeOk("device.connect", {}, nullptr, error)) { state_ = ConnectionState::Error; return false; }
     state_ = ConnectionState::Connected;
+    const auto sensor=capabilities(nullptr).value("camera").toObject().value("sensor").toObject();
+    sensorSizeCache_={sensor.value("widthPx").toInt(),sensor.value("heightPx").toInt()};
     return true;
 }
 void NativeOalCamera::disconnectDevice() {
@@ -70,79 +119,68 @@ void NativeOalCamera::disconnectDevice() {
     state_ = ConnectionState::Disconnected;
 }
 
-bool NativeOalCamera::capture(const ExposureRequest &r, CameraFrame &frame, QString *error) {
-    QJsonObject req{{"exposureSec", r.exposureSec}, {"gain", r.gain}, {"offset", r.offset},
-                    {"binX", r.binX}, {"binY", r.binY}, {"saveRaw", r.saveRaw}};
-    if (!r.savePath.isEmpty()) req["savePath"] = r.savePath;
-    if (r.roi.width > 0 && r.roi.height > 0)
-        req["roi"] = QJsonObject{{"x", r.roi.x}, {"y", r.roi.y},
-                                 {"width", r.roi.width}, {"height", r.roi.height}};
-    QJsonObject data;
-    if (!invokeOk("camera.capture", req, &data, error)) return false;
-    const quint64 token = data.value("frameToken").toVariant().toULongLong();
-    if (!token) { if (error) *error = "Native camera returned no frameToken"; return false; }
-    NativeDriverFrame native;
-    if (!loader_->takePublishedFrame(token, native, error)) return false;
-
-    const int w = int(native.width), h = int(native.height);
-    if (w <= 0 || h <= 0) { if (error) *error = "Native camera returned invalid frame dimensions"; return false; }
-    int cvType = -1;
-    switch (native.pixelFormat) {
-    case OAL_PIXEL_MONO8:
-    case OAL_PIXEL_BAYER8: cvType = CV_8UC1; break;
-    case OAL_PIXEL_MONO16:
-    case OAL_PIXEL_BAYER16: cvType = CV_16UC1; break;
-    case OAL_PIXEL_RGB8: cvType = CV_8UC3; break;
-    case OAL_PIXEL_RGB16: cvType = CV_16UC3; break;
-    default:
-        if (native.channels == 1 && native.bitsPerSample <= 8) cvType = CV_8UC1;
-        else if (native.channels == 1 && native.bitsPerSample <= 16) cvType = CV_16UC1;
-        else if (native.channels == 3 && native.bitsPerSample <= 8) cvType = CV_8UC3;
-        else if (native.channels == 3 && native.bitsPerSample <= 16) cvType = CV_16UC3;
-        break;
-    }
-    if (cvType < 0) { if (error) *error = "Unsupported native camera pixel format"; return false; }
-    const size_t elem = CV_ELEM_SIZE(cvType);
-    const size_t minStride = size_t(w) * elem;
-    const size_t stride = native.strideBytes ? size_t(native.strideBytes) : minStride;
-    if (stride < minStride || native.bytes.size() < qsizetype(stride * size_t(h))) {
-        if (error) *error = "Native camera frame buffer is shorter than declared geometry";
-        return false;
-    }
-    frame.image = cv::Mat(h, w, cvType, native.bytes.data(), stride).clone();
-    frame.id = native.frameId.isEmpty() ? QString("native-%1").arg(token) : native.frameId;
-    frame.capturedUtc = native.capturedUnixNs > 0
-        ? QDateTime::fromMSecsSinceEpoch(native.capturedUnixNs / 1000000, Qt::UTC)
-        : QDateTime::currentDateTimeUtc();
-    frame.exposureSec = native.exposureSec > 0.0 ? native.exposureSec : r.exposureSec;
-    frame.gain = int(native.gain);
-    // ABI v2 does not yet return explicit actual-bin metadata. For full-frame
-    // captures infer it from returned geometry so a driver that ignores a
-    // requested bin (for example a DSLR) cannot silently corrupt plate scale.
-    int actualBinX = 1;
-    int actualBinY = 1;
-    const int requestedBinX = std::max(1, r.binX);
-    const int requestedBinY = std::max(1, r.binY);
-    const QSize fullSensor = sensorSize();
-    if (r.roi.width <= 0 && r.roi.height <= 0 && fullSensor.width() > 0 && fullSensor.height() > 0) {
-        const int expectedW = std::max(1, fullSensor.width() / requestedBinX);
-        const int expectedH = std::max(1, fullSensor.height() / requestedBinY);
-        if (std::abs(w - expectedW) <= 1) actualBinX = requestedBinX;
-        if (std::abs(h - expectedH) <= 1) actualBinY = requestedBinY;
-    } else {
-        // ROI semantics are driver-defined in ABI v2; preserve the request
-        // until the ABI exposes actual frame binning explicitly.
-        actualBinX = requestedBinX;
-        actualBinY = requestedBinY;
-    }
-    frame.binX = actualBinX;
-    frame.binY = actualBinY;
-    frame.source = deviceId_;
-    frame.scienceFilePath = data.value("savedPath").toString();
-    if(frame.scienceFilePath.isEmpty()) frame.scienceFilePath = native.metadata.value("scienceFilePath").toString();
-    if(frame.scienceFilePath.isEmpty()) frame.scienceFilePath = native.metadata.value("originalPath").toString();
+namespace {
+bool decodeNativeCameraFrame(const std::shared_ptr<OalDriverPluginLoader> &loader,
+                             const QString &driverId,const QString &deviceId,
+                             const QJsonObject &data,const ExposureRequest &r,const QSize &sensorSize,
+                             CameraFrame &frame,bool allowScienceSave,QString *error){
+    const quint64 token=data.value("frameToken").toVariant().toULongLong();
+    if(!token){if(error)*error="Native camera returned no frameToken";return false;}
+    NativeDriverFrame native;if(!loader->takePublishedFrame(token,native,error))return false;
+    const int w=int(native.width),h=int(native.height);if(w<=0||h<=0){if(error)*error="Native camera returned invalid frame dimensions";return false;}
+    int cvType=-1;switch(native.pixelFormat){
+    case OAL_PIXEL_MONO8:case OAL_PIXEL_BAYER8:cvType=CV_8UC1;break;
+    case OAL_PIXEL_MONO16:case OAL_PIXEL_BAYER16:cvType=CV_16UC1;break;
+    case OAL_PIXEL_RGB8:cvType=CV_8UC3;break;
+    case OAL_PIXEL_RGB16:cvType=CV_16UC3;break;
+    default:if(native.channels==1&&native.bitsPerSample<=8)cvType=CV_8UC1;else if(native.channels==1&&native.bitsPerSample<=16)cvType=CV_16UC1;else if(native.channels==3&&native.bitsPerSample<=8)cvType=CV_8UC3;else if(native.channels==3&&native.bitsPerSample<=16)cvType=CV_16UC3;break;}
+    if(cvType<0){if(error)*error="Unsupported native camera pixel format";return false;}
+    const size_t elem=CV_ELEM_SIZE(cvType),minStride=size_t(w)*elem,stride=native.strideBytes?size_t(native.strideBytes):minStride;
+    if(stride<minStride||native.bytes.size()<qsizetype(stride*size_t(h))){if(error)*error="Native camera frame buffer is shorter than declared geometry";return false;}
+    frame.image=cv::Mat(h,w,cvType,native.bytes.data(),stride).clone();
+    frame.id=native.frameId.isEmpty()?QString("native-%1").arg(token):native.frameId;
+    frame.capturedUtc=native.capturedUnixNs>0?QDateTime::fromMSecsSinceEpoch(native.capturedUnixNs/1000000,Qt::UTC):QDateTime::currentDateTimeUtc();
+    frame.exposureSec=native.exposureSec>0.0?native.exposureSec:r.exposureSec;frame.gain=int(native.gain);
+    int actualBinX=1,actualBinY=1;const int requestedBinX=std::max(1,r.binX),requestedBinY=std::max(1,r.binY);
+    const int sensorW=sensorSize.width(),sensorH=sensorSize.height();
+    // Infer the bin actually delivered by the native driver from geometry. A
+    // requested bin that the hardware silently ignored cannot silently corrupt plate scale
+    // in downstream astrometry; the adaptive solver can then software-bin explicitly.
+    if(r.roi.width<=0&&r.roi.height<=0&&sensorW>0&&sensorH>0){const int expectedW=std::max(1,sensorW/requestedBinX),expectedH=std::max(1,sensorH/requestedBinY);if(std::abs(w-expectedW)<=1)actualBinX=requestedBinX;if(std::abs(h-expectedH)<=1)actualBinY=requestedBinY;}
+    else {actualBinX=requestedBinX;actualBinY=requestedBinY;}
+    frame.binX=actualBinX;frame.binY=actualBinY;frame.source=deviceId;
+    frame.bayerEncoded=(native.pixelFormat==OAL_PIXEL_BAYER8||native.pixelFormat==OAL_PIXEL_BAYER16)||native.metadata.value("rawSensor").toBool(false);
+    frame.bayerPattern=native.metadata.value("bayerPattern").toString().trimmed().toUpper();
+    // A rawSensor flag alone can also describe a monochrome sensor. Only
+    // advertise Bayer encoding when the pixel format says so or the driver
+    // publishes an explicit CFA pattern.
+    if(frame.bayerPattern.isEmpty()&&native.pixelFormat!=OAL_PIXEL_BAYER8&&native.pixelFormat!=OAL_PIXEL_BAYER16)frame.bayerEncoded=false;
+    frame.scienceFilePath=data.value("savedPath").toString();if(frame.scienceFilePath.isEmpty())frame.scienceFilePath=native.metadata.value("scienceFilePath").toString();if(frame.scienceFilePath.isEmpty())frame.scienceFilePath=native.metadata.value("originalPath").toString();
+    if(allowScienceSave&&r.saveRaw&&frame.scienceFilePath.isEmpty()){QString path=r.savePath;if(path.isEmpty())path=defaultSciencePath(driverId,frame);else if(QFileInfo(path).suffix().isEmpty()){QDir dir(path);dir.mkpath(".");path=dir.filePath(QFileInfo(defaultSciencePath(driverId,frame)).fileName());}if(!writeFitsScienceFrame(frame.image,path,frame,error))return false;frame.scienceFilePath=path;}
     return true;
 }
+}
+
+bool NativeOalCamera::capture(const ExposureRequest &r, CameraFrame &frame, QString *error) {
+    QJsonObject req{{"exposureSec",r.exposureSec},{"gain",r.gain},{"offset",r.offset},{"binX",r.binX},{"binY",r.binY},{"saveRaw",r.saveRaw}};
+    if(!r.savePath.isEmpty())req["savePath"]=r.savePath;if(r.roi.width>0&&r.roi.height>0)req["roi"]=QJsonObject{{"x",r.roi.x},{"y",r.roi.y},{"width",r.roi.width},{"height",r.roi.height}};
+    QJsonObject data;if(!invokeOk("camera.capture",req,&data,error))return false;
+    return decodeNativeCameraFrame(loader_,driverId_,deviceId_,data,r,sensorSizeCache_,frame,true,error);
+}
+
+bool NativeOalCamera::nativeLiveSupported() const {
+    return capabilities(nullptr).value("camera").toObject().value("streaming").toObject().value("supported").toBool(false);
+}
+bool NativeOalCamera::startNativeLive(const LiveViewRequest &r,QString *error){
+    QJsonObject req{{"exposureSec",r.exposureSec},{"gain",r.gain},{"binX",r.binX},{"binY",r.binY},{"targetFps",r.targetFps}};
+    if(!invokeOk("camera.liveStart",req,nullptr,error))return false;liveRequest_=r;return true;
+}
+bool NativeOalCamera::nextNativeLiveFrame(CameraFrame &frame,int timeoutMs,QString *error){
+    QJsonObject data;if(!invokeOk("camera.liveFrame",{{"timeoutMs",timeoutMs}},&data,error))return false;
+    ExposureRequest r;r.exposureSec=liveRequest_.exposureSec;r.gain=liveRequest_.gain;r.binX=liveRequest_.binX;r.binY=liveRequest_.binY;r.saveRaw=false;
+    return decodeNativeCameraFrame(loader_,driverId_,deviceId_,data,r,sensorSizeCache_,frame,false,error);
+}
+bool NativeOalCamera::stopNativeLive(QString *error){return invokeOk("camera.liveStop",{},nullptr,error);}
 
 bool NativeOalCamera::canAbortExposure() const {
     const auto c = capabilities(nullptr).value("camera").toObject().value("exposure").toObject();
@@ -152,8 +190,9 @@ bool NativeOalCamera::abortExposure(QString *error) {
     return invokeOk("camera.abortExposure", {}, nullptr, error);
 }
 QSize NativeOalCamera::sensorSize() const {
-    const auto sensor = capabilities(nullptr).value("camera").toObject().value("sensor").toObject();
-    return {sensor.value("widthPx").toInt(), sensor.value("heightPx").toInt()};
+    if(sensorSizeCache_.isValid())return sensorSizeCache_;
+    const auto sensor=capabilities(nullptr).value("camera").toObject().value("sensor").toObject();
+    return {sensor.value("widthPx").toInt(),sensor.value("heightPx").toInt()};
 }
 
 NativeOalMount::NativeOalMount(std::shared_ptr<OalDriverPluginLoader> l, const QJsonObject &d,
@@ -163,7 +202,7 @@ NativeOalMount::NativeOalMount(std::shared_ptr<OalDriverPluginLoader> l, const Q
     geometryAware_=mountCaps.value("rawAxes").toObject().value("supported").toBool(false);
 }
 bool NativeOalMount::connectDevice(QString *error) { state_=ConnectionState::Connecting;if(!invokeOk("device.connect",{},nullptr,error)){state_=ConnectionState::Error;return false;}state_=ConnectionState::Connected;return true; }
-void NativeOalMount::disconnectDevice(){if(state_==ConnectionState::Disconnected)return;invokeOk("device.disconnect",{},nullptr,nullptr);state_=ConnectionState::Disconnected;}
+void NativeOalMount::disconnectDevice(){if(state_==ConnectionState::Disconnected)return;invokeOk("mount.abort",{},nullptr,nullptr);invokeOk("device.disconnect",{},nullptr,nullptr);parking_=false;parked_=false;state_=ConnectionState::Disconnected;}
 bool NativeOalMount::rawAxisStatus(MechanicalAxes &axes,bool *slewing,QString *error) const {
     QJsonObject d;if(!invokeOk("mount.axisStatus",{},&d,error))return false;
     axes={d.value("axis1Deg").toDouble(),d.value("axis2Deg").toDouble(),true};
@@ -176,7 +215,11 @@ bool NativeOalMount::rawAxisGoto(const MechanicalAxes &axes,double limit,QString
 bool NativeOalMount::status(MountStatus &s, QString *error){
     if(geometryAware_){
         MechanicalAxes axes;bool moving=false;if(!rawAxisStatus(axes,&moving,error))return false;
-        s.connection=state_;s.axes=axes;s.geometryType=mountGeometryTypeName(geometry_.config().type);s.slewing=moving;s.parked=parked_;s.pierSide=geometry_.pierSide();
+        if(parking_&&!moving){
+            auto delta=[](double a,double b){double d=std::fmod(a-b,360.0);if(d>180)d-=360;if(d<-180)d+=360;return std::abs(d);};
+            parked_=delta(axes.axis1Deg,parkTarget_.axis1Deg)<=0.25&&delta(axes.axis2Deg,parkTarget_.axis2Deg)<=0.25;parking_=false;
+        }
+        s.connection=state_;s.axes=axes;s.geometryType=mountGeometryTypeName(geometry_.config().type);s.slewing=moving;s.parked=parked_||parking_;s.pierSide=geometry_.pierSide();
         EquatorialCoord sky;if(geometry_.skyFromAxes(axes,sky,QDateTime::currentDateTimeUtc(),nullptr)){s.coordinate=sky;s.coordinateValid=true;}else{s.coordinate={0,0,EquatorialFrame::J2000};s.coordinateValid=false;}
         // Tracking state is still owned by the driver. Query compatibility status
         // for this flag only; axis/sky coordinates come exclusively from Core geometry.
@@ -188,26 +231,42 @@ bool NativeOalMount::status(MountStatus &s, QString *error){
 bool NativeOalMount::slewTo(const EquatorialCoord&t,QString*e){
     if(!geometryAware_)return invokeOk("mount.slew",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);
     if(parked_){if(e)*e="Mount is parked; unpark before GOTO";return false;}
+    if(parking_){if(e)*e="Mount is currently parking; unpark or ABORT before GOTO";return false;}
     MechanicalAxes current,target;if(!rawAxisStatus(current,nullptr,e))return false;if(!geometry_.axesForSky(t,current,target,QDateTime::currentDateTimeUtc(),e))return false;
-    // Keep the existing supervised HIL safety envelope until the GEM geometry
-    // is qualified on long slews. Mechanical Park is a separate explicit path.
+    // Real HIL on 2026-08-29 exposed an unqualified installation-axis mapping:
+    // a long Stellarium GOTO could run physically away from the intended star.
+    // Restore a supervised qualification envelope until Axis 1/2 signs have
+    // been verified with small sky offsets. Mechanical Park uses its separately
+    // calibrated raw-axis target and is not governed by this sky-coordinate gate.
     return rawAxisGoto(target,15.0,e);
 }
-bool NativeOalMount::abortMotion(QString*e){return invokeOk("mount.abort",{},nullptr,e);}
+bool NativeOalMount::abortMotion(QString*e){const bool ok=invokeOk("mount.abort",{},nullptr,e);if(ok){parking_=false;parked_=false;}return ok;}
 bool NativeOalMount::syncTo(const EquatorialCoord&t,QString*e){
     if(!geometryAware_)return invokeOk("mount.sync",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);
     MechanicalAxes axes;if(!rawAxisStatus(axes,nullptr,e))return false;return geometry_.sync(t,axes,QDateTime::currentDateTimeUtc(),e);
 }
 bool NativeOalMount::setTracking(bool v,QString*e){
-    if(geometryAware_){const int direction=geometry_.trackingAxis1Direction();if(direction==0&&v){if(e)*e="This mount geometry requires two-axis tracking; raw native rate-vector tracking is not implemented yet";return false;}return invokeOk("mount.setTracking",{{"enabled",v},{"axis1Direction",direction}},nullptr,e);}
+    if(geometryAware_){if(v&&parking_){if(e)*e="Cannot enable tracking while a Park slew is active";return false;}if(v&&!geometry_.synced()){if(e)*e="Sync the mount on a known sky position before enabling tracking";return false;}const int direction=geometry_.trackingAxis1Direction();if(direction==0&&v){if(e)*e="This mount geometry requires two-axis tracking; raw native rate-vector tracking is not implemented yet";return false;}return invokeOk("mount.setTracking",{{"enabled",v},{"axis1Direction",direction}},nullptr,e);}
     return invokeOk("mount.setTracking",{{"enabled",v}},nullptr,e);
 }
 bool NativeOalMount::park(bool v,QString*e){
     if(!geometryAware_)return invokeOk("mount.park",{{"parked",v}},nullptr,e);
-    if(!v){parked_=false;return true;}
-    const auto target=geometry_.parkAxes();if(!rawAxisGoto(target,180.0,e))return false;parked_=true;return true;
+    if(!v){
+        // Unpark while a mechanical park GOTO is still running means STOP, not
+        // merely changing a logical checkbox. This is a safety path.
+        if(parking_&&!abortMotion(e))return false;
+        parking_=false;parked_=false;return true;
+    }
+    if(!geometry_.config().customPark){if(e)*e="Mechanical Park is not calibrated. Move the mount manually to a safe park position and use 'Set current mechanical axes as Park' first.";return false;}
+    // Never enter a park slew while sidereal tracking remains active.
+    if(!invokeOk("mount.setTracking",{{"enabled",false},{"axis1Direction",0}},nullptr,e))return false;
+    const auto target=geometry_.parkAxes();if(!rawAxisGoto(target,180.0,e))return false;parkTarget_=target;parking_=true;parked_=false;return true;
 }
 bool NativeOalMount::pulseGuide(GuideDirection dir,int ms,QString*e){QString d;switch(dir){case GuideDirection::North:d="north";break;case GuideDirection::South:d="south";break;case GuideDirection::East:d="east";break;case GuideDirection::West:d="west";break;}return invokeOk("mount.pulseGuide",{{"direction",d},{"durationMs",ms}},nullptr,e);}
+bool NativeOalMount::manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString*e){
+    parking_=false;parked_=false;
+    return invokeOk("mount.manualSlew",{{"axis1Direction",std::clamp(axis1Direction,-1,1)},{"axis2Direction",std::clamp(axis2Direction,-1,1)},{"rateLevel",std::clamp(rateLevel,0,9)}},nullptr,e);
+}
 
 NativeOalFocuser::NativeOalFocuser(std::shared_ptr<OalDriverPluginLoader> l, const QJsonObject &d)
     : NativeOalDeviceBase(std::move(l), d) {}

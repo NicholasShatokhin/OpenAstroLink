@@ -50,7 +50,7 @@ ASTEP exposes mechanical axis degrees, not celestial RA/DEC. OpenAstroLink uses
 4. RA/DEC status and GOTO are derived relative to that axis/sky anchor.
 
 `coordinateValid=false` until Sync. The first HIL release limits each native GOTO
-to `maxNativeGotoDeg` (15 deg by default). It converts the requested sky delta to
+to `maxNativeGotoDeg` (180 deg by default; effectively the shortest-axis envelope). It converts the requested sky delta to
 an **absolute ASTEP `Goto <axis1> <axis2>`** target. EQDrive firmware already owns
 its `Direction/Reversed` motor configuration; OpenAstroLink reports those signs
 as telemetry and does not blindly apply them a second time.

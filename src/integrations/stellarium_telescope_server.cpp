@@ -1,5 +1,6 @@
 #include "integrations/stellarium_telescope_server.h"
 #include "core/observatory_controller.h"
+#include "core/equatorial_frames.h"
 
 #include <QDateTime>
 #include <QDataStream>
@@ -76,7 +77,8 @@ void StellariumTelescopeServer::acceptConnections() {
             buffers_.remove(socket);
             socket->deleteLater();
         });
-        emit logMessage(QString("Stellarium connected from %1").arg(socket->peerAddress().toString()));
+        emit logMessage(QString("Stellarium connected from %1; live mount position stream active").arg(socket->peerAddress().toString()));
+        QTimer::singleShot(0,this,&StellariumTelescopeServer::broadcastPosition);
     }
 }
 
@@ -114,13 +116,14 @@ void StellariumTelescopeServer::processBuffer(QTcpSocket *socket) {
 }
 
 QByteArray StellariumTelescopeServer::makePositionPacket(const MountStatus &status) {
+    const auto j2000=convertEquatorialFrame(status.coordinate,EquatorialFrame::J2000);
     QByteArray packet;
     QDataStream out(&packet, QIODevice::WriteOnly);
     out.setByteOrder(QDataStream::LittleEndian);
     const quint64 micros = quint64(QDateTime::currentMSecsSinceEpoch()) * 1000ULL;
     const qint32 protocolStatus = status.slewing ? 1 : 0;
     out << quint16(kPositionPacketSize) << quint16(kMessageTypePositionOrGoto)
-        << micros << encodeRa(status.coordinate.raDeg) << encodeDec(status.coordinate.decDeg)
+        << micros << encodeRa(j2000.raDeg) << encodeDec(j2000.decDeg)
         << protocolStatus;
     return packet;
 }

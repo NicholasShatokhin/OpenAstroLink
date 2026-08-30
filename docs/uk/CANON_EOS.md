@@ -59,3 +59,7 @@ CANON_EDSDK_RUNTIME_DIR
 5. Скасуй одну довгу експозицію та перевір, що затвор одразу відпустився.
 6. Зроби серію з 20 коротких кадрів для кваліфікації стабільності transfer/event pipeline.
 
+
+## Hot-remove / power-off
+
+The EDSDK backend registers the per-camera state-event handler. `kEdsStateEvent_Shutdown` immediately marks the body disconnected, wakes any pending exposure, emits `device.disconnected`, and preserves the persisted binding so a later camera-added hot-plug can reconnect automatically.

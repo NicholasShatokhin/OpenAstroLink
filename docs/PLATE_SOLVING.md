@@ -106,6 +106,6 @@ openastrolink-node.exe --astap-executable "C:\\Program Files\\astap\\astap.exe" 
 The GUI exposes a dedicated **Adaptive base exposure** (default 1.5 s), so a long normal Capture exposure cannot accidentally turn the adaptive solver back into a 10–15 s trailed-star exposure.
 
 
-### Adaptive DSLR memory / exposure behavior (v0.2.10.30)
+### Adaptive DSLR memory / exposure behavior (v0.2.10.32)
 
 The requested adaptive bin is an **effective solver bin**. If a camera ignores hardware binning, the node downsamples each operational frame immediately before retaining it for adaptive stacking. This prevents multiple full-resolution DSLR RGB previews from accumulating in memory. Adaptive capture also has a bounded wall-clock budget and chooses the next short exposure from background/p99/saturation/star-count quality metrics; it does not alter gain/ISO automatically.

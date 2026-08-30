@@ -330,7 +330,7 @@ void stop(void *) {
 const char *manifest(void *) {
     return json(QJsonObject{{"driverId", "oal.gemini"},
                             {"name", "OpenAstroLink native Gemini EAF driver"},
-                            {"version", "0.2.10.25"},
+                            {"version", "0.2.10.32"},
                             {"abiVersion", 2},
                             {"threadModel", "per-device-serial"},
                             {"protocol", "MyFocuserPro2 serial"},
@@ -373,13 +373,21 @@ const char *capabilities(void *, const char *deviceId) {
 }
 
 const char *health(void *, const char *deviceId) {
-    const auto device = getDevice(QString::fromUtf8(deviceId ? deviceId : ""));
-    if (!device)
-        return json(QJsonObject{{"state", "missing"}, {"connected", false}});
-    return json(QJsonObject{{"state", device->connected ? "ok" : "disconnected"},
-                            {"connected", device->connected}, {"port", device->port},
-                            {"firmware", device->firmware},
-                            {"serialSessionOpen", device->session && device->session->isOpen()}});
+    const auto original = getDevice(QString::fromUtf8(deviceId ? deviceId : ""));
+    if (!original) return json(QJsonObject{{"state", "missing"}, {"connected", false}});
+    Device device=*original;
+    if(!device.connected||!device.session||!device.session->isOpen())
+        return json(QJsonObject{{"state","disconnected"},{"connected",false},{"port",device.port}});
+    // A position read is a non-moving liveness probe. The loader serializes it
+    // with normal focuser operations, so unplugging USB becomes an actual
+    // device.disconnected event instead of a stale GUI connection.
+    const auto position=queryInt(device,QByteArray::fromStdString(oal::gemini::positionCommand()),'P');
+    if(!position){
+        if(device.session)device.session->close();device.session.reset();device.connected=false;updateDevice(device);
+        emitEvent(device,"device.disconnected",QJsonObject{{"reason","Gemini health probe failed"}});
+        return json(QJsonObject{{"state","disconnected"},{"connected",false},{"port",device.port},{"reason","health-probe-failed"}});
+    }
+    return json(QJsonObject{{"state","ok"},{"connected",true},{"port",device.port},{"firmware",device.firmware},{"position",*position},{"serialSessionOpen",true}});
 }
 
 const char *invoke(void *, const char *deviceId, const char *method,

@@ -127,3 +127,7 @@ Recommended EOS 550D HIL sequence:
 5. Cancel one long exposure and verify the shutter is released immediately.
 6. Run a 20-frame short-exposure sequence to qualify repeated transfer/event stability.
 
+
+## Hot-remove / power-off
+
+The EDSDK backend registers the per-camera state-event handler. `kEdsStateEvent_Shutdown` immediately marks the body disconnected, wakes any pending exposure, emits `device.disconnected`, and preserves the persisted binding so a later camera-added hot-plug can reconnect automatically.

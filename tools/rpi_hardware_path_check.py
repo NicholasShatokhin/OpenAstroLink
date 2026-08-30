@@ -12,7 +12,7 @@ def require(path,*needles):
 require(Path('CMakeLists.txt'),'VERSION 0.2.10','oal_driver_qhy','oal_driver_canon','oal_driver_gemini','oal_driver_skywatcher','OAL_DRIVER_BUILD_DIR')
 require(Path('src/algorithms/astap_solver.cpp'),'OAL_ASTAP_EXECUTABLE','OAL_ASTAP_DATABASE','"-fov"','"-spd"','PLTSOLVD','CRVAL1','CRVAL2')
 require(Path('src/backends/indi_devices.cpp'),'EQUATORIAL_EOD_COORD','TELESCOPE_ABORT_MOTION','ABS_FOCUS_POSITION','FOCUS_ABORT_MOTION','short-lived client')
-require(Path('drivers/qhy/oal_driver_qhy.cpp'),'InitQHYCCDResource','SetQHYCCDStreamMode(c->handle,0)','CONTROL_TRANSFERBIT','CancelQHYCCDExposingAndReadout','GetQHYCCDSingleFrame','publishFrame')
+require(Path('drivers/qhy/oal_driver_qhy.cpp'),'InitQHYCCDResource','SetQHYCCDStreamMode(c.handle,streamMode)','openCameraMode(*c,0','CancelQHYCCDExposingAndReadout','GetQHYCCDSingleFrame','BeginQHYCCDLive','GetQHYCCDLiveFrame','StopQHYCCDLive','publishFrame')
 require(Path('drivers/gemini/oal_driver_gemini.cpp'),'oal.gemini','MyFocuserPro2','OAL_GEMINI_PORT','focuser.moveAbsolute')
 require(Path('drivers/skywatcher/oal_driver_skywatcher.cpp'),'oal.skywatcher','SynScan Serial Communication Protocol 3.3','OAL_SKYWATCHER_PORT','mount.slew')
 require(Path('src/tools/hardware_probe.cpp'),'Native OAL:','Native QHY: OK','Native Canon EOS: OK','Native Gemini EAF:','Native Sky-Watcher:','INDI compatibility:','nativeBackendKey')

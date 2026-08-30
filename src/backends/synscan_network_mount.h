@@ -29,6 +29,7 @@ public:
     bool setTracking(bool enabled,QString *error=nullptr) override;
     bool park(bool enabled,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
+    bool manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
     void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; }
 private:
     bool resolveEndpoint(QHostAddress &host,quint16 &port,QString *error);
@@ -39,6 +40,7 @@ private:
     bool stopAxis(int axis,QString *error=nullptr);
     bool waitStopped(int axis,int timeoutMs,QString *error=nullptr);
     bool gotoAxisDelta(int axis,double deltaDeg,QString *error=nullptr);
+    bool setManualRate(int axis,int direction,int rateLevel,QString *error=nullptr);
     double axisDeltaDeg(int axis,qint32 from,qint32 to) const;
     MechanicalAxes axesFromEncoder(qint32 p1,qint32 p2) const;
 
@@ -53,6 +55,5 @@ private:
     MountGeometryModel geometry_{};
     bool trackingRequested_{false};
     bool parked_{false};
-    double safetyGotoLimitDeg_{15.0};
 };
 }

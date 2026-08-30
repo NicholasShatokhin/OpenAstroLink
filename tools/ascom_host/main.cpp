@@ -12,6 +12,7 @@
 #endif
 
 #include <cstdio>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <utility>
@@ -162,6 +163,21 @@ public:
     QJsonObject abort(){return method0(L"AbortSlew","ABORT_FAILED");}
     QJsonObject park(bool parked){return method0(parked?L"Park":L"Unpark",parked?"PARK_FAILED":"UNPARK_FAILED");}
     QJsonObject pulseGuide(int direction,int ms){return method2(L"PulseGuide",vInt(direction),vInt(ms),"PULSE_GUIDE_FAILED");}
+    QJsonObject manualSlew(int axis1Direction,int axis2Direction,int rateLevel){
+        if(!telescope_.valid())return notConnected();
+        const int level=std::clamp(rateLevel,0,9);
+        // Hand-controller-style levels expressed as sidereal multiples.  ASCOM
+        // MoveAxis uses degrees/second; drivers that expose a narrower range
+        // return their normal COM error to the caller.
+        static const double mult[10]={0,1,8,16,32,64,128,400,600,800};
+        const double rate=mult[level]*(360.0/86164.0905);
+        QString e;
+        if(!telescope_.call(L"MoveAxis",{vInt(0),vDouble(double(std::clamp(axis1Direction,-1,1))*rate)},nullptr,&e))return errorJson("MOVE_AXIS_FAILED",e);
+        if(!telescope_.call(L"MoveAxis",{vInt(1),vDouble(double(std::clamp(axis2Direction,-1,1))*rate)},nullptr,&e)){
+            QString ignored;telescope_.call(L"MoveAxis",{vInt(0),vDouble(0.0)},nullptr,&ignored);return errorJson("MOVE_AXIS_FAILED",e);
+        }
+        return ok({{"rateLevel",level},{"rateDegPerSec",rate}});
+    }
     QJsonObject destinationPierSide(double ra,double dec){if(!telescope_.valid())return notConnected();QString e;AutoVariant out;if(!telescope_.call(L"DestinationSideOfPier",{vDouble(ra),vDouble(dec)},&out.value,&e))return errorJson("DESTINATION_PIER_SIDE_FAILED",e);return ok({{"sideOfPier",asInt(out.value,-1)}});}
 private:
     QJsonObject notConnected(){return errorJson("NOT_CONNECTED","ASCOM telescope is not connected");}
@@ -204,6 +220,7 @@ int main(int argc,char **argv){
             else if(cmd=="tracking")r=s.tracking(q.value("enabled").toBool());
             else if(cmd=="park")r=s.park(q.value("parked").toBool());
             else if(cmd=="pulseGuide")r=s.pulseGuide(q.value("direction").toInt(),q.value("durationMs").toInt());
+            else if(cmd=="manualSlew")r=s.manualSlew(q.value("axis1Direction").toInt(),q.value("axis2Direction").toInt(),q.value("rateLevel").toInt());
             else if(cmd=="destinationPierSide")r=s.destinationPierSide(q.value("raHours").toDouble(),q.value("decDeg").toDouble());
             else if(cmd=="quit"){r=ok();r["quit"]=true;}
             else r=errorJson("UNKNOWN_COMMAND","Unknown command: "+cmd);

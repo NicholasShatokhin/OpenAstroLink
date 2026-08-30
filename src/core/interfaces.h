@@ -40,6 +40,13 @@ public:
     virtual bool setTracking(bool enabled, QString *error = nullptr) = 0;
     virtual bool park(bool enabled, QString *error = nullptr) = 0;
     virtual bool pulseGuide(GuideDirection direction, int durationMs, QString *error = nullptr) = 0;
+    // Optional ASCOM-style two-axis manual slew. axis directions are -1/0/+1
+    // and rateLevel is a backend-normalized hand-controller level 1..9.
+    virtual bool manualSlew(int axis1Direction, int axis2Direction, int rateLevel, QString *error = nullptr) {
+        Q_UNUSED(axis1Direction); Q_UNUSED(axis2Direction); Q_UNUSED(rateLevel);
+        if (error) *error = "Manual two-axis slew is not supported by this mount backend";
+        return false;
+    }
     virtual void configureGeometry(const MountGeometryConfig &, const ObserverLocation &) {}
     // Optional predictive pier-side query. Classic ASCOM drivers can expose
     // DestinationSideOfPier; other backends may leave this unknown.

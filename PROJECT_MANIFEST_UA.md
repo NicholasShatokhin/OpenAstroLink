@@ -1,4 +1,4 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.30
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.35.1 hotfix package
 
 Канонічна документація — англійська. `PROJECT_MANIFEST_UA.md` є українським дзеркалом.
 
@@ -7,7 +7,8 @@
 - Hardware diagnostics: `oal-hardware-probe`
 - Core: `oas_core`
 - Protocol/native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.30-adaptive-histogram-stability`
+- Package: `0.2.10.35.1-zwo-msvc-hotfix`
+- Core version: `0.2.10.35-focus-debayer-coordinates`
 - C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -15,7 +16,40 @@
 - Qt 6.4+, OpenCV 4
 - Native driver ABI: C ABI v2
 
-## v0.2.10.30 — стабільність adaptive solver / гістограма
+## v0.2.10.35 — focus preview, optional debayer, synchronized coordinates
+
+- Operational autofocus preview у головній панелі та ручний jog фокусера.
+- Scene autofocus із стабільнішою метрикою/вибором піку.
+- Preview-only optional debayer: Auto CFA metadata + ручні RGGB/BGGR/GRBG/GBRG; QHY `CAM_COLOR`, ZWO `BayerPattern`; science RAW/FITS не змінюються.
+- Синхронні J2000/JNow/Az-Alt/Galactic target fields та Polaris preset.
+- Saturation є quality warning, а не camera/transport error.
+
+## v0.2.10.34 — стабільність QHY Live View та health
+
+- Native QHY continuous SDK streaming для Live/Finder.
+- Автоматичне повернення QHY у single-frame mode після завершення Live View.
+- Health polling не запускається для зайнятих operation-ресурсів; QHY використовує три послідовні idle-probe помилки замість `GetQHYCCDChipInfo`.
+- Кешування геометрії сенсора native-камери без зайвих post-readout capability calls.
+- Безпечніші денні defaults та діагностика пересвіченого/темного кадру.
+
+## v0.2.10.33 — Live/Finder та scene autofocus
+
+- Безперервний Live View як node-side operation з camera lock і доставкою кадрів remote GUI.
+- Вкладка Live / Finder: auto-stretch, crosshair, пошук яскравої області та wizard юстування шукача.
+- Scene autofocus з окремими exposure/gain; star autofocus відхиляє поле без достатньої кількості зір.
+- RAM-cache preview для remote live-frame fetch.
+- Початкова структура `site/` для `openastro.link` (англійська канонічна + українське дзеркало).
+- Псевдо-Live View через серійні Canon still-capture заблокований до реалізації EDSDK EVF.
+
+## v0.2.10.32 — safety-фікси hardware HIL
+
+- Фонові liveness-probe та очищення stale connected-state при фізичному від’єднанні QHY, Gemini й EQDrive.
+- Core FITS science spool для користувацьких capture, якщо native camera не повертає шлях до оригіналу (QHY).
+- Instant ABORT EQDrive з перевіркою фактичної зупинки; explicit disconnect спочатку зупиняє рух.
+- Mechanical Park вимагає явно відкалібровану поточну raw-axis позицію; unpark під час паркування викликає фізичний abort.
+- Безпечніший Sync UX, Sync з plate solve, кнопки реверсу mapping осей і тимчасовий 15° qualification envelope для sky-GOTO.
+
+## v0.2.10.32 — стабільність adaptive solver / гістограма
 
 - Програмний fallback binning для solver-кадрів, якщо апаратний binning відсутній.
 - Обмежена за часом capture-фаза adaptive solve та пауза між Canon-кадрами.
@@ -159,3 +193,12 @@ Handoff: `docs/NEW_CHAT_HANDOFF.md` і `docs/uk/NEW_CHAT_HANDOFF.md`.
 
 ### v0.2.10.29 — виправлення capture після hot-plug
 Hard-recovery Canon повинен ініціалізувати EDSDK на довгоживучому Qt event-loop потоці застосунку. Не переносити Canon `restartDriver()` назад у короткоживучий native-discovery worker: у такому випадку enumeration і команди працюють, але після hot-plug губляться EOS object-transfer callback-и.
+
+## v0.2.10.32 — фіналізація hardware control
+
+- Canon EDSDK hot-remove: per-camera `kEdsStateEvent_Shutdown`, негайний `DEVICE_DISCONNECTED`, пробудження/скасування pending exposure, видалення активного native binding у controller зі збереженням auto-connect для наступного hot-add.
+- Native long GOTO: тимчасовий HIL-envelope 15° знято. Raw/native GOTO використовує shortest-axis envelope до 180°; automatic meridian flip лишається вимкненим, а перші довгі переходи треба HIL-тестувати під наглядом.
+- Manual mount control: двовісний OAL/REST/remote API зі швидкостями hand-controller 1..9; у GUI press-and-hold 3×3 pad; реалізація для native EQDrive, native SynScan, direct SynScan/EQDrive Wi-Fi та Classic ASCOM MoveAxis.
+- Stellarium: immediate position packet при підключенні клієнта та live J2000 position stream кожні 500 мс. Raw EQDrive потребує одного Sync до появи валідних sky coordinates.
+
+- Remote capture transport зберігає `saveRaw` / `savePath`, тому QHY FITS science spool працює і через remote GUI, а не лише in-process.

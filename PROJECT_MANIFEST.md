@@ -1,4 +1,4 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.30
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.35.1 hotfix package
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
 
@@ -7,7 +7,8 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Hardware diagnostics: `oal-hardware-probe`
 - Core library: `oas_core`
 - Protocol / native driver framework: `OpenAstroLink (OAL)`
-- Version: `0.2.10.30-adaptive-histogram-stability`
+- Package: `0.2.10.35.1-zwo-msvc-hotfix`
+- Core version: `0.2.10.35-focus-debayer-coordinates`
 - Language: C++20
 - Minimum CMake: 3.20
 - Preset schema: v2
@@ -19,7 +20,41 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 - Async execution: Qt Concurrent + `OperationManager`
 - Native driver ABI: C ABI v2
 
-## v0.2.10.30 adaptive solver stability / histogram
+## v0.2.10.35 focus preview, optional debayer, synchronized coordinates
+
+- Operational autofocus preview in the main camera pane and manual focuser jog controls.
+- More stable Scene autofocus metric and coarse/fine peak selection.
+- Preview-only optional debayer with Auto CFA metadata plus explicit RGGB/BGGR/GRBG/GBRG; QHY uses `CAM_COLOR`, ZWO uses `BayerPattern`; science RAW/FITS is untouched.
+- Synchronized J2000/JNow/Az-Alt/Galactic target fields and a Polaris preset.
+- Saturation is an image-quality warning, never a camera/transport error.
+
+## v0.2.10.34 QHY live-stream and health stability
+
+- Native QHY continuous SDK streaming transport for Live/Finder.
+- Automatic restore to QHY single-frame mode when Live View ends.
+- Operation-aware native health scheduling; QHY idle health uses a three-strike probe instead of `GetQHYCCDChipInfo`.
+- Cached native camera sensor geometry to avoid post-readout vendor capability calls.
+- Daylight-safe Live/Finder defaults and saturated/dark-frame diagnostics.
+- Remote capture transport preserves `saveRaw` / `savePath`, so QHY FITS science spooling works through the remote GUI as well as in-process.
+
+## v0.2.10.33 live/finder and scene autofocus
+
+- Continuous node-side Live View operation with camera resource locking and remote frame delivery.
+- Live / Finder GUI with auto-stretch, crosshair, bright-region locator and finder-alignment wizard.
+- Scene autofocus with configurable exposure/gain; star autofocus rejects fields without enough stars.
+- Preview cache for remote live-frame fetches.
+- Static `site/` foundation for `openastro.link` (English canonical + Ukrainian mirror).
+- Canon repeated-still Live View is blocked until EDSDK EVF is implemented.
+
+## v0.2.10.32 hardware HIL safety corrections
+
+- Background liveness probes + hot-remove state cleanup for active QHY, Gemini and EQDrive devices.
+- Core FITS science spool for user captures when a native camera does not provide an original file path (QHY).
+- EQDrive instant ABORT with stop verification; explicit disconnect stops motion first.
+- Mechanical Park requires an explicitly calibrated current-axis target; unpark during parking aborts physical motion.
+- Safer Sync UX, plate-solve Sync helper, axis mapping reversal controls, and temporary 15° sky-GOTO qualification envelope.
+
+## v0.2.10.32 adaptive solver stability / histogram
 
 - Software fallback binning for solver frames when hardware binning is unavailable.
 - Bounded adaptive capture phase and Canon inter-frame settling.
@@ -174,3 +209,10 @@ New-chat handoff: `docs/NEW_CHAT_HANDOFF.md` and `docs/uk/NEW_CHAT_HANDOFF.md`.
 
 ### v0.2.10.29 hot-plug capture fix
 Canon hard-recovery must initialize EDSDK on the long-lived application Qt event-loop thread. Do not move the Canon `restartDriver()` call back into the transient native-discovery worker: doing so allows enumeration and commands but loses EOS object-transfer callbacks after hot-plug.
+
+## v0.2.10.32 hardware-control finish
+
+- Canon EDSDK hot-remove: per-camera `kEdsStateEvent_Shutdown`, immediate `DEVICE_DISCONNECTED`, pending exposure wake/cancel, controller-side removal of the active native binding while preserving saved auto-connect for the next hot-add.
+- Native long GOTO: removed the temporary 15-degree HIL envelope. Raw/native GOTO uses a 180-degree shortest-axis envelope; automatic meridian flip remains disabled and long slews remain supervised HIL work.
+- Manual mount control: OAL/REST/remote-controller two-axis manual-slew contract with hand-controller rate levels 1..9; GUI press-and-hold 3x3 pad; native EQDrive, native SynScan, direct SynScan/EQDrive Wi-Fi and Classic ASCOM MoveAxis implementations.
+- Stellarium: immediate position packet on client connection plus 500 ms live J2000 position stream. Raw EQDrive requires one Sync before sky coordinates are valid.

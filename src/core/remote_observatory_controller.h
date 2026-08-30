@@ -43,6 +43,7 @@ public:
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
     QString startGuideCapture(const ExposureRequest &request,QString *error=nullptr) override;
+    QString startLiveView(const LiveViewRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     QString startAdaptiveSolve(const AdaptiveSolveRequest &request,QString *error=nullptr) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
@@ -63,6 +64,7 @@ public:
     bool setMountTracking(bool enabled,QString *error=nullptr) override;
     bool parkMount(bool parked,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
+    bool manualMountSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
 
     GuidingStatus startGuiding() override;
     GuidingStatus stopGuiding() override;

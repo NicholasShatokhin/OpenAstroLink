@@ -34,6 +34,6 @@ Axis 2 = 0 deg
 
 ## Безпека
 
-Для celestial GOTO native EQDrive та direct Wi-Fi поки зберігають supervised limit 15° по механічній осі. Це навмисно, доки не кваліфіковані довгі GEM-переходи, pier-side та limits. Park є окремою явно запущеною механічною операцією й може переміщуватися далі.
+Для celestial GOTO native EQDrive та direct Wi-Fi тимчасовий HIL-limit 15° знято. Використовується найкоротший шлях механічної осі (до 180°). Automatic meridian flip все ще вимкнений, тому довгі переходи треба виконувати під наглядом до повної HIL-кваліфікації pier-side та фізичних limits.
 
 Перетворення координат Alt-Az уже є, але production two-axis sidereal tracking та керування field derotator ще залишаються наступними задачами. Fork-equatorial та equatorial-platform використовують екваторіальний hour-angle foundation без GEM pier-flip геометрії.

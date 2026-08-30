@@ -47,6 +47,7 @@ bool AscomClassicMount::syncTo(const EquatorialCoord&t,QString*e){const auto n=t
 bool AscomClassicMount::setTracking(bool v,QString*e){return request({{"cmd","tracking"},{"enabled",v}},nullptr,e);}
 bool AscomClassicMount::park(bool v,QString*e){return request({{"cmd","park"},{"parked",v}},nullptr,e,30000);}
 bool AscomClassicMount::pulseGuide(GuideDirection dir,int ms,QString*e){int d=0;switch(dir){case GuideDirection::North:d=0;break;case GuideDirection::South:d=1;break;case GuideDirection::East:d=2;break;case GuideDirection::West:d=3;break;}return request({{"cmd","pulseGuide"},{"direction",d},{"durationMs",ms}},nullptr,e,std::max(5000,ms+3000));}
+bool AscomClassicMount::manualSlew(int a1,int a2,int rate,QString*e){return request({{"cmd","manualSlew"},{"axis1Direction",std::clamp(a1,-1,1)},{"axis2Direction",std::clamp(a2,-1,1)},{"rateLevel",std::clamp(rate,0,9)}},nullptr,e,5000);}
 QString AscomClassicMount::destinationPierSide(const EquatorialCoord&t,QString*e){const auto n=toAscomFrame(t);QJsonObject d;if(!request({{"cmd","destinationPierSide"},{"raHours",n.raDeg/15.0},{"decDeg",n.decDeg}},&d,e,5000))return{};const int side=d.value("sideOfPier").toInt(-1);return side==0?"east":side==1?"west":"unknown";}
 bool AscomClassicMount::chooseTelescope(const QString&current,QString&selected,QString*error){
 #ifndef Q_OS_WIN

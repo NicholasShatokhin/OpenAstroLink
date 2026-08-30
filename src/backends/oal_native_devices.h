@@ -48,6 +48,16 @@ public:
     bool canAbortExposure() const override;
     bool abortExposure(QString *error=nullptr) override;
     QSize sensorSize() const override;
+    // Native vendor streaming transport used by Live/Finder when the driver
+    // exposes camera.streaming.supported. This avoids emulating video with
+    // repeated still exposures on cameras such as QHY.
+    bool nativeLiveSupported() const;
+    bool startNativeLive(const LiveViewRequest &request, QString *error=nullptr);
+    bool nextNativeLiveFrame(CameraFrame &frame, int timeoutMs, QString *error=nullptr);
+    bool stopNativeLive(QString *error=nullptr);
+private:
+    LiveViewRequest liveRequest_{};
+    QSize sensorSizeCache_{};
 };
 
 class NativeOalMount final : public IMount, private NativeOalDeviceBase {
@@ -69,13 +79,16 @@ public:
     bool setTracking(bool, QString *error=nullptr) override;
     bool park(bool, QString *error=nullptr) override;
     bool pulseGuide(GuideDirection, int durationMs, QString *error=nullptr) override;
-    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; }
+    bool manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
+    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; parking_=false; }
 private:
     bool rawAxisStatus(MechanicalAxes &axes, bool *slewing=nullptr, QString *error=nullptr) const;
     bool rawAxisGoto(const MechanicalAxes &axes, double maxAxisDeltaDeg, QString *error=nullptr);
     bool geometryAware_{false};
     MountGeometryModel geometry_;
     bool parked_{false};
+    bool parking_{false};
+    MechanicalAxes parkTarget_{};
 };
 
 class NativeOalFocuser final : public IFocuser, private NativeOalDeviceBase {

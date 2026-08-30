@@ -2,7 +2,7 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.gemini",
   "name": "OpenAstroLink native Gemini EAF driver",
-  "version": "0.2.10.25",
+  "version": "0.2.10.32",
   "abiVersion": 2,
   "library": "oal_driver_gemini",
   "deviceClasses": [

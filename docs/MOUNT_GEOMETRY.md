@@ -34,6 +34,6 @@ The Profile tab can change Home/Park axis coordinates. The Mount tab provides **
 
 ## Safety status
 
-Native EQDrive and direct Wi-Fi celestial GOTO still retain the supervised 15-degree mechanical-axis limit. This is intentional while long-slew GEM pier/limit behavior is qualified. Park is a separate explicit mechanical operation and may move farther.
+Native EQDrive and direct Wi-Fi celestial GOTO no longer impose the temporary 15-degree HIL envelope. They use the shortest mechanical-axis path (up to 180 degrees). Automatic meridian flips remain disabled, so long slews must be supervised until pier-side and physical-limit behavior is fully HIL-qualified.
 
 Alt-azimuth coordinate conversion is present, but production two-axis sidereal tracking and field-derotator control are future work. Fork-equatorial and equatorial-platform profiles share the equatorial hour-angle foundation without GEM pier-flip geometry.

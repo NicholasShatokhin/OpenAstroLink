@@ -11,6 +11,7 @@
 #include "core/observatory_controller.h"
 #include "core/settings.h"
 #include <memory>
+#include <deque>
 #include <QThread>
 
 #ifdef OAS_HAVE_POSITIONING
@@ -63,6 +64,7 @@ public:
     bool capture(const ExposureRequest &request,CameraFrame *out=nullptr,QString *error=nullptr) override;
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
     QString startGuideCapture(const ExposureRequest &request,QString *error=nullptr) override;
+    QString startLiveView(const LiveViewRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     QString startAdaptiveSolve(const AdaptiveSolveRequest &request,QString *error=nullptr) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
@@ -84,6 +86,7 @@ public:
     bool setMountTracking(bool enabled,QString *error=nullptr) override;
     bool parkMount(bool parked,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
+    bool manualMountSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
 
     GuidingStatus startGuiding() override;
     GuidingStatus stopGuiding() override;
@@ -136,7 +139,8 @@ signals:
 private:
     void disconnectDevices(bool clearAutoConnect);
     bool ensureResourcesAvailable(const QStringList &resources,QString *error=nullptr) const;
-    void commitCapturedFrame(const CameraFrame &frame);
+    void commitCapturedFrame(const CameraFrame &frame,bool emitFullState=true,bool verbose=true);
+    void publishOperationalPreview(const CameraFrame &frame,const QString &purpose);
     void scheduleCanonHotplugRediscovery(quint64 generation);
     bool nativeDriverHasCachedDevice(const QString &driverId) const;
     static QImage toQImage(const cv::Mat &image);
@@ -154,6 +158,7 @@ private:
     TelescopeProfile profile_;
     CameraFrame previousFrame_;
     CameraFrame lastFrame_;
+    std::deque<CameraFrame> previewFrameCache_;
     CameraFrame lastGuideFrame_;
     SolveResult lastSolve_;
     AutofocusEngine autofocusEngine_;
@@ -173,6 +178,8 @@ private:
     ::QGeoPositionInfoSource *positionSource_{};
 #endif
     QThread *nativeDiscoveryThread_{};
+    QThread *nativeHealthThread_{};
+    QTimer *nativeHealthTimer_{};
     QStringList pendingNativeDiscoveryDrivers_;
     bool pendingNativeDiscoveryAll_{false};
     bool pendingNativeDiscoveryHardRecovery_{false};

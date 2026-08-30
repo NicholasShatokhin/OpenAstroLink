@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="OpenAstroLink — відкрита система керування астрономічним обладнанням.">
+  <link rel="canonical" href="https://openastro.link/uk/">
+  <link rel="alternate" hreflang="en" href="https://openastro.link/">
+  <link rel="stylesheet" href="/styles.css">
+  <title>OpenAstroLink — керування обсерваторією</title>
+</head>
+<body>
+<header><a class="brand" href="/uk/">OpenAstroLink</a><nav><a href="#features">Можливості</a><a href="#architecture">Архітектура</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/">English</a></nav></header>
+<main>
+<section class="hero"><p class="eyebrow">OPEN OBSERVATORY CONTROL</p><h1>Одна ланка між астрономічним обладнанням і програмами.</h1><p class="lead">OpenAstroLink — відкрита node-first система керування камерами, монтуваннями, фокусерами, астрометрією, автофокусом, гідуванням та автоматизованими сесіями.</p><div class="actions"><a class="primary" href="https://github.com/NicholasShatokhin/OpenAstroLink">Відкрити GitHub</a><a href="#architecture">Як це працює</a></div></section>
+<section id="features" class="grid"><article><h2>Нативне обладнання</h2><p>QHY, Canon EOS, EQDrive/Sky-Watcher, Gemini, ZWO ASI/EAF та compatibility backends у єдиній моделі керування.</p></article><article><h2>Live acquisition</h2><p>Live View, гістограма та auto-exposure assistant, scene/star autofocus і інструменти юстування шукача.</p></article><article><h2>Астрометрія й автоматизація</h2><p>Plate solving, adaptive urban capture, polar alignment, guiding і resource-locked асинхронні operations виконуються на node.</p></article></section>
+<section id="architecture" class="panel"><p class="eyebrow">NODE FIRST</p><h2>Керування залишається поруч з обладнанням.</h2><p>OpenAstroLink node володіє hardware sessions і довгими operations. GUI та інтеграції працюють через HTTP/WebSocket, а Stellarium отримує живу позицію монтування і передає GOTO через Telescope Control bridge.</p><pre>Камера / Монтування / Фокусер
+              ↓
+       OpenAstroLink node
+          ↙          ↘
+      GUI / API     Stellarium</pre></section>
+<section class="panel"><h2>Стан проєкту</h2><p>Проєкт активно перевіряється на реальному обладнанні. Safety-gates для монтування зберігаються, доки конкретна механічна геометрія не відкалібрована й не пройшла HIL.</p></section>
+</main><footer>OpenAstroLink · openastro.link · open-source інструменти для астрономії</footer>
+</body></html>

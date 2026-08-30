@@ -1,6 +1,6 @@
 # Stellarium integration
 
-Version: 0.2.10
+Version: 0.2.10.35
 
 OpenAstroLink includes a direct TCP bridge compatible with Stellarium's external Telescope Control protocol. It is deliberately a mount bridge, not a replacement for the OAL observatory API.
 
@@ -37,3 +37,7 @@ Stellarium's standard telescope-control connection transports telescope position
 ## Safety
 
 The bridge uses the same active mount and therefore remains subject to OAL resource locks and the mount driver's own limits/interlocks. Do not expose the TCP port directly to the public Internet; use a trusted LAN/VPN and the OAL security plan for remote operation.
+
+## Live position
+
+The bridge publishes the active mount position to Stellarium every 500 ms and sends an immediate position update when a Stellarium client connects. The packet is normalized to J2000. Raw-axis EQDrive needs one OAL Sync before a valid encoder-to-sky position exists.

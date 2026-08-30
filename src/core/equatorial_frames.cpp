@@ -72,4 +72,33 @@ EquatorialCoord convertEquatorialFrame(const EquatorialCoord&coord,EquatorialFra
     return coordFromVector(mul(m,vectorFromCoord(coord)),target);
 }
 
+double localSiderealTimeDeg(const ObserverLocation &observer,const QDateTime &utc){
+    const double jd=julianDateUtc(utc),T=(jd-2451545.0)/36525.0;
+    const double gmst=280.46061837+360.98564736629*(jd-2451545.0)+0.000387933*T*T-(T*T*T)/38710000.0;
+    return wrap360(gmst+observer.longitudeDeg);
+}
+HorizontalCoord equatorialToHorizontal(const EquatorialCoord &coord,const ObserverLocation &observer,const QDateTime &utc){
+    const auto eq=convertEquatorialFrame(coord,EquatorialFrame::JNow,utc);const double lat=observer.latitudeDeg*kDeg,dec=eq.decDeg*kDeg;
+    double H=(localSiderealTimeDeg(observer,utc)-eq.raDeg)*kDeg;while(H>kPi)H-=2*kPi;while(H<-kPi)H+=2*kPi;
+    const double east=-std::cos(dec)*std::sin(H);const double north=std::cos(lat)*std::sin(dec)-std::sin(lat)*std::cos(dec)*std::cos(H);const double up=std::sin(lat)*std::sin(dec)+std::cos(lat)*std::cos(dec)*std::cos(H);
+    return {wrap360(std::atan2(east,north)/kDeg),std::asin(std::clamp(up,-1.0,1.0))/kDeg};
+}
+EquatorialCoord horizontalToEquatorial(const HorizontalCoord &coord,const ObserverLocation &observer,EquatorialFrame targetFrame,const QDateTime &utc){
+    const double lat=observer.latitudeDeg*kDeg,A=wrap360(coord.azDeg)*kDeg,h=std::clamp(coord.altDeg,-90.0,90.0)*kDeg;
+    const double east=std::cos(h)*std::sin(A),north=std::cos(h)*std::cos(A),up=std::sin(h);
+    const double sinDec=up*std::sin(lat)+north*std::cos(lat);const double dec=std::asin(std::clamp(sinDec,-1.0,1.0));
+    const double cosDecCosH=up*std::cos(lat)-north*std::sin(lat);const double H=std::atan2(-east,cosDecCosH);
+    EquatorialCoord now{wrap360(localSiderealTimeDeg(observer,utc)-H/kDeg),dec/kDeg,EquatorialFrame::JNow};return convertEquatorialFrame(now,targetFrame,utc);
+}
+GalacticCoord equatorialToGalactic(const EquatorialCoord &coord,const QDateTime &utc){
+    const auto eq=convertEquatorialFrame(coord,EquatorialFrame::J2000,utc);const Vec3 v=vectorFromCoord(eq);
+    static constexpr Mat3 R={{{-0.0548755604,-0.8734370902,-0.4838350155},{0.4941094279,-0.4448296300,0.7469822445},{-0.8676661490,-0.1980763734,0.4559837762}}};
+    const Vec3 g=mul(R,v);return {wrap360(std::atan2(g[1],g[0])/kDeg),std::atan2(g[2],std::hypot(g[0],g[1]))/kDeg};
+}
+EquatorialCoord galacticToEquatorial(const GalacticCoord &coord,EquatorialFrame targetFrame,const QDateTime &utc){
+    const double l=wrap360(coord.lDeg)*kDeg,b=std::clamp(coord.bDeg,-90.0,90.0)*kDeg,cb=std::cos(b);const Vec3 g{cb*std::cos(l),cb*std::sin(l),std::sin(b)};
+    static constexpr Mat3 R={{{-0.0548755604,-0.8734370902,-0.4838350155},{0.4941094279,-0.4448296300,0.7469822445},{-0.8676661490,-0.1980763734,0.4559837762}}};
+    const auto j2000=coordFromVector(mul(transpose(R),g),EquatorialFrame::J2000);return convertEquatorialFrame(j2000,targetFrame,utc);
+}
+
 } // namespace oas

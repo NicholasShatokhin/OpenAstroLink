@@ -352,7 +352,7 @@ void stop(void *) {
 const char *manifest(void *) {
     return json(QJsonObject{{"driverId", "oal.skywatcher"},
                             {"name", "OpenAstroLink native Sky-Watcher/SynScan driver"},
-                            {"version", "0.2.10.25"},
+                            {"version", "0.2.10.32"},
                             {"abiVersion", 2},
                             {"threadModel", "per-device-serial"},
                             {"protocol", "SynScan Serial Communication Protocol 3.3"},
@@ -399,6 +399,8 @@ const char *capabilities(void *, const char *deviceId) {
              {"pulseGuide", QJsonObject{{"supported", equatorial},
                                         {"implementation", "fixed-rate-1"},
                                         {"maxDurationMs", 5000}}},
+             {"manualSlew", QJsonObject{{"supported", true}, {"rateLevels", 9},
+                                          {"axes", 2}, {"implementation", "SynScan fixed-rate P command"}}},
              {"pierSide", QJsonObject{{"supported", device->pierSideSupported}}},
              {"alignment", QJsonObject{{"querySupported", true},
                                        {"requiredForRaDecGoto", true}}},
@@ -529,6 +531,17 @@ const char *invoke(void *, const char *deviceId, const char *method,
         return ok();
     }
 
+    if (methodName == "mount.manualSlew") {
+        const int a1=std::clamp(request.value("axis1Direction").toInt(),-1,1);
+        const int a2=std::clamp(request.value("axis2Direction").toInt(),-1,1);
+        const int rate=std::clamp(request.value("rateLevel").toInt(),0,9);
+        const bool ok1=fixedRate(device,true,a1>=0,a1==0?0:rate);
+        const bool ok2=fixedRate(device,false,a2>=0,a2==0?0:rate);
+        if(!ok1||!ok2){stopManualAxes(device);return fail("TRANSPORT_ERROR","Could not set SynScan manual slew rate");}
+        emitEvent(device,"mount.manualSlew",QJsonObject{{"axis1Direction",a1},{"axis2Direction",a2},{"rateLevel",rate}});
+        return ok();
+    }
+
     if (methodName == "mount.setTracking") {
         const bool enabled = request.value("enabled").toBool();
         QByteArray command;
@@ -587,7 +600,7 @@ OalDriverV2 api{OAL_DRIVER_ABI_V2,
                     OAL_DRIVER_FEATURE_HEALTH,
                 "oal.skywatcher",
                 "OpenAstroLink native Sky-Watcher/SynScan driver",
-                "0.2.10.25",
+                "0.2.10.32",
                 nullptr,
                 &manifest,
                 &start,

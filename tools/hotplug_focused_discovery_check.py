@@ -27,8 +27,8 @@ need('drivers/skywatcher/oal_driver_skywatcher.cpp',
      'QByteArrayLiteral(":e1\\r")',
      "true,'\\r'",
      'direct Sky-Watcher Motor Controller protocol detected')
-need('drivers/qhy/oal_driver_qhy.manifest.json', '0.2.10.25')
-need('drivers/gemini/oal_driver_gemini.manifest.json', '0.2.10.25')
-need('drivers/skywatcher/oal_driver_skywatcher.manifest.json', '0.2.10.25')
+need('drivers/qhy/oal_driver_qhy.manifest.json', '0.2.10.35')
+need('drivers/gemini/oal_driver_gemini.manifest.json', '0.2.10.32')
+need('drivers/skywatcher/oal_driver_skywatcher.manifest.json', '0.2.10.32')
 
 print(f'hotplug/focused discovery check: PASS ({len(checks)} assertions)')

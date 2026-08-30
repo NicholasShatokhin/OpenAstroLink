@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.30
+  version: 0.2.10.35
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -178,6 +178,31 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ExposureRequest' }
       responses: { '202': { $ref: '#/components/responses/Success' } }
+  /cameras/{id}/live-view:
+    post:
+      summary: Start continuous node-local operational preview (cancel the returned operation to stop)
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                exposureSec: { type: number, minimum: 0.0001, maximum: 10, default: 0.05 }
+                gain: { type: integer, minimum: 0, default: 100 }
+                binX: { type: integer, minimum: 1, maximum: 4, default: 2 }
+                binY: { type: integer, minimum: 1, maximum: 4, default: 2 }
+                targetFps: { type: number, minimum: 0.2, maximum: 10, default: 5 }
+                debayer:
+                  type: boolean
+                  default: false
+                  description: Preview-only software debayer. Science FITS/RAW remains unchanged.
+                bayerPattern:
+                  type: string
+                  enum: [AUTO, RGGB, BGGR, GRBG, GBRG]
+                  default: AUTO
+                  description: AUTO uses camera/driver CFA metadata when available; an explicit pattern works as a camera-neutral fallback.
+      responses: { '202': { $ref: '#/components/responses/Success' } }
   /frames/{id}/preview:
     get:
       parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
@@ -273,6 +298,26 @@ paths:
     get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /sessions/current/stop:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /mounts/{id}/manual-slew:
+    post:
+      summary: Start/stop ASCOM-style two-axis manual mount motion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                axis1Direction: { type: integer, minimum: -1, maximum: 1 }
+                axis2Direction: { type: integer, minimum: -1, maximum: 1 }
+                rateLevel: { type: integer, minimum: 0, maximum: 9 }
+      responses:
+        '200': { description: Manual motion command accepted }
 components:
   parameters:
     OperationId:
@@ -339,17 +384,27 @@ components:
         binY: { type: integer, minimum: 1, default: 1 }
         gain: { type: integer, default: 0 }
         offset: { type: integer, default: 0 }
+        saveRaw:
+          type: boolean
+          default: false
+          description: Preserve a science/original file for this user capture when the camera/data plane supports it. Native host-frame cameras such as QHY are spooled by the node to FITS.
+        savePath:
+          type: string
+          description: Optional destination file or directory. If omitted, the node uses its Pictures/OpenAstroLink/<vendor>/ science spool.
         includeImage: { type: boolean, default: true }
     AutofocusRequest:
       type: object
       properties:
-        mode: { type: string, enum: [stars, planet, bahtinov], default: stars }
+        mode: { type: string, enum: [stars, scene, planet, bahtinov], default: stars }
         rangeSteps: { type: integer, minimum: 100, default: 1600 }
         coarseStep: { type: integer, minimum: 1, default: 200 }
         fineStep: { type: integer, minimum: 1, default: 40 }
         framesPerPosition: { type: integer, minimum: 1, default: 3 }
         settleMs: { type: integer, minimum: 0, default: 400 }
         autoPlanetRoi: { type: boolean, default: true }
+        exposureSec: { type: number, exclusiveMinimum: 0, default: 0.05 }
+        gain: { type: integer, minimum: 0, default: 0 }
+        minStars: { type: integer, minimum: 1, default: 3 }
     SessionRequest:
       type: object
       required: [name, targets]

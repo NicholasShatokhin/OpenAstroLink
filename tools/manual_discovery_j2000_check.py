@@ -8,7 +8,7 @@ def want(path, text, label):
 def reject(path,text,label):
     data=(root/path).read_text(encoding='utf-8', errors='ignore')
     checks.append((label,text not in data))
-want(Path('src/node/main.cpp'),'automatic periodic probing is disabled','node disables periodic native rediscovery')
+want(Path('src/node/main.cpp'),'Automatic periodic probing is disabled','node disables periodic native rediscovery')
 reject(Path('src/node/main.cpp'),'reconnectTimer','legacy 10-second reconnect timer removed')
 want(Path('src/oal/oal_server.cpp'),'refreshNativeDiscoveryAsync({},true)','refresh API starts explicit async discovery')
 want(Path('src/core/equatorial_frames.cpp'),'2306.2181','J2000/JNow precession implementation present')

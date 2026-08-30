@@ -1,4 +1,12 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.25
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.35
+
+
+## v0.2.10.35 HIL follow-up
+
+- QHY native Live→Stop→Capture and FITS science spooling are HIL-confirmed.
+- Optional preview-only debayer is camera-neutral; QHY Auto uses SDK `CAM_COLOR`, ZWO Auto uses ASI Bayer metadata, and explicit CFA patterns support other one-channel Bayer sources.
+- Autofocus preview and manual focus jog are available; Scene AF peak selection was hardened after daylight HIL.
+- Mount target entry now synchronizes J2000/JNow/Az-Alt/Galactic fields while keeping J2000 canonical for GOTO/Sync.
 
 Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL or production qualification pending; 🧪 experimental; ⏳ not yet implemented.
 
@@ -42,14 +50,14 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 
 | Driver | Status | Notes |
 |---|---|---|
-| QHY | 🟡 HIL active | QHY5III462C discovery/connect/capture confirmed; explicit Refresh now hard-reloads the inactive QHY driver DLL/SDK after a zero-device scan. Windows hot-plug and repeated-capture stability still require HIL |
+| QHY | 🟡 HIL active | QHY5III462C discovery/connect/single capture confirmed; user captures spool to FITS. v0.2.10.34 moves Finder Live View to native QHYCCD continuous streaming and makes health probing idle-only with a three-strike disconnect rule; Live→Stop→Capture and repeated reconnect remain the next Windows HIL checks |
 | Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
 | ZWO ASI | 🟡 | Native ASI SDK, multi-camera discovery; HIL pending |
 | ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
-| Gemini EAF | ✅ basic HIL | Windows native discovery/connection, direct motion and autofocus-driven motion confirmed; long-run/reconnect/limits qualification remains |
+| Gemini EAF | ✅ basic HIL | Windows native discovery/connection, direct motion and autofocus-driven motion confirmed; active serial health polling now detects physical disconnect and refreshes the device catalogue; optical autofocus convergence/repeatability remains to qualify |
 | Sky-Watcher/SynScan | ✅ direct Wi-Fi basic HIL | Serial SynScan path retained; `synscan-wifi` direct Motor Controller UDP/11880 has connected and physically moved the mount; `synscan-app` remains the SynScan Pro/App UDP/11881 compatibility path |
 | Sky-Watcher direct motor-controller | 🧪 | Shared Motor Controller codec now follows EQMOD/INDI status/direction semantics and is used by direct Wi-Fi plus the EQDrive native fallback |
-| EQDrive native | ✅ basic HIL / 🟡 geometry | Separate `oal.eqdrive` discovered and moved the real controller; v0.2.10.25 routes raw axes through the Core GEM/fork/Alt-Az geometry layer and mechanical Park model; long-slew/pier-flip HIL remains pending |
+| EQDrive native | ✅ basic HIL / 🟡 geometry | Separate `oal.eqdrive` discovered and moved the real controller; raw axes route through the Core geometry layer. HIL exposed unqualified installation axis signs, so sky GOTO is back under a 15° qualification envelope until orientation is verified; pier-flip HIL remains pending |
 | INDI compatibility | ✅ | Optional compatibility client; independent of native drivers |
 | Classic ASCOM | ✅ basic HIL | Windows out-of-process COM bridge; EQMOD HEQ5/6 connect, park/unpark and Stellarium-driven GOTO confirmed |
 | ASCOM Alpaca | ✅ | Compatibility backend |
@@ -89,8 +97,8 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 - Geometry profiles: German equatorial, fork equatorial, Alt-Az, Alt-Az+derotator, equatorial platform, custom two-axis.
 - Native EQDrive and direct SynScan/EQDrive Wi-Fi use `MountGeometryModel` in OAL Core; drivers expose raw axes/motion.
 - GEM conversion uses UTC/site longitude → local sidereal time → hour angle → selected pier branch → mechanical axes. One Sync establishes installation encoder offset/signs.
-- Mechanical Park defaults to Axis1=90°, Axis2=0° and is configurable; GUI can save current axes as Park.
-- Automatic meridian flips remain disabled by default; native/direct GOTO keeps the supervised 15° axis limit until long-slew HIL completes.
+- Mechanical Park has no active default for raw native mounts. The user must explicitly save the current safe physical axes; stopping an in-progress park invokes the physical abort path.
+- Automatic meridian flips remain disabled by default. After unsafe-direction HIL, native EQDrive sky GOTO again uses a 15° qualification envelope until Axis 1/2 orientation is verified with small moves.
 - Alt-Az coordinate conversion exists; production two-axis tracking/derotator control remains future work.
 - Classic ASCOM slews emit periodic RA/DEC/pier/tracking diagnostics.
 - Explicit Refresh can hard-reload an inactive QHY OAL driver DLL/SDK after a zero-device scan; periodic vendor polling remains disabled.

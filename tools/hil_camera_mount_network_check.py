@@ -23,7 +23,7 @@ has('src/core/application_controller.cpp','Mount GOTO preflight','GOTO direction
 has('src/integrations/stellarium_telescope_server.cpp','decoded/forwarded unchanged','Stellarium coordinates logged unchanged')
 has('drivers/eqdrive/oal_driver_eqdrive.cpp','official EQDrive ASTEP','native EQDrive uses official ASTEP mount protocol')
 has('drivers/eqdrive/oal_driver_eqdrive.cpp','native EQDrive discovery will not fight for the port','busy COM short-circuits discovery spam')
-has('drivers/eqdrive/oal_driver_eqdrive.manifest.json','"maxNativeGotoDeg": 15.0','native EQDrive HIL GOTO safety limit')
+has('drivers/eqdrive/oal_driver_eqdrive.manifest.json','"maxNativeGotoDeg": 15.0','native EQDrive qualification GOTO safety envelope')
 failed=[n for n,ok in checks if not ok]
 for n,ok in checks:print(('PASS' if ok else 'FAIL')+': '+n)
 print(f'{len(checks)-len(failed)}/{len(checks)} checks passed')

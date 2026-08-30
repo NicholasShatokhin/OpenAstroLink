@@ -2,7 +2,7 @@
   "schema": "org.openastrolink.driver-manifest/v2",
   "driverId": "oal.skywatcher",
   "name": "OpenAstroLink native Sky-Watcher/SynScan driver",
-  "version": "0.2.10.25",
+  "version": "0.2.10.32",
   "abiVersion": 2,
   "library": "oal_driver_skywatcher",
   "deviceClasses": [

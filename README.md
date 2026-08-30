@@ -1,7 +1,52 @@
 # OpenAstroSuite / OpenAstroLink
 
 
-**Current release: v0.2.10.30 — adaptive-solve stability + preview histogram assistant**
+**Current package: v0.2.10.35.1 — ZWO ASI MSVC build hotfix (core OAS version remains 0.2.10.35)**
+
+## v0.2.10.35.1 ZWO ASI MSVC build hotfix
+
+- Fixed a C++ most-vexing-parse in the new ZWO ASI Live View buffer allocation. MSVC interpreted `std::vector<unsigned char> buffer(size_t(bytes));` as a function declaration, which caused the misleading `.data()` and `ASIGetVideoData` argument-count diagnostics.
+- The Live View buffer now uses an unambiguous default construction plus `resize(static_cast<std::size_t>(bytes))`.
+- Added `tools/zwo_asi_sdk_compile_check.py`, which syntax-compiles the full native ZWO ASI driver against an API-shape stub containing the real four-argument `ASIGetVideoData` contract.
+
+## v0.2.10.35 Focus preview, optional debayer and synchronized target coordinates
+
+- Autofocus publishes one operational preview frame per focus position, so the main camera pane stays visually useful while the focuser scans. The Focus tab also provides manual `-- / - / STOP / + / ++` jog controls with a configurable step.
+- Scene autofocus now uses an intensity-preserving contrast metric, rejects flat curves, extends a coarse scan when the best sample lands on an edge, and no longer replaces a strong coarse peak with a weaker fine-pass peak. This addresses the daylight HIL case where a visually good ~7160 position was displaced by a lower-score fine scan.
+- Live View software debayer is optional and preview-only. `AUTO` consumes CFA metadata from the active driver; RGGB/BGGR/GRBG/GBRG can be selected explicitly for any one-channel Bayer source. QHY obtains its Bayer sequence from `CAM_COLOR`; ZWO ASI publishes `ASI_CAMERA_INFO::BayerPattern`. Science FITS/RAW pixels remain untouched.
+- 16-bit color previews are converted correctly to the 8-bit GUI transport after debayer instead of being interpreted as RGB888 byte data.
+- Saturation/underexposure are image-quality warnings only. A clipped frame remains a valid camera frame and never implies transport failure or physical disconnect.
+- The Mount tab now exposes synchronized editable J2000, JNow, horizontal Az/Alt and Galactic l/b target fields. Editing any system updates the others using current UTC and the observatory location; all GOTO/Sync requests enter the mount layer canonically as J2000.
+- Added a Polaris J2000 preset and clearer Park/Sync guidance for the raw EQDrive workflow. Mechanical Park is not silently treated as a sky Sync: after startup, establish one known pointing anchor (Polaris or a plate solve) before Stellarium/coordinate GOTO.
+
+## v0.2.10.34 QHY Live View stability and false-disconnect fix
+
+- QHY Live View now uses the SDK continuous-stream path (`SetQHYCCDStreamMode(...,1)` / `BeginQHYCCDLive` / `GetQHYCCDLiveFrame` / `StopQHYCCDLive`) instead of emulating video with repeated single-frame exposures. The driver reopens the camera in single-frame mode when Live View stops, so normal Capture/Autofocus remains usable afterwards.
+- Native health polling now skips resources owned by active operations. QHY health no longer calls `GetQHYCCDChipInfo` every 1.8 s; it uses a lighter idle-only control probe and requires three consecutive failures before emitting `device.disconnected`, preventing transient SDK errors from looking like USB removal.
+- Native camera sensor geometry is cached at connect time, avoiding extra QHY capability/vendor calls after every readout.
+- Daylight Live/Finder defaults are now 1 ms, gain 0, 2x2, 5 fps. The GUI explicitly warns when a preview is almost completely white or black, which is especially useful for finder alignment.
+- QHY Live View cancellation no longer routes through the single-frame exposure-abort API; the stream loop exits and performs the correct `StopQHYCCDLive` cleanup itself.
+- Remote GUI capture now forwards `saveRaw` / `savePath` through HTTP, fixing the missing-QHY-FITS symptom when the GUI runs against a separate node. Live View and autofocus frames remain preview-only and are not science-spooled.
+
+## v0.2.10.33 Live View, Scene Autofocus and Finder Alignment
+
+- Added a node-local `camera.live-view` operation exposed through OAL HTTP/WebSocket. It continuously acquires short preview frames while holding the camera resource and never science-saves those frames. The default GUI profile is 50 ms, 2x2 binning, 5 fps for low-latency QHY/ASI-style acquisition.
+- Added the **Live / Finder** GUI tab with auto-stretch, a center crosshair, robust brightest-region highlighting and pixel offset readout.
+- Added a five-step **Finder Alignment wizard** for daylight alignment: acquire a distant target -> Scene autofocus -> center the main optical axis -> adjust finder screws -> verify.
+- Added **Scene autofocus** for terrestrial/lunar/planetary structure. It uses an edge-energy metric and configurable AF exposure/gain instead of requiring stellar PSFs.
+- Star autofocus now has a minimum-star gate and fails explicitly with `No suitable stars detected` instead of selecting a noise peak when the field contains no stars.
+- Live preview keeps a small in-memory frame cache so a remote GUI can fetch several outstanding preview frames without racing the next frame.
+- Repeated-still Canon DSLR Live View is deliberately blocked to protect the shutter. A dedicated Canon EDSDK EVF transport is the next Canon-specific live-view step.
+- Added an initial static web-site source under `site/` for `openastro.link`, with English canonical content and a Ukrainian mirror. No DNS/deployment changes are performed by the application.
+
+## v0.2.10.32 Safety-first hardware HIL fixes
+
+- Active native QHY, Gemini EAF and EQDrive devices receive lightweight background health probes. Physical USB/serial loss emits `device.disconnected`, cancels the owning resource operation, removes the stale connected object from node state, and refreshes only the affected native driver catalogue. Persisted reconnect bindings are retained.
+- User-triggered native camera captures request science-file preservation. Cameras that publish only host-frame pixels (notably QHY) are spooled by OAL Core to FITS under `Pictures/OpenAstroLink/<VENDOR>/`; Canon continues to preserve its native CR2/CR3 original. Adaptive/autofocus temporary frames are not automatically written.
+- EQDrive `ABORT` now uses Motor Controller instant-stop (`:L`) with normal-stop fallback and verifies both axes actually stop. Explicit disconnect also attempts a stop first.
+- Native mechanical Park is disabled until the user explicitly saves the current safe physical axes as Park. Unchecking Park while a park slew is active now calls the physical abort path. The unsafe generic `90°,0°` Park restore button was removed.
+- Mount Sync UX now states that Sync asserts the telescope is physically pointing at the entered coordinates, adds `Sync mount to last successful plate solve`, and exposes quick Axis 1/Axis 2 mapping reversal controls for HIL qualification.
+- After the first long-slew HIL showed an unqualified installation-axis mapping, the 15° native sky-GOTO qualification envelope is temporarily restored. Mechanical Park has its own explicitly calibrated raw-axis target.
 
 The EOS 550D HIL showed that EDSDK can emit `camera-added` before `EdsGetCameraList()` exposes the body. v0.2.10.29 therefore turns the callback into a bounded, debounced Canon-only settle/retry sequence instead of an immediate one-shot scan. If normal retries still see zero devices, the final fallback hard-reloads only the idle `oal.canon` EDSDK driver and rescans it. There is still no periodic vendor polling. ISO/gain, Bulb capture, full-resolution operational preview, and CR2/CR3 science-file preservation remain unchanged.
 
@@ -63,7 +108,7 @@ OpenAstroLink (OAL) is a local-first observatory control stack. The reference pa
 - **Direct SynScan/EQDrive Wi-Fi:** `synscan-wifi` continues to talk directly to the mount adapter over UDP 11880, while `synscan-app` remains the separate SynScan Pro/App compatibility backend on UDP 11881.
 - **Motor Controller semantics corrected:** running/GOTO/initialization/direction bits and GOTO motion-mode encoding now follow the Sky-Watcher/EQMOD convention. Direct GOTO uses the proven `G -> H -> M -> J` sequence and verifies encoder movement before reporting success.
 - **Native EQDrive dual protocol:** `oal.eqdrive` first probes the EQMOD-compatible Sky-Watcher Motor Controller command set used by the proven EQMOD path, then falls back to official EQDrive ASTEP (`St`, `Pos`, `Cg`, `Speed`, `Goto`) where exposed by firmware. A busy COM port exits discovery immediately rather than fighting EQMOD/ASCOM.
-- **Safety retained:** direct Wi-Fi and native EQDrive celestial GOTO still require Sync and remain HIL-limited to small test moves until axis direction/pier geometry is qualified.
+- **Long GOTO enabled:** direct Wi-Fi and native EQDrive still require Sync, but the temporary 15° HIL envelope is removed. Automatic meridian flips remain disabled; supervise long slews and keep ABORT available.
 
 ## Current hardware coverage
 

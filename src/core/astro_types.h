@@ -12,7 +12,7 @@ namespace oas {
 
 enum class ConnectionState { Disconnected, Connecting, Connected, Error };
 enum class DeviceKind { Camera, Mount, Focuser, Guider, Solver, Unknown };
-enum class AutofocusMode { Stars, Planet, Bahtinov };
+enum class AutofocusMode { Stars, Scene, Planet, Bahtinov };
 enum class GuideDirection { North, South, East, West };
 enum class EquatorialFrame { J2000, JNow };
 enum class MountGeometryType { GermanEquatorial, ForkEquatorial, AltAzimuth, AltAzimuthDerotator, EquatorialPlatform, CustomTwoAxis };
@@ -115,6 +115,9 @@ struct CameraFrame {
     // this points at the original CR2/CR3; it is distinct from image, which may
     // be an operational preview used by UI/autofocus/plate solving.
     QString scienceFilePath;
+    // Native raw-sensor metadata used only for preview processing.
+    bool bayerEncoded{false};
+    QString bayerPattern;
 };
 
 struct DetectedStar {
@@ -185,6 +188,7 @@ struct FocusSample {
     int position{0};
     double score{0.0};
     double spread{0.0};
+    int detectedStars{0};
 };
 
 struct AutofocusRequest {
@@ -195,6 +199,47 @@ struct AutofocusRequest {
     int framesPerPosition{3};
     int settleMs{400};
     bool autoPlanetRoi{true};
+    // Camera settings used for every focus sample. Scene autofocus is intended
+    // for daytime terrestrial targets, Moon/planet structure and other
+    // non-stellar images; star autofocus additionally enforces minStars.
+    double exposureSec{0.05};
+    int gain{0};
+    int minStars{3};
+};
+
+enum class BayerPattern { Auto, RGGB, BGGR, GRBG, GBRG };
+
+inline QString bayerPatternName(BayerPattern p) {
+    switch (p) {
+    case BayerPattern::RGGB: return "RGGB";
+    case BayerPattern::BGGR: return "BGGR";
+    case BayerPattern::GRBG: return "GRBG";
+    case BayerPattern::GBRG: return "GBRG";
+    default: return "AUTO";
+    }
+}
+
+inline BayerPattern bayerPatternFromString(const QString &text, BayerPattern fallback = BayerPattern::Auto) {
+    const QString s = text.trimmed().toUpper();
+    if (s == "RGGB") return BayerPattern::RGGB;
+    if (s == "BGGR") return BayerPattern::BGGR;
+    if (s == "GRBG") return BayerPattern::GRBG;
+    if (s == "GBRG") return BayerPattern::GBRG;
+    if (s == "AUTO" || s.isEmpty()) return BayerPattern::Auto;
+    return fallback;
+}
+
+struct LiveViewRequest {
+    double exposureSec{0.05};
+    int gain{0};
+    int binX{1};
+    int binY{1};
+    double targetFps{5.0};
+    // Preview-only color reconstruction. Science frames remain untouched.
+    // AUTO uses driver-published CFA metadata; explicit patterns make the
+    // feature camera-vendor-neutral even when a driver cannot identify CFA.
+    bool debayer{false};
+    BayerPattern bayerPattern{BayerPattern::Auto};
 };
 
 struct AutofocusResult {
@@ -260,7 +305,7 @@ inline QJsonObject solveToJson(const SolveResult &s) {
 inline QJsonObject autofocusToJson(const AutofocusResult &r) {
     QJsonArray samples;
     for (const auto &s : r.samples)
-        samples.append(QJsonObject{{"position", s.position}, {"score", s.score}, {"spread", s.spread}});
+        samples.append(QJsonObject{{"position", s.position}, {"score", s.score}, {"spread", s.spread}, {"detectedStars", s.detectedStars}});
     return {{"success", r.success}, {"bestPosition", r.bestPosition}, {"bestScore", r.bestScore},
             {"message", r.message}, {"samples", samples}};
 }

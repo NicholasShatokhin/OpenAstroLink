@@ -14,7 +14,7 @@ need(Path('src/oal/driver_plugin_loader.cpp'),'*.manifest.json','oalCreateDriver
 need(Path('src/backends/oal_native_devices.cpp'),'nativeBackendKey','NativeOalCamera','NativeOalMount','NativeOalFocuser','camera.capture','frameToken')
 need(Path('src/core/application_controller.cpp'),'Native OAL driver registry','nativeBackendsFor','NativeOalCamera','Migrated legacy direct QHY binding')
 need(Path('drivers/reference_simulated/oal_driver_simulated.cpp'),'oalCreateDriverV2','sim-camera','sim-mount','sim-focuser','publishFrame')
-need(Path('drivers/qhy/oal_driver_qhy.cpp'),'oalCreateDriverV2','oal.qhy','publishFrame','QHYCCD SDK','minSec','maxSec','\\"streaming\\":{\\"supported\\":false')
+need(Path('drivers/qhy/oal_driver_qhy.cpp'),'oalCreateDriverV2','oal.qhy','publishFrame','QHYCCD SDK','minSec','maxSec','qhyccd-live','BeginQHYCCDLive','GetQHYCCDLiveFrame','StopQHYCCDLive')
 need(Path('src/oal/oal_server.cpp'),'/api/v1/drivers','nativeCapabilitiesJson')
 need(Path('src/gui/main_window.cpp'),'Detected native devices','Compatibility / embedded')
 need(Path('schemas/driver-manifest-v2.schema.json'),'out-of-process','permissions','deviceClasses')

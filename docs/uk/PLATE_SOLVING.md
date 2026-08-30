@@ -102,6 +102,6 @@ openastrolink-node.exe --astap-executable "C:\\Program Files\\astap\\astap.exe" 
 GUI має окрему **Adaptive base exposure** (типово 1.5 с), тому довга експозиція зі звичайного Capture не може випадково перетворити adaptive solve назад на 10–15-секундний кадр зі штрихами зір.
 
 
-### Пам’ять DSLR та експозиція adaptive solve (v0.2.10.30)
+### Пам’ять DSLR та експозиція adaptive solve (v0.2.10.32)
 
 Запитаний adaptive bin є **ефективним bin для solver**. Якщо камера ігнорує апаратний binning, node одразу зменшує кожен operational-кадр перед збереженням його для adaptive stack. Це не дозволяє накопичувати в пам’яті кілька повнорозмірних RGB-прев’ю DSLR. Capture-фаза також має обмежений wall-clock budget, а наступна коротка витримка вибирається за фоном/p99/saturation/кількістю зір; gain/ISO автоматично не змінюється.

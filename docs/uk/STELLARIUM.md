@@ -26,3 +26,7 @@ REST: `GET/POST /api/v1/integrations/stellarium`.
 ## Безпека
 
 Міст використовує те саме активне монтування і підпорядковується locks та hardware limits. Не відкривайте TCP-порт напряму в Інтернет; використовуйте LAN/VPN.
+
+## Live position
+
+The bridge publishes the active mount position to Stellarium every 500 ms and sends an immediate position update when a Stellarium client connects. The packet is normalized to J2000. Raw-axis EQDrive needs one OAL Sync before a valid encoder-to-sky position exists.

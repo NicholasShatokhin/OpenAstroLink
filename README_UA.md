@@ -1,7 +1,51 @@
 # OpenAstroSuite / OpenAstroLink
 
 
-**Поточний реліз: v0.2.10.30 — стабільність adaptive solve + гістограма прев’ю**
+**Поточний пакет: v0.2.10.35.1 — MSVC build hotfix для ZWO ASI (внутрішня OAS-версія лишається 0.2.10.35)**
+
+## v0.2.10.35.1 — MSVC build hotfix для ZWO ASI
+
+- Виправлено C++ most-vexing-parse у новому ZWO ASI Live View: MSVC трактував `std::vector<unsigned char> buffer(size_t(bytes));` як декларацію функції, тому повідомлення про `.data()` та кількість аргументів `ASIGetVideoData` були вторинними й оманливими.
+- Буфер Live View тепер створюється однозначно через default construction + `resize(static_cast<std::size_t>(bytes))`.
+- Додано `tools/zwo_asi_sdk_compile_check.py`, який реально syntax-компілює весь native ZWO ASI driver проти API-shape stub із чотириаргументним контрактом `ASIGetVideoData`.
+
+## v0.2.10.35 — preview автофокуса, опційний debayer та синхронні координати цілі
+
+- Під час autofocus основна панель зображення отримує operational preview для кожної позиції фокусера. На вкладку Focus додано ручний jog `-- / - / STOP / + / ++` із налаштовуваним кроком.
+- Scene autofocus використовує метрику без нормалізації кожного кадру min/max, відкидає пласкі криві, розширює coarse scan якщо максимум потрапив на край і не замінює сильний coarse-пік слабшим fine-піком.
+- Debayer у Live View опційний і працює лише для preview. `AUTO` бере CFA-патерн із metadata драйвера; RGGB/BGGR/GRBG/GBRG можна задати вручну для будь-якого одноканального Bayer-джерела. QHY читає Bayer sequence через SDK `CAM_COLOR`, ZWO ASI — через `BayerPattern`. Science FITS/RAW не змінюється.
+- Пересвічений або недоекспонований кадр вважається валідним кадром; це лише warning якості експозиції, а не помилка камери/USB.
+- На Mount додані синхронні editable-поля J2000, JNow, Az/Alt і Galactic l/b. Зміна будь-якої системи перераховує всі інші для поточного UTC та координат обсерваторії; GOTO/Sync всередині канонічно використовують J2000.
+- Додано preset Полярної та явний workflow Park → відома небесна точка/plate solve → Sync → Stellarium/GOTO. Mechanical Park сам по собі не є sky Sync.
+
+## v0.2.10.34 — стабілізація QHY Live View та false-disconnect fix
+
+- QHY Live View тепер використовує справжній continuous-stream шлях SDK (`SetQHYCCDStreamMode(...,1)` / `BeginQHYCCDLive` / `GetQHYCCDLiveFrame` / `StopQHYCCDLive`) замість псевдовідео через серійні single-frame exposure. Після Stop драйвер перевідкриває камеру у single-frame mode, тому звичайний Capture/Autofocus має працювати одразу після Live View.
+- Фоновий health polling тепер пропускає ресурси, зайняті operation. Для QHY прибрано періодичний `GetQHYCCDChipInfo`; використовується легший idle-only probe, а `device.disconnected` генерується лише після трьох послідовних помилок, щоб transient SDK failure не виглядав як фізичне USB-від'єднання.
+- Геометрія сенсора native-камери кешується під час connect, тому після кожного readout більше немає зайвого vendor capability call.
+- Денний стартовий профіль Live/Finder: 1 ms, gain 0, 2x2, 5 fps. GUI окремо попереджає, якщо кадр майже повністю білий або чорний.
+- Скасування QHY Live View більше не викликає single-frame `camera.abortExposure`; stream сам виходить із циклу та коректно виконує `StopQHYCCDLive`.
+- Remote GUI тепер передає `saveRaw` / `savePath` через HTTP, тому звичайний користувацький QHY Capture на віддаленій node знову створює FITS. Live View та autofocus кадри залишаються preview-only і на диск автоматично не пишуться.
+
+## v0.2.10.33 — Live View, Scene Autofocus та юстування шукача
+
+- Додано node-local operation `camera.live-view`, доступну через OAL HTTP/WebSocket. Вона безперервно отримує короткі preview-кадри під camera lock і ніколи не зберігає їх як science-файли. Типові GUI-параметри: 50 ms, 2x2 bin, 5 fps для QHY/ASI-подібних камер.
+- Додано вкладку **Live / Finder** з auto-stretch, центральним перехрестям, підсвічуванням найяскравішої області та показом її зміщення від центра в пікселях.
+- Додано п'ятикроковий **Finder Alignment wizard**: далекий денний об'єкт -> Scene autofocus -> центрування головної труби -> регулювання шукача -> перевірка.
+- Додано **Scene autofocus** для наземних, місячних і планетних структур. Він використовує градієнтну/edge-energy метрику та окремі exposure/gain параметри, тому зорі не потрібні.
+- Star autofocus тепер має мінімальну кількість зір і повертає `No suitable stars detected`, а не вибирає максимум шуму при порожньому полі.
+- Для remote Live View додано невеликий RAM-cache preview-кадрів, щоб GUI не втрачав кадри через гонку з наступним frameReady.
+- Серійні DSLR-знімки Canon не використовуються як псевдо-Live View, щоб не зношувати затвор. Для Canon потрібен окремий EDSDK EVF transport.
+- Додано початковий статичний сайт у `site/` для `openastro.link`: англійська канонічна сторінка та українське дзеркало. DNS/deploy застосунок не змінює.
+
+## v0.2.10.32 — safety-first HIL-фікси обладнання
+
+- Для активних native QHY, Gemini EAF та EQDrive додано легкі фонові health-probe. Фізичне від’єднання USB/serial тепер генерує `device.disconnected`, скасовує operation, прибирає stale connected-об’єкт зі state та оновлює каталог лише відповідного драйвера. Persisted binding для повторного auto-connect зберігається.
+- Звичайний користувацький Capture тепер просить зберігати science-файл. Для камер, що публікують лише host-frame (зокрема QHY), OAL Core записує FITS у `Pictures/OpenAstroLink/<VENDOR>/`; Canon як і раніше зберігає native CR2/CR3. Тимчасові кадри autofocus/adaptive solve автоматично не пишуться.
+- EQDrive `ABORT` використовує instant-stop Motor Controller (`:L`) із fallback на звичайний stop та перевіряє фактичну зупинку обох осей. Explicit disconnect також спершу намагається зупинити рух.
+- Mechanical Park для native mount вимкнений, доки користувач явно не збереже поточні безпечні фізичні осі як Park. Зняття прапорця Park під час паркування тепер викликає фізичний abort. Небезпечну кнопку відновлення універсального `90°,0°` прибрано.
+- UI Sync прямо пояснює, що телескоп вже має фізично дивитися у введені координати; додано `Sync mount to last successful plate solve` і швидкі кнопки реверсу Axis 1/Axis 2 для HIL-калібрування.
+- Після першого long-slew HIL, який показав некваліфіковану орієнтацію осей конкретної установки, тимчасово повернуто 15° qualification envelope для sky-GOTO. Mechanical Park має окрему явно відкалібровану raw-axis ціль.
 
 HIL EOS 550D показав, що EDSDK може надіслати `camera-added` раніше, ніж камера з’явиться у `EdsGetCameraList()`. Тому v0.2.10.29 замінює миттєвий одноразовий scan на обмежену debounced-послідовність повторів лише для Canon. Якщо звичайні повтори й далі бачать нуль пристроїв, останній fallback перезавантажує тільки неактивний `oal.canon` EDSDK driver і сканує його знову. Періодичного vendor polling немає. ISO/gain, Bulb, повнорозмірний operational preview та збереження CR2/CR3 не змінені.
 

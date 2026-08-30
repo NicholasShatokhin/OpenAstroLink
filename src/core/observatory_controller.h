@@ -48,6 +48,9 @@ public:
     // Preferred UI/API path: exposure is an operation and returns immediately.
     virtual QString startCapture(const ExposureRequest &request, QString *error = nullptr) = 0;
     virtual QString startGuideCapture(const ExposureRequest &request, QString *error = nullptr) = 0;
+    // Continuous operational preview. The core owns the camera resource until
+    // the returned operation is cancelled. Live frames are never science-saved.
+    virtual QString startLiveView(const LiveViewRequest &request, QString *error = nullptr) = 0;
     virtual SolveResult solveLast(const SolveHint &hint = {}) = 0;
     virtual QString startAdaptiveSolve(const AdaptiveSolveRequest &request, QString *error = nullptr) = 0;
     virtual AutofocusResult autofocus(const AutofocusRequest &request) = 0;
@@ -68,6 +71,7 @@ public:
     virtual bool setMountTracking(bool enabled, QString *error = nullptr) = 0;
     virtual bool parkMount(bool parked, QString *error = nullptr) = 0;
     virtual bool pulseGuide(GuideDirection direction, int durationMs, QString *error = nullptr) = 0;
+    virtual bool manualMountSlew(int axis1Direction, int axis2Direction, int rateLevel, QString *error = nullptr) = 0;
 
     virtual GuidingStatus startGuiding() = 0;
     virtual GuidingStatus stopGuiding() = 0;
