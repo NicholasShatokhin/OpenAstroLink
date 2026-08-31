@@ -1,7 +1,33 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.38 — mount site normalization, sky-angle safety and shared persistent Park
 
-**Current package: v0.2.10.35.1 — ZWO ASI MSVC build hotfix (core OAS version remains 0.2.10.35)**
+- Fixed native near-pole GOTO safety semantics: the user limit is now the **true angular separation on the sky**, not raw RA/DEC motor-axis rotation. Near the celestial pole a 3–5° sky move may legitimately require >100° of RA-axis rotation; the native transport keeps a separate 180° mechanical hard cap. `maxGotoSkyDeltaDeg` is the preferred API name while `maxGotoAxisDeltaDeg` remains a compatibility alias.
+- Classic ASCOM now automatically checks its own `SiteLatitude/SiteLongitude` against the OAL observatory profile on connect and before every GOTO. If the driver allows site writes, OAL pushes the canonical site/time automatically. If EQMOD rejects writes, GOTO is blocked with an explicit instruction to enable **ASCOM Options → Allow Site Writes** or configure the same site in EQMOD Properties.
+- Classic ASCOM diagnostics now include driver-reported Azimuth, Altitude and SiderealTime in addition to RA/DEC, pier side, tracking, site and UTC. This makes East/West geometry disagreements directly visible in the node log.
+- ASCOM `EquatorialSystem` is decoded according to the standard (`Topocentric=1`, `J2000=2`). Legacy EQMOD commonly advertises `equOther=0`; for `EQMOD.*` OAL uses an explicit compatibility assumption of topocentric/JNow and logs that assumption. Selecting an explicit JNOW or J2000 epoch in EQMOD Setup is still recommended.
+- Added a backend-neutral **Calibrate current physical pose as persistent Home / Park** action. Native raw-axis mounts persist the same pose as OAL Home+Park and enable auto-Home restore; Classic ASCOM uses the standard `CanSetPark/SetPark` mechanism. Calibrate each backend once at the same physical pose (without moving between backend switches) and the park pose remains persistent thereafter.
+- Native Axis1/Axis2 inversion controls are explicitly native-only; they are blocked for Classic ASCOM because EQMOD/ASCOM owns its own motor-to-sky transform.
+- Existing v0.37 behavior remains: repeatable native Home can restore the sky model on connect, operational profile changes preserve Sync, GOTO can auto-unpark, and the Mount tab is vertically scrollable.
+
+**Current package: v0.2.10.38 — mount site normalization, sky-angle GOTO safety, shared persistent Home/Park**
+
+## v0.2.10.36.1 package hotfix — Qt 6.10 QTimer signal call
+
+**Package hotfix:** fixes the Windows Qt 6.10/MSVC build failure caused by explicitly calling `QTimer::timeout()`. Core/protocol version remains `0.2.10.36`; no runtime behavior or protocol schema changed.
+
+
+## v0.2.10.36 Mount diagnostics, SER and tracking-rate HIL
+
+- Live/Finder can optionally record the raw pre-debayer stream to SER, preserving Bayer/mono science pixels while the GUI remains independently stretched/debayered.
+- Added optional Mil-Dot and angular measurement grids to Live View. The angular grid uses the optical profile pixel scale; Mil-Dot spacing is one milliradian.
+- Mount tracking now exposes Sidereal, Lunar and Solar rates. Lunar mode is the appropriate first test when keeping the Moon centered; sidereal tracking intentionally follows the stellar sky instead.
+- Native EQDrive raw-axis GOTO safety is configurable (0.1–180°) and is exposed on the Mount tab. The conservative default remains 15° until the installation axis mapping is qualified.
+- Mount GOTO/Sync/connect/tracking now log UTC, local time, site, LST, J2000, JNow, Az/Alt, spherical sky separation, pier side, raw axes and backend diagnostics. Near-pole Sync emits an explicit warning because RA is poorly conditioned close to the celestial pole.
+- Classic ASCOM status is marked coordinate-valid so its live RA/DEC can reach Stellarium. ASCOM diagnostics include its own site/time/alignment/tracking-rate values, and the Mount tab can explicitly push the OAL site and UTC to writable ASCOM drivers.
+- Remote 10-fps Live View fetches the node's latest frame rather than stale per-frame IDs, removing preview-cache races seen during long QHY streams.
+
+
 
 ## v0.2.10.35.1 ZWO ASI MSVC build hotfix
 

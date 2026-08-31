@@ -14,8 +14,25 @@ enum class ConnectionState { Disconnected, Connecting, Connected, Error };
 enum class DeviceKind { Camera, Mount, Focuser, Guider, Solver, Unknown };
 enum class AutofocusMode { Stars, Scene, Planet, Bahtinov };
 enum class GuideDirection { North, South, East, West };
+enum class TrackingRate { Sidereal, Lunar, Solar };
 enum class EquatorialFrame { J2000, JNow };
 enum class MountGeometryType { GermanEquatorial, ForkEquatorial, AltAzimuth, AltAzimuthDerotator, EquatorialPlatform, CustomTwoAxis };
+
+
+inline QString trackingRateName(TrackingRate rate) {
+    switch (rate) {
+    case TrackingRate::Lunar: return "lunar";
+    case TrackingRate::Solar: return "solar";
+    case TrackingRate::Sidereal: default: return "sidereal";
+    }
+}
+inline TrackingRate trackingRateFromString(const QString &text, TrackingRate fallback = TrackingRate::Sidereal) {
+    const QString s = text.trimmed().toLower();
+    if (s == "lunar" || s == "moon") return TrackingRate::Lunar;
+    if (s == "solar" || s == "sun") return TrackingRate::Solar;
+    if (s == "sidereal" || s == "stars") return TrackingRate::Sidereal;
+    return fallback;
+}
 
 struct MountGeometryConfig {
     MountGeometryType type{MountGeometryType::GermanEquatorial};
@@ -26,12 +43,27 @@ struct MountGeometryConfig {
     int axis1Sign{1};
     int axis2Sign{1};
     QString preferredPierSide{"east"};
+    // Raw controller coordinates of the repeatable mechanical Home pose.
+    // For a GEM this is the conventional counterweight-down pose with the
+    // telescope/DEC axis aligned with the celestial pole.  When customHome
+    // and autoHomeSync are enabled, Core can restore a usable sky model on
+    // connect without asking for a manual near-pole Sync every session.
     double homeAxis1Deg{90.0};
     double homeAxis2Deg{0.0};
+    bool customHome{false};
+    bool autoHomeSync{false};
+    double homeToleranceDeg{2.0};
     double parkAxis1Deg{90.0};
     double parkAxis2Deg{0.0};
     bool customPark{false};
     bool allowAutomaticPierFlip{false};
+    // User-controlled sky-separation safety envelope for coordinate GOTO.
+    // The legacy field name is kept for wire/settings compatibility, but from
+    // v0.2.10.38 its value is interpreted as ANGULAR SKY SEPARATION, not raw
+    // motor-axis rotation. Near the celestial pole a few degrees on the sky can
+    // legitimately require a large RA-axis rotation, so the raw transport keeps
+    // a separate hard mechanical ceiling of 180 deg.
+    double maxGotoAxisDeltaDeg{15.0};
 };
 
 struct MechanicalAxes {
@@ -175,6 +207,7 @@ struct MountStatus {
     QString pierSide{"unknown"};
     MechanicalAxes axes{};
     QString geometryType{"unknown"};
+    QJsonObject diagnostics{};
 };
 
 struct FocuserStatus {
@@ -240,6 +273,10 @@ struct LiveViewRequest {
     // feature camera-vendor-neutral even when a driver cannot identify CFA.
     bool debayer{false};
     BayerPattern bayerPattern{BayerPattern::Auto};
+    // Optional raw live-stream recording. SER is written on the node before
+    // preview-only debayer/stretch so science pixels are preserved.
+    bool recordSer{false};
+    QString serPath{};
 };
 
 struct AutofocusResult {

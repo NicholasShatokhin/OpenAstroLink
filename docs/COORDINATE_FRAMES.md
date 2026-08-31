@@ -15,7 +15,7 @@ The core uses the standard IAU-1976 / Meeus J2000-to-date precession rotation. I
 
 ## Classic ASCOM
 
-Classic ASCOM drivers expose `EquatorialSystem`. The OAL ASCOM helper reads it. `equJ2000` is passed through; `equTopocentric` is treated as an of-date mount frame and converted at the compatibility boundary. Other legacy ASCOM frames remain pass-through/compatibility territory until a dedicated transform is implemented.
+Classic ASCOM drivers expose `EquatorialSystem`. OAL decodes the standard values: `equJ2000=2` is J2000 and `equTopocentric=1` is the current topocentric/of-date frame (approximated by the current OAL JNow transform). EQMOD commonly advertises legacy `equOther=0`; for `EQMOD.*`, OAL explicitly treats that as a topocentric/JNow compatibility fallback and exposes the assumption in diagnostics. Production setups should select an explicit JNOW or J2000 epoch in EQMOD Setup.
 
 ## Stellarium
 

@@ -1,5 +1,6 @@
 #include "core/application_controller.h"
 #include "core/equatorial_frames.h"
+#include "core/ser_writer.h"
 #include "algorithms/pattern_plate_solver.h"
 #include "algorithms/astap_solver.h"
 #include "algorithms/neural_solver.h"
@@ -29,6 +30,7 @@
 #include <QElapsedTimer>
 #include <QDir>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QUrl>
 #include <QTimer>
 #include <QThread>
@@ -36,6 +38,7 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QSysInfo>
+#include <QStandardPaths>
 #include <opencv2/imgproc.hpp>
 #ifdef OAS_HAVE_POSITIONING
 #include <QGeoPositionInfoSource>
@@ -46,6 +49,26 @@
 
 namespace oas {
 namespace {
+double skyAngularSeparationDeg(const EquatorialCoord&a,const EquatorialCoord&b){
+    constexpr double d2r=3.14159265358979323846/180.0;
+    const double da=(b.raDeg-a.raDeg)*d2r,d1=a.decDeg*d2r,d2=b.decDeg*d2r;
+    const double c=std::sin(d1)*std::sin(d2)+std::cos(d1)*std::cos(d2)*std::cos(da);
+    return std::acos(std::clamp(c,-1.0,1.0))/d2r;
+}
+QString compactJson(const QJsonObject&o){return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));}
+QString mountDiagnosticSnapshot(const QString &backend,const MountStatus &st,const ObserverLocation &observer,const QDateTime &utc){
+    QStringList parts;parts<<QString("backend=%1").arg(backend)
+        <<QString("UTC=%1").arg(utc.toUTC().toString(Qt::ISODateWithMs))
+        <<QString("local=%1").arg(utc.toLocalTime().toString(Qt::ISODateWithMs))
+        <<QString("site=(%1,%2,%3m)").arg(observer.latitudeDeg,0,'f',6).arg(observer.longitudeDeg,0,'f',6).arg(observer.elevationM,0,'f',1)
+        <<QString("LST=%1deg/%2h").arg(localSiderealTimeDeg(observer,utc),0,'f',6).arg(localSiderealTimeDeg(observer,utc)/15.0,0,'f',6)
+        <<QString("tracking=%1 slewing=%2 parked=%3 pier=%4 geometry=%5").arg(st.tracking?"ON":"OFF").arg(st.slewing?"YES":"NO").arg(st.parked?"YES":"NO").arg(st.pierSide,st.geometryType);
+    if(st.coordinateValid){const auto j2000=convertEquatorialFrame(st.coordinate,EquatorialFrame::J2000,utc);const auto jnow=convertEquatorialFrame(j2000,EquatorialFrame::JNow,utc);const auto hor=equatorialToHorizontal(j2000,observer,utc);parts<<QString("J2000=(%1,%2) JNow=(%3,%4) AzAlt=(%5,%6)").arg(j2000.raDeg,0,'f',6).arg(j2000.decDeg,0,'f',6).arg(jnow.raDeg,0,'f',6).arg(jnow.decDeg,0,'f',6).arg(hor.azDeg,0,'f',6).arg(hor.altDeg,0,'f',6);}
+    else parts<<"sky=INVALID/UNSYNCED";
+    if(st.axes.valid)parts<<QString("axes=(%1,%2)").arg(st.axes.axis1Deg,0,'f',6).arg(st.axes.axis2Deg,0,'f',6);
+    if(!st.diagnostics.isEmpty())parts<<QString("backendDiagnostics=%1").arg(compactJson(st.diagnostics));
+    return parts.join(" | ");
+}
 QJsonObject solveQualityJson(const SolveFrameQuality &q){
     return {{"detectedStars",q.detectedStars},{"background",q.background},{"noiseSigma",q.noiseSigma},
             {"p99",q.p99},{"saturationFraction",q.saturationFraction},{"medianHfrPx",q.medianHfrPx}};
@@ -212,8 +235,9 @@ public:
     bool slewTo(const EquatorialCoord&t,QString*e=nullptr)override{return direct_?inner_->slewTo(t,e):invokeOnControllerThread(owner_,[this,&t,e](){return inner_->slewTo(t,e);});}
     bool abortMotion(QString*e=nullptr)override{return direct_?inner_->abortMotion(e):invokeOnControllerThread(owner_,[this,e](){return inner_->abortMotion(e);});}
     bool syncTo(const EquatorialCoord&t,QString*e=nullptr)override{return direct_?inner_->syncTo(t,e):invokeOnControllerThread(owner_,[this,&t,e](){return inner_->syncTo(t,e);});}
-    bool setTracking(bool v,QString*e=nullptr)override{return direct_?inner_->setTracking(v,e):invokeOnControllerThread(owner_,[this,v,e](){return inner_->setTracking(v,e);});}
+    bool setTracking(bool v,TrackingRate rate=TrackingRate::Sidereal,QString*e=nullptr)override{return direct_?inner_->setTracking(v,rate,e):invokeOnControllerThread(owner_,[this,v,rate,e](){return inner_->setTracking(v,rate,e);});}
     bool park(bool v,QString*e=nullptr)override{return direct_?inner_->park(v,e):invokeOnControllerThread(owner_,[this,v,e](){return inner_->park(v,e);});}
+    bool setCurrentParkPosition(QString*e=nullptr)override{return direct_?inner_->setCurrentParkPosition(e):invokeOnControllerThread(owner_,[this,e](){return inner_->setCurrentParkPosition(e);});}
     bool pulseGuide(GuideDirection d,int ms,QString*e=nullptr)override{return direct_?inner_->pulseGuide(d,ms,e):invokeOnControllerThread(owner_,[this,d,ms,e](){return inner_->pulseGuide(d,ms,e);});}
 private:QObject *owner_;std::shared_ptr<IMount> inner_;bool direct_{false};
 };
@@ -368,7 +392,19 @@ void ApplicationController::shutdown(){
     if(driverLoader_)driverLoader_->clear();
     emit logMessage("OpenAstroLink node shutdown complete");
 }
-void ApplicationController::setProfile(const TelescopeProfile&p){profile_=p;settings_.saveProfile(p);if(mount_)mount_->configureGeometry(profile_.mount,profile_.observer);emit profileChanged();emit logMessage("Mount geometry/profile updated; native/direct mounts require a fresh Sync after geometry changes");emitState();}
+void ApplicationController::setProfile(const TelescopeProfile&p){
+    const auto old=profile_;
+    const bool transformChanged =
+        old.mount.type!=p.mount.type || old.mount.axis1Sign!=p.mount.axis1Sign || old.mount.axis2Sign!=p.mount.axis2Sign ||
+        old.mount.preferredPierSide.compare(p.mount.preferredPierSide,Qt::CaseInsensitive)!=0 ||
+        std::abs(old.observer.latitudeDeg-p.observer.latitudeDeg)>1e-10 ||
+        std::abs(old.observer.longitudeDeg-p.observer.longitudeDeg)>1e-10;
+    profile_=p;settings_.saveProfile(p);if(mount_)mount_->configureGeometry(profile_.mount,profile_.observer);
+    emit profileChanged();
+    if(transformChanged)emit logMessage("Mount coordinate-transform profile changed; native/direct mount Sync is invalidated");
+    else emit logMessage("Mount operational/profile settings updated; existing Sync preserved");
+    emitState();
+}
 QStringList ApplicationController::cameraBackends()const{QStringList x=nativeBackendsFor(driverLoader_,"camera");x<<"simulated"<<"opencv"<<"oal";
 #ifdef OAS_HAVE_GPHOTO2
 x<<"canon-gphoto2";
@@ -420,16 +456,54 @@ bool ApplicationController::connectGuideCamera(const QString&b,const QString&e,Q
     if(!d->connectDevice(err))return false;guideCamera_=std::move(d);settings_.saveGuideCameraBinding({guideCamera_->backendName(),e,true});
     if(!note.isEmpty())emit logMessage(note);emit logMessage("Guide camera connected: "+guideCamera_->displayName());emitState();return true;
 }
-bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"mount"},err))return false;std::shared_ptr<IMount>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"mount",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalMount>(driverLoader_,desc,profile_.mount,profile_.observer);}
-else if(b=="simulated")d=std::make_shared<SimulatedMount>();else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);else if(b=="synscan-app")d=std::make_shared<SynScanAppMount>(e);else if(b=="synscan-wifi")d=std::make_shared<SynScanNetworkMount>(e,profile_.mount,profile_.observer);
+bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){
+    if(!ensureResourcesAvailable({"mount"},err))return false;
+    std::shared_ptr<IMount>d;QString driverId,deviceId;
+    if(parseNativeBackendKey(b,driverId,deviceId)){
+        auto desc=nativeDescriptor(driverLoader_,b,"mount",err);if(desc.isEmpty())return false;
+        d=std::make_shared<NativeOalMount>(driverLoader_,desc,profile_.mount,profile_.observer);
+    }
+    else if(b=="simulated")d=std::make_shared<SimulatedMount>();
+    else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);
+    else if(b=="synscan-app")d=std::make_shared<SynScanAppMount>(e);
+    else if(b=="synscan-wifi")d=std::make_shared<SynScanNetworkMount>(e,profile_.mount,profile_.observer);
 #ifdef OAS_HAVE_ASCOM_CLASSIC
-else if(b=="ascom-classic")d=std::make_shared<AscomClassicMount>(e);
+    else if(b=="ascom-classic")d=std::make_shared<AscomClassicMount>(e);
 #endif
-else if(b=="ascom-alpaca")d=std::make_shared<AlpacaMount>(QUrl(e));else if(b=="oal")d=std::make_shared<OalMountClient>(QUrl(e));
+    else if(b=="ascom-alpaca")d=std::make_shared<AlpacaMount>(QUrl(e));
+    else if(b=="oal")d=std::make_shared<OalMountClient>(QUrl(e));
 #ifdef OAS_HAVE_INDI
-else if(b=="indi")d=std::make_shared<IndiMount>(e);
+    else if(b=="indi")d=std::make_shared<IndiMount>(e);
 #endif
-else{if(err)*err="Unknown mount backend";return false;}if(!d->connectDevice(err))return false;mount_=std::move(d);settings_.saveMountBinding({mount_->backendName(),e,true});emit logMessage("Mount connected: "+mount_->displayName());emitState();return true;}
+    else{if(err)*err="Unknown mount backend";return false;}
+    if(!d->connectDevice(err))return false;
+    mount_=std::move(d);settings_.saveMountBinding({mount_->backendName(),e,true});
+    emit logMessage("Mount connected: "+mount_->displayName());
+
+    // Classic ASCOM/EQMOD owns its own horizon/hour-angle transform. A stale
+    // site can mirror East/West even when the RA/DEC target is correct, so OAL
+    // automatically pushes the canonical profile site/time on connect.
+    if(mount_->backendName()=="ascom-classic"){
+        QString autoSiteError;
+        if(!ensureMountBackendSiteTime(&autoSiteError))
+            emit logMessage("MOUNT SITE AUTO-SYNC WARNING: "+autoSiteError);
+    }
+
+    {MountStatus st;QString se;if(mountStatus(st,&se)){
+        emit logMessage("Mount diagnostic CONNECT: "+mountDiagnosticSnapshot(mount_->backendName(),st,profile_.observer,QDateTime::currentDateTimeUtc()));
+        if(!st.diagnostics.isEmpty()){
+            const QString align=st.diagnostics.value("alignmentSource").toString();
+            if(align=="auto-home")emit logMessage("Mount automatic Home alignment restored: "+st.diagnostics.value("homeAlignmentNote").toString());
+            else if(st.diagnostics.value("autoHomeSyncEnabled").toBool()&&!st.coordinateValid)emit logMessage("Mount automatic Home alignment not active: "+st.diagnostics.value("homeAlignmentNote").toString());
+            const double blat=st.diagnostics.value("siteLatitude").toDouble(999.0),blon=st.diagnostics.value("siteLongitude").toDouble(999.0);
+            if(std::abs(blat)<=90.0&&std::abs(blon)<=180.0&&(std::abs(blat-profile_.observer.latitudeDeg)>0.01||std::abs(blon-profile_.observer.longitudeDeg)>0.01))
+                emit logMessage(QString("MOUNT SITE WARNING: backend site (%1,%2) differs from OpenAstroLink profile (%3,%4). Automatic synchronization was attempted; do not trust ASCOM GOTO until this warning disappears.").arg(blat,0,'f',6).arg(blon,0,'f',6).arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6));
+            if(st.diagnostics.value("equatorialFrameAssumed").toBool())
+                emit logMessage("ASCOM EQUATORIAL FRAME WARNING: "+st.diagnostics.value("equatorialFrameAssumption").toString()+". For EQMOD, explicitly selecting JNOW or J2000 in EQMOD ASCOM Setup is recommended.");
+        }
+    }else emit logMessage("Mount diagnostic CONNECT status unavailable: "+se);}
+    emitState();return true;
+}
 bool ApplicationController::connectFocuser(const QString&b,const QString&e,QString*err){if(!ensureResourcesAvailable({"focuser"},err))return false;std::shared_ptr<IFocuser>d;QString driverId,deviceId;if(parseNativeBackendKey(b,driverId,deviceId)){auto desc=nativeDescriptor(driverLoader_,b,"focuser",err);if(desc.isEmpty())return false;d=std::make_shared<NativeOalFocuser>(driverLoader_,desc);}
 else if(b=="simulated")d=std::make_shared<SimulatedFocuser>();else if(b=="gemini-eaf")d=std::make_shared<GeminiEafFocuser>(e);else if(b=="ascom-alpaca")d=std::make_shared<AlpacaFocuser>(QUrl(e));else if(b=="oal")d=std::make_shared<OalFocuserClient>(QUrl(e));
 #ifdef OAS_HAVE_INDI
@@ -439,6 +513,41 @@ else{if(err)*err="Unknown focuser backend";return false;}if(!d->connectDevice(er
 bool ApplicationController::ensureResourcesAvailable(const QStringList&resources,QString*error)const{
     for(const auto &resource:resources){QString owner;if(operations_.isResourceLocked(resource,&owner)){if(error)*error=QString("Resource %1 is locked by operation %2").arg(resource,owner);return false;}}
     return true;
+}
+bool ApplicationController::ensureMountBackendSiteTime(QString*error){
+    if(!mount_||mount_->backendName()!="ascom-classic"){if(error)error->clear();return true;}
+    MountStatus st;QString statusError;
+    bool mismatch=false;
+    if(mount_->status(st,&statusError)){
+        const double lat=st.diagnostics.value("siteLatitude").toDouble(999.0);
+        const double lon=st.diagnostics.value("siteLongitude").toDouble(999.0);
+        if(std::abs(lat)<=90.0&&std::abs(lon)<=180.0)
+            mismatch=std::abs(lat-profile_.observer.latitudeDeg)>0.01||std::abs(lon-profile_.observer.longitudeDeg)>0.01;
+    }
+    if(!mismatch){if(error)error->clear();return true;}
+    QString applyError;
+    const auto utc=QDateTime::currentDateTimeUtc();
+    if(!mount_->setSiteTime(profile_.observer,utc,&applyError)){
+        QString hint;
+        if(st.diagnostics.value("progId").toString().startsWith("EQMOD.",Qt::CaseInsensitive))
+            hint=" EQMOD normally requires 'ASCOM Options -> Allow Site Writes' to be enabled; alternatively set the same latitude/longitude in EQMOD ASCOM Setup.";
+        const QString msg=QString("ASCOM backend site differs from OAL site and automatic correction failed: %1.%2").arg(applyError,hint);
+        if(error)*error=msg;return false;
+    }
+    MountStatus after;QString verifyError;
+    if(mount_->status(after,&verifyError)){
+        const double lat=after.diagnostics.value("siteLatitude").toDouble(999.0);
+        const double lon=after.diagnostics.value("siteLongitude").toDouble(999.0);
+        if(std::abs(lat)<=90.0&&std::abs(lon)<=180.0&&
+           (std::abs(lat-profile_.observer.latitudeDeg)>0.01||std::abs(lon-profile_.observer.longitudeDeg)>0.01)){
+            const QString msg=QString("ASCOM backend ignored the requested site: backend=(%1,%2), OAL=(%3,%4)")
+                .arg(lat,0,'f',6).arg(lon,0,'f',6).arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6);
+            if(error)*error=msg;return false;
+        }
+    }
+    emit logMessage(QString("ASCOM site/time automatically synchronized from OAL profile: lat=%1 lon=%2 elev=%3m UTC=%4")
+        .arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6).arg(profile_.observer.elevationM,0,'f',1).arg(utc.toString(Qt::ISODateWithMs)));
+    if(error)error->clear();return true;
 }
 bool ApplicationController::disconnectCamera(QString*error){if(!ensureResourcesAvailable({"camera"},error))return false;if(camera_)camera_->disconnectDevice();camera_.reset();auto b=settings_.cameraBinding();b.autoConnect=false;settings_.saveCameraBinding(b);emit logMessage("Main camera disconnected");emitState();return true;}
 bool ApplicationController::disconnectGuideCamera(QString*error){if(!ensureResourcesAvailable({"camera.guide"},error))return false;if(guideCamera_)guideCamera_->disconnectDevice();guideCamera_.reset();auto b=settings_.guideCameraBinding();b.autoConnect=false;settings_.saveGuideCameraBinding(b);emit logMessage("Guide camera disconnected");emitState();return true;}
@@ -759,14 +868,14 @@ QString ApplicationController::startLiveView(const LiveViewRequest&request,QStri
     // would actuate the shutter continuously. Canon gets a dedicated EVF path
     // in a later driver revision.
     if(camera_->backendName().startsWith("native:oal.canon/")){if(error)*error="Canon live view requires the EDSDK EVF transport; repeated still captures are intentionally disabled to protect the shutter. Use QHY/ASI for finder alignment in this release.";return{};}
-    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,10.0);
+    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,10.0);if(r.recordSer&&r.serPath.trimmed().isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();r.serPath=QDir(base).filePath(QString("OpenAstroLink/SER/Live_%1.ser").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")));}
     // CFA pixels must remain on their native 1x1 lattice for software debayer.
     // Drivers that already return RGB are harmlessly passed through, but forcing
     // 1x1 here keeps raw QHY/ZWO previews color-correct across vendors.
     if(r.debayer&&(r.binX!=1||r.binY!=1)){r.binX=r.binY=1;emit logMessage("Live View debayer enabled: forcing 1x1 readout so the Bayer mosaic remains valid");}
     auto cam=camera_;
     const QString id=operations_.submit("camera.live-view",{"camera"},true,[this,cam,r](OperationContext&ctx){
-        OperationOutcome out;int frames=0;QElapsedTimer elapsed;elapsed.start();
+        OperationOutcome out;int frames=0;QElapsedTimer elapsed;elapsed.start();std::unique_ptr<SerWriter> ser;auto appendSer=[&](const CameraFrame&raw,QString&err){if(!r.recordSer)return true;if(!ser){ser=std::make_unique<SerWriter>();if(!ser->open(r.serPath,raw,profile_,&err))return false;QMetaObject::invokeMethod(this,[this,path=r.serPath](){emit logMessage("SER recording started: "+path);},Qt::QueuedConnection);}return ser->append(raw,&err);};auto closeSer=[&](){if(!ser)return;QString ce;const quint32 n=ser->frameCount();const QString path=ser->path();ser->close(&ce);QMetaObject::invokeMethod(this,[this,path,n,ce](){emit logMessage(QString("SER recording finished: %1 frames → %2%3").arg(n).arg(path,ce.isEmpty()?QString():QString(" — WARNING: "+ce)));},Qt::QueuedConnection);ser.reset();};
         const qint64 targetPeriodMs=qint64(std::lround(1000.0/r.targetFps));
         // QHY has a real SDK streaming mode. Use it instead of repeated
         // ExpQHYCCDSingleFrame/GetQHYCCDSingleFrame calls; HIL showed that
@@ -781,32 +890,34 @@ QString ApplicationController::startLiveView(const LiveViewRequest&request,QStri
             while(!ctx.isCancellationRequested()){
                 QElapsedTimer cycle;cycle.start();CameraFrame frame;QString err;
                 const int timeoutMs=int(std::clamp<qint64>(qint64(std::ceil(r.exposureSec*3000.0))+1000,1000,5000));
-                if(!native->nextNativeLiveFrame(frame,timeoutMs,&err)){if(ctx.isCancellationRequested()){stopStream();out.cancelled=true;return out;}stopStream();out.problem={{"code","LIVE_VIEW_FRAME_FAILED"},{"message",err}};return out;}
-                if(ctx.isCancellationRequested()){stopStream();out.cancelled=true;return out;}
-                QString previewNote;if(!processLivePreview(frame,r,&previewNote)){stopStream();out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
+                if(!native->nextNativeLiveFrame(frame,timeoutMs,&err)){if(ctx.isCancellationRequested()){stopStream();closeSer();out.cancelled=true;return out;}stopStream();closeSer();out.problem={{"code","LIVE_VIEW_FRAME_FAILED"},{"message",err}};return out;}
+                if(ctx.isCancellationRequested()){stopStream();closeSer();out.cancelled=true;return out;}
+                QString serError;if(!appendSer(frame,serError)){stopStream();closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}
+                QString previewNote;if(!processLivePreview(frame,r,&previewNote)){stopStream();closeSer();out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
                 frame.id="live-"+frame.id;frame.scienceFilePath.clear();++frames;
                 QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame,false,false);},Qt::BlockingQueuedConnection);
                 const double actualFps=elapsed.elapsed()>0?1000.0*double(frames)/double(elapsed.elapsed()):0.0;
                 ctx.reportProgress(0.0,"live",{{"frames",frames},{"actualFps",actualFps},{"targetFps",r.targetFps},{"frameId",frame.id},{"transport","native-stream"}});
                 qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}
             }
-            stopStream();out.cancelled=true;return out;
+            stopStream();closeSer();out.cancelled=true;return out;
         }
         ThreadMarshalledCamera proxy(this,cam);
         while(!ctx.isCancellationRequested()){
             QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.binX=r.binX;e.binY=r.binY;e.saveRaw=false;CameraFrame frame;QString err;
-            if(!proxy.capture(e,frame,&err)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","LIVE_VIEW_CAPTURE_FAILED"},{"message",err}};return out;}
-            if(ctx.isCancellationRequested()){out.cancelled=true;return out;}
-            QString previewNote;if(!processLivePreview(frame,r,&previewNote)){out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
+            if(!proxy.capture(e,frame,&err)){if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}closeSer();out.problem={{"code","LIVE_VIEW_CAPTURE_FAILED"},{"message",err}};return out;}
+            if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}
+            QString serError;if(!appendSer(frame,serError)){closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}
+            QString previewNote;if(!processLivePreview(frame,r,&previewNote)){closeSer();out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
             frame.id="live-"+frame.id;frame.scienceFilePath.clear();++frames;
             QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame,false,false);},Qt::BlockingQueuedConnection);
             const double actualFps=elapsed.elapsed()>0?1000.0*double(frames)/double(elapsed.elapsed()):0.0;
             ctx.reportProgress(0.0,"live",{{"frames",frames},{"actualFps",actualFps},{"targetFps",r.targetFps},{"frameId",frame.id},{"transport","repeated-capture"}});
             qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}
         }
-        out.cancelled=true;return out;
+        closeSer();out.cancelled=true;return out;
     });
-    emit logMessage(QString("Live View operation accepted: %1 — %2 s, gain %3, target %4 fps, debayer=%5 %6").arg(id).arg(r.exposureSec,0,'g',5).arg(r.gain).arg(r.targetFps,0,'g',3).arg(r.debayer?"ON":"OFF").arg(bayerPatternName(r.bayerPattern)));return id;
+    emit logMessage(QString("Live View operation accepted: %1 — %2 s, gain %3, target %4 fps, debayer=%5 %6").arg(id).arg(r.exposureSec,0,'g',5).arg(r.gain).arg(r.targetFps,0,'g',3).arg(r.debayer?"ON":"OFF").arg(bayerPatternName(r.bayerPattern))+(r.recordSer?QString(" SER=%1").arg(r.serPath):QString()));return id;
 }
 SolveResult ApplicationController::solveLast(const SolveHint&h){if(lastFrame_.image.empty()){lastSolve_.message="No captured frame";lastSolve_.success=false;}else lastSolve_=solver_->solve(lastFrame_,profile_,h);auto j=solveToJson(lastSolve_);QJsonArray stars;for(const auto&s:lastSolve_.imageStars)stars.append(QJsonObject{{"x",s.positionPx.x},{"y",s.positionPx.y},{"flux",s.flux},{"peak",s.peak},{"hfrPx",s.hfrPx}});j["imageStars"]=stars;emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();return lastSolve_;}
 QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&request,QString*error){
@@ -909,9 +1020,45 @@ void ApplicationController::requestSystemLocation(){
     emit logMessage("Qt Positioning was not available at build time; enter location manually");
 #endif
 }
-bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);MountStatus before;QString statusError;if(mountStatus(before,&statusError)&&before.coordinateValid){double dra=target.raDeg-before.coordinate.raDeg;while(dra>180.0)dra-=360.0;while(dra<-180.0)dra+=360.0;QString pierError;const QString destinationPier=mount_->destinationPierSide(target,&pierError);emit logMessage(QString("Mount GOTO preflight [J2000]: current RA=%1° DEC=%2° pier=%3 tracking=%4 -> target RA=%5° DEC=%6° (short dRA=%7° dDEC=%8°%9)").arg(before.coordinate.raDeg,0,'f',6).arg(before.coordinate.decDeg,0,'f',6).arg(before.pierSide).arg(before.tracking?"ON":"OFF").arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6).arg(dra,0,'f',6).arg(target.decDeg-before.coordinate.decDeg,0,'f',6).arg(destinationPier.isEmpty()?QString():QString(" destinationPier=%1").arg(destinationPier)));if(!pierError.isEmpty())emit logMessage("Mount DestinationSideOfPier unavailable: "+pierError);}else if(!statusError.isEmpty())emit logMessage("Mount GOTO preflight status unavailable: "+statusError);bool ok=mount_->slewTo(target,e);if(ok)emit logMessage(QString("Mount slew accepted: RA=%1°, DEC=%2° J2000 (no RA/DEC sign inversion)").arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6));emitState();return ok;}
+bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){
+    if(!ensureResourcesAvailable({"mount"},e))return false;
+    if(!mount_){if(e)*e="No mount connected";return false;}
+    if(!ensureMountBackendSiteTime(e)){emit logMessage("Mount GOTO rejected before slew: "+(e?*e:QString()));return false;}
+    const QDateTime utc=QDateTime::currentDateTimeUtc();
+    const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000,utc);
+    const auto targetJNow=convertEquatorialFrame(target,EquatorialFrame::JNow,utc);
+    const auto targetHor=equatorialToHorizontal(target,profile_.observer,utc);
+    MountStatus before;QString statusError;
+    if(mountStatus(before,&statusError)&&before.parked){QString ue;if(!mount_->park(false,&ue)){if(e)*e="Mount is parked and automatic unpark failed: "+ue;emit logMessage("Mount GOTO rejected: "+(e?*e:QString()));return false;}emit logMessage("Mount auto-unparked for GOTO");before={};statusError.clear();}
+    if(mountStatus(before,&statusError)&&before.coordinateValid){
+        double dra=target.raDeg-before.coordinate.raDeg;while(dra>180.0)dra-=360.0;while(dra<-180.0)dra+=360.0;
+        const double ddec=target.decDeg-before.coordinate.decDeg;
+        const double skySep=skyAngularSeparationDeg(before.coordinate,target);
+        const auto currentJNow=convertEquatorialFrame(before.coordinate,EquatorialFrame::JNow,utc);
+        const auto currentHor=equatorialToHorizontal(before.coordinate,profile_.observer,utc);
+        QString pierError;const QString destinationPier=mount_->destinationPierSide(target,&pierError);
+        emit logMessage(QString("Mount GOTO preflight: backend=%1 UTC=%2 site=(%3,%4,%5m) LST=%6deg | current J2000=(%7,%8) JNow=(%9,%10) AzAlt=(%11,%12) pier=%13 tracking=%14 | target J2000=(%15,%16) JNow=(%17,%18) AzAlt=(%19,%20) | short dRA=%21 dDEC=%22 skySeparation=%23deg%24")
+            .arg(mount_->backendName(),utc.toString(Qt::ISODateWithMs)).arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6).arg(profile_.observer.elevationM,0,'f',1)
+            .arg(localSiderealTimeDeg(profile_.observer,utc),0,'f',6)
+            .arg(before.coordinate.raDeg,0,'f',6).arg(before.coordinate.decDeg,0,'f',6).arg(currentJNow.raDeg,0,'f',6).arg(currentJNow.decDeg,0,'f',6).arg(currentHor.azDeg,0,'f',6).arg(currentHor.altDeg,0,'f',6)
+            .arg(before.pierSide).arg(before.tracking?"ON":"OFF")
+            .arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6).arg(targetJNow.raDeg,0,'f',6).arg(targetJNow.decDeg,0,'f',6).arg(targetHor.azDeg,0,'f',6).arg(targetHor.altDeg,0,'f',6)
+            .arg(dra,0,'f',6).arg(ddec,0,'f',6).arg(skySep,0,'f',6).arg(destinationPier.isEmpty()?QString():QString(" destinationPier=%1").arg(destinationPier)));
+        if(before.axes.valid)emit logMessage(QString("Mount GOTO native preflight: current axis1=%1deg axis2=%2deg skySafetyLimit=%3deg rawMechanicalHardCap=180deg axisSigns=(%4,%5) preferredPier=%6")
+            .arg(before.axes.axis1Deg,0,'f',6).arg(before.axes.axis2Deg,0,'f',6).arg(profile_.mount.maxGotoAxisDeltaDeg,0,'f',3).arg(profile_.mount.axis1Sign).arg(profile_.mount.axis2Sign).arg(profile_.mount.preferredPierSide));
+        if(!before.diagnostics.isEmpty())emit logMessage("Mount backend preflight diagnostics: "+compactJson(before.diagnostics));
+        if(!pierError.isEmpty())emit logMessage("Mount DestinationSideOfPier unavailable: "+pierError);
+    }else if(!statusError.isEmpty())emit logMessage("Mount GOTO preflight status unavailable: "+statusError);
+    bool ok=mount_->slewTo(target,e);
+    if(ok)emit logMessage(QString("Mount slew accepted: RA=%1deg DEC=%2deg J2000 backend=%3").arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6).arg(mount_->backendName()));
+    else emit logMessage(QString("Mount slew REJECTED/FAILED: backend=%1 target=(%2,%3) error=%4").arg(mount_->backendName()).arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6).arg(e?*e:QString()));
+    emitState();return ok;
+}
 QString ApplicationController::startMountSlew(const EquatorialCoord&t,QString*e){
-    if(!mount_){if(e)*e="No mount connected";return{};}const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);auto mount=mount_;const bool ascomDiagnostics=mount->backendName()=="ascom-classic";
+    if(!mount_){if(e)*e="No mount connected";return{};}
+    if(!ensureMountBackendSiteTime(e))return{};
+    {MountStatus st;QString se;if(mountStatus(st,&se)&&st.parked){if(!mount_->park(false,&se)){if(e)*e="Mount is parked and automatic unpark failed: "+se;return{};}emit logMessage("Mount auto-unparked for GOTO operation");}}
+    const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);auto mount=mount_;const bool ascomDiagnostics=mount->backendName()=="ascom-classic";
     const QString id=operations_.submit("mount.slew",{"mount"},true,[this,mount,target,ascomDiagnostics](OperationContext&ctx){
         ThreadMarshalledMount proxy(this,mount);QString err;OperationOutcome out;ctx.reportProgress(0.05,"commanding",{{"raDeg",target.raDeg},{"decDeg",target.decDeg},{"coordinateFrame","J2000"}});
         if(!proxy.slewTo(target,&err)){out.problem={{"code","MOUNT_SLEW_FAILED"},{"message",err}};return out;}
@@ -939,13 +1086,69 @@ QString ApplicationController::startMountSlew(const EquatorialCoord&t,QString*e)
     emit logMessage(QString("Mount slew operation accepted: %1 → RA=%2°, DEC=%3° J2000").arg(id).arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6));return id;
 }
 bool ApplicationController::abortMountMotion(QString*e){QString owner;if(operations_.isResourceLocked("mount",&owner))operations_.cancel(owner,nullptr);if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->abortMotion(e);if(ok)emit logMessage("Mount motion abort requested");emitState();return ok;}
-bool ApplicationController::syncMount(const EquatorialCoord&t,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);bool ok=mount_->syncTo(target,e);if(ok)emit logMessage(QString("Mount sync: RA=%1°, DEC=%2° J2000").arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6));emitState();return ok;}
+bool ApplicationController::syncMount(const EquatorialCoord&t,QString*e){
+    if(!ensureResourcesAvailable({"mount"},e))return false;
+    if(!mount_){if(e)*e="No mount connected";return false;}
+    const QDateTime utc=QDateTime::currentDateTimeUtc();const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000,utc);
+    if(std::abs(target.decDeg)>80.0)emit logMessage("SYNC WARNING: target is within 10deg of the celestial pole. A single near-pole Sync is a weak RA/axis-1 calibration anchor; prefer a plate-solved star field farther from the pole before trusting long native raw-axis GOTO.");
+    MountStatus before;if(mountStatus(before,nullptr))emit logMessage("Mount diagnostic BEFORE SYNC: "+mountDiagnosticSnapshot(mount_->backendName(),before,profile_.observer,utc));
+    bool ok=mount_->syncTo(target,e);
+    if(ok){
+        emit logMessage(QString("Mount sync accepted: RA=%1deg DEC=%2deg J2000 UTC=%3 LST=%4deg site=(%5,%6,%7m)")
+            .arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6).arg(utc.toString(Qt::ISODateWithMs)).arg(localSiderealTimeDeg(profile_.observer,utc),0,'f',6)
+            .arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6).arg(profile_.observer.elevationM,0,'f',1));
+        MountStatus after;if(mountStatus(after,nullptr))emit logMessage("Mount diagnostic AFTER SYNC: "+mountDiagnosticSnapshot(mount_->backendName(),after,profile_.observer,QDateTime::currentDateTimeUtc()));
+    }else emit logMessage(QString("Mount sync FAILED: backend=%1 target=(%2,%3) error=%4").arg(mount_->backendName()).arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6).arg(e?*e:QString()));
+    emitState();return ok;
+}
 bool ApplicationController::mountStatus(MountStatus&s,QString*e)const{if(!mount_){if(e)*e="No mount connected";return false;}if(!mount_->status(s,e))return false;if(s.coordinateValid)s.coordinate=convertEquatorialFrame(s.coordinate,EquatorialFrame::J2000);return true;}
 bool ApplicationController::focuserStatus(FocuserStatus&s,QString*e)const{if(!focuser_){if(e)*e="No focuser connected";return false;}return focuser_->status(s,e);}
 bool ApplicationController::moveFocuser(int p,QString*e){if(!ensureResourcesAvailable({"focuser"},e))return false;if(!focuser_){if(e)*e="No focuser connected";return false;}bool ok=focuser_->moveAbsolute(p,e);emitState();return ok;}
 bool ApplicationController::haltFocuser(QString*e){QString owner;if(operations_.isResourceLocked("focuser",&owner))operations_.cancel(owner,nullptr);if(!focuser_){if(e)*e="No focuser connected";return false;}bool ok=focuser_->halt(e);if(ok)emit logMessage("Focuser halt requested");return ok;}
-bool ApplicationController::setMountTracking(bool v,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->setTracking(v,e);if(ok)emit logMessage(QString("Mount tracking %1").arg(v?"ON":"OFF"));emitState();return ok;}
+bool ApplicationController::setMountTracking(bool v,TrackingRate rate,QString*e){
+    if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}
+    MountStatus before;const bool haveBefore=mountStatus(before,nullptr);
+    bool ok=mount_->setTracking(v,rate,e);
+    if(ok){
+        emit logMessage(QString("Mount tracking %1 rate=%2").arg(v?"ON":"OFF",trackingRateName(rate)));
+        if(v&&haveBefore){
+            const auto baseline=before;const QString backend=mount_->backendName();
+            QTimer::singleShot(3000,this,[this,baseline,backend,rate](){
+                if(!mount_||mount_->backendName()!=backend)return;MountStatus after;QString err;if(!mountStatus(after,&err)){emit logMessage("Tracking diagnostic status failed: "+err);return;}
+                double dra=after.coordinate.raDeg-baseline.coordinate.raDeg;while(dra>180)dra-=360;while(dra<-180)dra+=360;
+                const double ddec=after.coordinate.decDeg-baseline.coordinate.decDeg;
+                QString axes;if(baseline.axes.valid&&after.axes.valid)axes=QString(" axis1Δ=%1° axis2Δ=%2°").arg(after.axes.axis1Deg-baseline.axes.axis1Deg,0,'f',6).arg(after.axes.axis2Deg-baseline.axes.axis2Deg,0,'f',6);
+                emit logMessage(QString("Tracking diagnostic +3s [%1/%2]: RAΔ=%3° DECΔ=%4°%5 tracking=%6")
+                    .arg(backend,trackingRateName(rate)).arg(dra,0,'f',6).arg(ddec,0,'f',6).arg(axes).arg(after.tracking?"ON":"OFF"));
+            });
+        }
+    }
+    emitState();return ok;
+}
+bool ApplicationController::setMountSiteTime(const ObserverLocation &site,const QDateTime &utc,QString*e){
+    if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}
+    if(!mount_->setSiteTime(site,utc.toUTC(),e)){emit logMessage(QString("Mount backend site/time apply failed: backend=%1 site=(%2,%3,%4m) UTC=%5 error=%6").arg(mount_->backendName()).arg(site.latitudeDeg,0,'f',6).arg(site.longitudeDeg,0,'f',6).arg(site.elevationM,0,'f',1).arg(utc.toUTC().toString(Qt::ISODateWithMs),e?*e:QString()));return false;}
+    profile_.observer=site;settings_.saveProfile(profile_);emit profileChanged();
+    emit logMessage(QString("Mount/Core site/time applied: backend=%1 site=(%2,%3,%4m) UTC=%5").arg(mount_->backendName()).arg(site.latitudeDeg,0,'f',6).arg(site.longitudeDeg,0,'f',6).arg(site.elevationM,0,'f',1).arg(utc.toUTC().toString(Qt::ISODateWithMs)));
+    MountStatus st;if(mountStatus(st,nullptr))emit logMessage("Mount diagnostic AFTER SITE/TIME: "+mountDiagnosticSnapshot(mount_->backendName(),st,site,QDateTime::currentDateTimeUtc()));emitState();return true;
+}
 bool ApplicationController::parkMount(bool v,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}bool ok=mount_->park(v,e);if(ok)emit logMessage(v?"Mount parking slew started":"Mount unpark/parking-stop accepted");emitState();return ok;}
+bool ApplicationController::setCurrentMountAsPark(QString*e){
+    if(!ensureResourcesAvailable({"mount"},e))return false;
+    if(!mount_){if(e)*e="No mount connected";return false;}
+    MountStatus st;QString se;if(!mount_->status(st,&se)){if(e)*e=se;return false;}
+    if(st.axes.valid&&mount_->backendName().startsWith("native:")){
+        auto p=profile_;
+        p.mount.homeAxis1Deg=st.axes.axis1Deg;p.mount.homeAxis2Deg=st.axes.axis2Deg;p.mount.customHome=true;p.mount.autoHomeSync=true;
+        p.mount.parkAxis1Deg=st.axes.axis1Deg;p.mount.parkAxis2Deg=st.axes.axis2Deg;p.mount.customPark=true;
+        setProfile(p);
+        emit logMessage(QString("Shared physical Home/Park calibrated for native mount: axis1=%1deg axis2=%2deg. This persists across restarts.").arg(st.axes.axis1Deg,0,'f',6).arg(st.axes.axis2Deg,0,'f',6));
+        if(e)e->clear();return true;
+    }
+    if(!mount_->setCurrentParkPosition(e))return false;
+    emit logMessage("Persistent park position stored by active mount backend. For identical native/ASCOM park, run this once in each backend without moving the telescope between calibrations.");
+    return true;
+}
 bool ApplicationController::pulseGuide(GuideDirection d,int ms,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}return mount_->pulseGuide(d,ms,e);}
 bool ApplicationController::manualMountSlew(int a1,int a2,int rate,QString*e){if(!ensureResourcesAvailable({"mount"},e))return false;if(!mount_){if(e)*e="No mount connected";return false;}const bool ok=mount_->manualSlew(std::clamp(a1,-1,1),std::clamp(a2,-1,1),std::clamp(rate,0,9),e);if(ok){emit logMessage(QString("Manual mount slew: axis1=%1 axis2=%2 rate=%3").arg(a1).arg(a2).arg(rate));emitState();}return ok;}
 GuidingStatus ApplicationController::startGuiding(){if(lastSolve_.success)guiding_.setTarget({lastSolve_.raDeg,lastSolve_.decDeg});auto s=guiding_.status();auto j=QJsonObject{{"active",s.active},{"raErrorArcsec",s.raErrorArcsec},{"decErrorArcsec",s.decErrorArcsec},{"rmsArcsec",s.rmsArcsec}};emit guidingChanged(j);if(oalWsServer_)oalWsServer_->broadcast("guidingUpdate",j);return s;}
@@ -977,7 +1180,7 @@ void ApplicationController::refreshState(){emitState();}
 QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const QString&role,const DeviceBinding&binding){if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"role",role},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")}});}};add(camera_,"camera","main",settings_.cameraBinding());add(guideCamera_,"camera","guide",settings_.guideCameraBinding());add(mount_,"mount","main",settings_.mountBinding());add(focuser_,"focuser","main",settings_.focuserBinding());return a;}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();j["canAbortExposure"]=camera_->canAbortExposure();}return j;}
 bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}for(auto it=previewFrameCache_.rbegin();it!=previewFrameCache_.rend();++it)if(it->id==id){frame=*it;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
-QJsonObject ApplicationController::stateJson()const{auto strings=[](const QStringList&xs){QJsonArray a;for(const auto&x:xs)a.append(x);return a;};QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"backends",QJsonObject{{"camera",strings(cameraBackends())},{"mount",strings(mountBackends())},{"focuser",strings(focuserBackends())},{"solver",strings(solverBackends())}}},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr)){QJsonObject mj{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateFrame",equatorialFrameName(m.coordinate.frame)},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide},{"geometryType",m.geometryType}};if(m.axes.valid){mj["axis1Deg"]=m.axes.axis1Deg;mj["axis2Deg"]=m.axes.axis2Deg;mj["axesValid"]=true;}else mj["axesValid"]=false;j["mount"]=mj;}FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
+QJsonObject ApplicationController::stateJson()const{auto strings=[](const QStringList&xs){QJsonArray a;for(const auto&x:xs)a.append(x);return a;};QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"backends",QJsonObject{{"camera",strings(cameraBackends())},{"mount",strings(mountBackends())},{"focuser",strings(focuserBackends())},{"solver",strings(solverBackends())}}},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr)){QJsonObject mj{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateFrame",equatorialFrameName(m.coordinate.frame)},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide},{"geometryType",m.geometryType}};if(m.axes.valid){mj["axis1Deg"]=m.axes.axis1Deg;mj["axis2Deg"]=m.axes.axis2Deg;mj["axesValid"]=true;}else mj["axesValid"]=false;if(!m.diagnostics.isEmpty())mj["diagnostics"]=m.diagnostics;j["mount"]=mj;}FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
 QJsonObject ApplicationController::nodeInfoJson()const{
     return {{"nodeId",QCoreApplication::applicationName()+"@"+QSysInfo::machineHostName()},
             {"version",QString::fromLatin1(OAS_VERSION)},

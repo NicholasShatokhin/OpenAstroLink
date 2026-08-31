@@ -11,7 +11,7 @@ bool AlpacaMount::status(MountStatus&s,QString*e){auto ra=http_.get(QUrl(endpoin
 bool AlpacaMount::slewTo(const EquatorialCoord&t,QString*e){auto q=transactionForm();q.addQueryItem("RightAscension",QString::number(t.raDeg/15.0,'g',14));q.addQueryItem("Declination",QString::number(t.decDeg,'g',14));return check(http_.putForm(endpoint("slewtocoordinatesasync"),q,30000),e);}
 bool AlpacaMount::abortMotion(QString*e){return check(http_.putForm(endpoint("abortslew"),transactionForm()),e);}
 bool AlpacaMount::syncTo(const EquatorialCoord&t,QString*e){auto q=transactionForm();q.addQueryItem("RightAscension",QString::number(t.raDeg/15.0,'g',14));q.addQueryItem("Declination",QString::number(t.decDeg,'g',14));return check(http_.putForm(endpoint("synctocoordinates"),q),e);}
-bool AlpacaMount::setTracking(bool v,QString*e){auto q=transactionForm();q.addQueryItem("Tracking",v?"true":"false");return check(http_.putForm(endpoint("tracking"),q),e);}
+bool AlpacaMount::setTracking(bool v,TrackingRate,QString*e){auto q=transactionForm();q.addQueryItem("Tracking",v?"true":"false");return check(http_.putForm(endpoint("tracking"),q),e);}
 bool AlpacaMount::park(bool v,QString*e){return check(http_.putForm(endpoint(v?"park":"unpark"),transactionForm(),30000),e);}
 bool AlpacaMount::pulseGuide(GuideDirection d,int ms,QString*e){int dir=0;if(d==GuideDirection::North)dir=0;else if(d==GuideDirection::South)dir=1;else if(d==GuideDirection::East)dir=2;else dir=3;auto q=transactionForm();q.addQueryItem("Direction",QString::number(dir));q.addQueryItem("Duration",QString::number(ms));return check(http_.putForm(endpoint("pulseguide"),q),e);}
 

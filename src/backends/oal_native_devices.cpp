@@ -17,6 +17,13 @@
 
 namespace oas {
 namespace {
+double skySeparationDeg(const EquatorialCoord &a,const EquatorialCoord &b){
+    constexpr double kPi=3.14159265358979323846;
+    const double ra1=a.raDeg*kPi/180.0,ra2=b.raDeg*kPi/180.0;
+    const double d1=a.decDeg*kPi/180.0,d2=b.decDeg*kPi/180.0;
+    const double c=std::sin(d1)*std::sin(d2)+std::cos(d1)*std::cos(d2)*std::cos(ra1-ra2);
+    return std::acos(std::clamp(c,-1.0,1.0))*180.0/kPi;
+}
 QByteArray fitsCard(const QString &key,const QString &value){
     QByteArray c=(key.leftJustified(8,' ')+"= "+value).toLatin1();
     c=c.left(80);if(c.size()<80)c.append(QByteArray(80-c.size(),' '));return c;
@@ -201,7 +208,14 @@ NativeOalMount::NativeOalMount(std::shared_ptr<OalDriverPluginLoader> l, const Q
     const auto mountCaps=capabilities(nullptr).value("mount").toObject();
     geometryAware_=mountCaps.value("rawAxes").toObject().value("supported").toBool(false);
 }
-bool NativeOalMount::connectDevice(QString *error) { state_=ConnectionState::Connecting;if(!invokeOk("device.connect",{},nullptr,error)){state_=ConnectionState::Error;return false;}state_=ConnectionState::Connected;return true; }
+bool NativeOalMount::connectDevice(QString *error) {
+    state_=ConnectionState::Connecting;
+    if(!invokeOk("device.connect",{},nullptr,error)){state_=ConnectionState::Error;return false;}
+    state_=ConnectionState::Connected;
+    alignmentSource_.clear();homeAlignmentNote_.clear();
+    tryAutoHomeSync(nullptr);
+    return true;
+}
 void NativeOalMount::disconnectDevice(){if(state_==ConnectionState::Disconnected)return;invokeOk("mount.abort",{},nullptr,nullptr);invokeOk("device.disconnect",{},nullptr,nullptr);parking_=false;parked_=false;state_=ConnectionState::Disconnected;}
 bool NativeOalMount::rawAxisStatus(MechanicalAxes &axes,bool *slewing,QString *error) const {
     QJsonObject d;if(!invokeOk("mount.axisStatus",{},&d,error))return false;
@@ -212,6 +226,20 @@ bool NativeOalMount::rawAxisStatus(MechanicalAxes &axes,bool *slewing,QString *e
 bool NativeOalMount::rawAxisGoto(const MechanicalAxes &axes,double limit,QString *error){
     return invokeOk("mount.gotoAxes",{{"axis1Deg",axes.axis1Deg},{"axis2Deg",axes.axis2Deg},{"maxAxisDeltaDeg",limit}},nullptr,error);
 }
+bool NativeOalMount::tryAutoHomeSync(QString *error){
+    if(!geometryAware_||!geometry_.config().autoHomeSync||!geometry_.config().customHome)return false;
+    MechanicalAxes actual;QString e;
+    if(!rawAxisStatus(actual,nullptr,&e)){homeAlignmentNote_="Home reference status unavailable: "+e;if(error)*error=e;return false;}
+    auto delta=[](double a,double b){double d=std::fmod(a-b,360.0);if(d>180)d-=360;if(d<-180)d+=360;return std::abs(d);};
+    const double d1=delta(actual.axis1Deg,geometry_.config().homeAxis1Deg);
+    const double d2=delta(actual.axis2Deg,geometry_.config().homeAxis2Deg);
+    const double tol=std::clamp(geometry_.config().homeToleranceDeg,0.1,15.0);
+    if(d1>tol||d2>tol){homeAlignmentNote_=QString("Home reference not applied: current axes differ from saved Home by dAxis1=%1deg dAxis2=%2deg (tolerance %3deg)").arg(d1,0,'f',4).arg(d2,0,'f',4).arg(tol,0,'f',2);if(error)*error=homeAlignmentNote_;return false;}
+    if(!geometry_.syncHome(actual,QDateTime::currentDateTimeUtc(),&e)){homeAlignmentNote_="Home reference rejected: "+e;if(error)*error=e;return false;}
+    alignmentSource_="auto-home";
+    homeAlignmentNote_=QString("Home reference accepted: dAxis1=%1deg dAxis2=%2deg tolerance=%3deg").arg(d1,0,'f',4).arg(d2,0,'f',4).arg(tol,0,'f',2);
+    if(error)error->clear();return true;
+}
 bool NativeOalMount::status(MountStatus &s, QString *error){
     if(geometryAware_){
         MechanicalAxes axes;bool moving=false;if(!rawAxisStatus(axes,&moving,error))return false;
@@ -220,6 +248,13 @@ bool NativeOalMount::status(MountStatus &s, QString *error){
             parked_=delta(axes.axis1Deg,parkTarget_.axis1Deg)<=0.25&&delta(axes.axis2Deg,parkTarget_.axis2Deg)<=0.25;parking_=false;
         }
         s.connection=state_;s.axes=axes;s.geometryType=mountGeometryTypeName(geometry_.config().type);s.slewing=moving;s.parked=parked_||parking_;s.pierSide=geometry_.pierSide();
+        s.diagnostics["alignmentSource"]=alignmentSource_.isEmpty()?(geometry_.synced()?"restored":"unsynced"):alignmentSource_;
+        s.diagnostics["autoHomeSyncEnabled"]=geometry_.config().autoHomeSync;
+        s.diagnostics["customHome"]=geometry_.config().customHome;
+        s.diagnostics["homeAxis1Deg"]=geometry_.config().homeAxis1Deg;
+        s.diagnostics["homeAxis2Deg"]=geometry_.config().homeAxis2Deg;
+        s.diagnostics["homeToleranceDeg"]=geometry_.config().homeToleranceDeg;
+        if(!homeAlignmentNote_.isEmpty())s.diagnostics["homeAlignmentNote"]=homeAlignmentNote_;
         EquatorialCoord sky;if(geometry_.skyFromAxes(axes,sky,QDateTime::currentDateTimeUtc(),nullptr)){s.coordinate=sky;s.coordinateValid=true;}else{s.coordinate={0,0,EquatorialFrame::J2000};s.coordinateValid=false;}
         // Tracking state is still owned by the driver. Query compatibility status
         // for this flag only; axis/sky coordinates come exclusively from Core geometry.
@@ -232,22 +267,53 @@ bool NativeOalMount::slewTo(const EquatorialCoord&t,QString*e){
     if(!geometryAware_)return invokeOk("mount.slew",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);
     if(parked_){if(e)*e="Mount is parked; unpark before GOTO";return false;}
     if(parking_){if(e)*e="Mount is currently parking; unpark or ABORT before GOTO";return false;}
-    MechanicalAxes current,target;if(!rawAxisStatus(current,nullptr,e))return false;if(!geometry_.axesForSky(t,current,target,QDateTime::currentDateTimeUtc(),e))return false;
-    // Real HIL on 2026-08-29 exposed an unqualified installation-axis mapping:
-    // a long Stellarium GOTO could run physically away from the intended star.
-    // Restore a supervised qualification envelope until Axis 1/2 signs have
-    // been verified with small sky offsets. Mechanical Park uses its separately
-    // calibrated raw-axis target and is not governed by this sky-coordinate gate.
-    return rawAxisGoto(target,15.0,e);
+    const QDateTime utc=QDateTime::currentDateTimeUtc();
+    MechanicalAxes current,target;if(!rawAxisStatus(current,nullptr,e))return false;
+    EquatorialCoord currentSky;if(!geometry_.skyFromAxes(current,currentSky,utc,e))return false;
+    const auto targetJ2000=convertEquatorialFrame(t,EquatorialFrame::J2000,utc);
+    const double skySep=skySeparationDeg(convertEquatorialFrame(currentSky,EquatorialFrame::J2000,utc),targetJ2000);
+    const double skyLimit=std::clamp(geometry_.config().maxGotoAxisDeltaDeg,0.1,180.0);
+    if(skySep>skyLimit){if(e)*e=QString("Sky GOTO exceeds safety limit %1 deg: separation=%2 deg").arg(skyLimit,0,'f',1).arg(skySep,0,'f',3);return false;}
+    if(!geometry_.axesForSky(t,current,target,utc,e))return false;
+    // Near the celestial pole a small angular displacement can legitimately
+    // require a large RA-axis rotation because RA is singular at Dec=+/-90.
+    // Safety is therefore expressed in true sky separation. The transport keeps
+    // a separate absolute mechanical ceiling of 180 degrees per axis.
+    return rawAxisGoto(target,180.0,e);
 }
 bool NativeOalMount::abortMotion(QString*e){const bool ok=invokeOk("mount.abort",{},nullptr,e);if(ok){parking_=false;parked_=false;}return ok;}
 bool NativeOalMount::syncTo(const EquatorialCoord&t,QString*e){
     if(!geometryAware_)return invokeOk("mount.sync",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);
-    MechanicalAxes axes;if(!rawAxisStatus(axes,nullptr,e))return false;return geometry_.sync(t,axes,QDateTime::currentDateTimeUtc(),e);
+    MechanicalAxes axes;if(!rawAxisStatus(axes,nullptr,e))return false;
+    const bool ok=geometry_.sync(t,axes,QDateTime::currentDateTimeUtc(),e);
+    if(ok){alignmentSource_="manual-sync";homeAlignmentNote_.clear();}
+    return ok;
 }
-bool NativeOalMount::setTracking(bool v,QString*e){
-    if(geometryAware_){if(v&&parking_){if(e)*e="Cannot enable tracking while a Park slew is active";return false;}if(v&&!geometry_.synced()){if(e)*e="Sync the mount on a known sky position before enabling tracking";return false;}const int direction=geometry_.trackingAxis1Direction();if(direction==0&&v){if(e)*e="This mount geometry requires two-axis tracking; raw native rate-vector tracking is not implemented yet";return false;}return invokeOk("mount.setTracking",{{"enabled",v},{"axis1Direction",direction}},nullptr,e);}
-    return invokeOk("mount.setTracking",{{"enabled",v}},nullptr,e);
+void NativeOalMount::configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o){
+    const bool wasSynced=geometry_.synced();const auto old=geometry_.config();
+    const bool parkChanged=old.customPark!=c.customPark||std::abs(old.parkAxis1Deg-c.parkAxis1Deg)>1e-10||std::abs(old.parkAxis2Deg-c.parkAxis2Deg)>1e-10;
+    geometry_.configure(c,o);
+    if(wasSynced&&!geometry_.synced())alignmentSource_.clear();
+    if(!geometry_.synced()&&state_==ConnectionState::Connected)tryAutoHomeSync(nullptr);
+    if(parkChanged){parked_=false;parking_=false;}
+}
+bool NativeOalMount::setSiteTime(const ObserverLocation &site,const QDateTime &,QString*e){
+    const bool wasSynced=geometry_.synced();
+    geometry_.configure(geometry_.config(),site);
+    if(wasSynced&&!geometry_.synced())alignmentSource_.clear();
+    if(!geometry_.synced()&&state_==ConnectionState::Connected)tryAutoHomeSync(nullptr);
+    if(e)e->clear();
+    return true;
+}
+bool NativeOalMount::setTracking(bool v,TrackingRate rate,QString*e){
+    if(geometryAware_){
+        if(v&&parking_){if(e)*e="Cannot enable tracking while a Park slew is active";return false;}
+        if(v&&!geometry_.synced()){if(e)*e="Sync the mount on a known sky position before enabling tracking";return false;}
+        const int direction=geometry_.trackingAxis1Direction();
+        if(direction==0&&v){if(e)*e="This mount geometry requires two-axis tracking; raw native rate-vector tracking is not implemented yet";return false;}
+        return invokeOk("mount.setTracking",{{"enabled",v},{"axis1Direction",direction},{"rate",trackingRateName(rate)}},nullptr,e);
+    }
+    return invokeOk("mount.setTracking",{{"enabled",v},{"rate",trackingRateName(rate)}},nullptr,e);
 }
 bool NativeOalMount::park(bool v,QString*e){
     if(!geometryAware_)return invokeOk("mount.park",{{"parked",v}},nullptr,e);

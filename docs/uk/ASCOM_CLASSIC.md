@@ -43,12 +43,14 @@ Helper використовує Classic ASCOM Telescope automation для:
 
 - `Connected`;
 - `RightAscension`, `Declination`;
-- `Tracking`, `Slewing`, `AtPark`, `SideOfPier`;
+- `Tracking`, `Slewing`, `AtPark`, `AtHome`, `SideOfPier`;
 - `SlewToCoordinatesAsync` (або synchronous fallback);
 - `AbortSlew`;
 - `SyncToCoordinates`;
-- `Park` / `Unpark`;
-- `PulseGuide`.
+- `Park` / `Unpark` та persistent `SetPark`, якщо `CanSetPark=true`;
+- `PulseGuide`;
+- `SiteLatitude`, `SiteLongitude`, `SiteElevation`, `UTCDate`;
+- driver-reported `Azimuth`, `Altitude`, `SiderealTime`, `EquatorialSystem` та capabilities для diagnostics.
 
 Непідтримані виклики та COM exceptions повертаються в OAL як явні помилки.
 
@@ -67,3 +69,19 @@ build/<preset>/oas-ascom-host.exe
 ```
 
 Для runtime на машині node мають бути встановлені ASCOM Platform і вибраний Telescope driver. ASCOM Alpaca лишається окремим backend (`ascom-alpaca`).
+
+## Site, epoch та сумісність з EQMOD
+
+Observatory profile OpenAstroLink є канонічним місцем спостереження. При Classic ASCOM connect і безпосередньо перед GOTO OAL порівнює site самого driver із profile. Неправильний site може фізично віддзеркалити East/West slew навіть тоді, коли RA/DEC команда правильна. Якщо driver дозволяє site writes, OAL автоматично записує profile site/time і перевіряє результат.
+
+У EQMOD опція **Allow Site Writes** часто вимкнена за замовчуванням. Якщо site різний і запис відхилений, OAL навмисно блокує GOTO. Відкрий **ASCOM Properties...**, задай ті самі latitude/longitude, що й в OAL, та/або ввімкни **ASCOM Options → Allow Site Writes**, після чого перепідключися.
+
+`EquatorialSystem` читається за стандартом ASCOM: Topocentric=1, J2000=2. Старі/default конфігурації EQMOD можуть рекламувати `equOther=0`; лише для `EQMOD.*` OAL явно застосовує compatibility assumption default topocentric/JNow-style stream і пише його в diagnostics. Для відтворюваної роботи краще явно вибрати JNOW або J2000 в EQMOD Setup.
+
+Axis-sign inversion у Mount tab стосується лише native raw-axis drivers і не змінює Classic ASCOM, бо motor↔sky transform належить EQMOD/ASCOM.
+
+## Persistent спільний Park
+
+Дія **Calibrate current physical pose as persistent Home / Park** має одну фізичну семантику, хоча зберігання backend-specific. Native EQDrive зберігає поточні raw axes як OAL Home+Park і вмикає automatic Home alignment. Classic ASCOM викликає стандартний `SetPark`, якщо driver рекламує `CanSetPark`.
+
+Щоб native і EQMOD/ASCOM паркувалися в одну фізичну позу, один раз постав монтування в неї, відкалібруй native, перемкни backend без руху монтування і один раз відкалібруй Classic ASCOM. Обидві калібровки persistent; робити це кожної сесії не потрібно.

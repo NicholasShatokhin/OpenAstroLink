@@ -1,8 +1,12 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.35
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.38
 
 
-## v0.2.10.35 HIL follow-up
+## v0.2.10.38 HIL follow-up
 
+- Remote mount profile transport carries preferred `maxGotoSkyDeltaDeg` (plus the legacy alias) and repeatable Home calibration; native safety now measures true sky separation while raw transport retains a separate 180° hard cap.
+- Equatorial native mounts can restore their coordinate model automatically from a saved mechanical Home pose; operational profile edits preserve Sync.
+- Mount GUI is vertically scrollable and GOTO can auto-unpark; persistent Home/Park has one calibration action across native and Classic ASCOM (`SetPark`).
+- Classic ASCOM verifies its driver site against the OAL profile before GOTO, attempts automatic site/time synchronization, blocks unsafe EQMOD site mismatch, and reports driver Az/Alt/LST plus EquatorialSystem diagnostics.
 - QHY native Live→Stop→Capture and FITS science spooling are HIL-confirmed.
 - Optional preview-only debayer is camera-neutral; QHY Auto uses SDK `CAM_COLOR`, ZWO Auto uses ASI Bayer metadata, and explicit CFA patterns support other one-channel Bayer sources.
 - Autofocus preview and manual focus jog are available; Scene AF peak selection was hardened after daylight HIL.

@@ -26,10 +26,14 @@ TelescopeProfile AppSettings::loadProfile() const {
     p.mount.preferredPierSide = settings_.value("mountGeometry/preferredPierSide", p.mount.preferredPierSide).toString();
     p.mount.homeAxis1Deg = settings_.value("mountGeometry/homeAxis1Deg", p.mount.homeAxis1Deg).toDouble();
     p.mount.homeAxis2Deg = settings_.value("mountGeometry/homeAxis2Deg", p.mount.homeAxis2Deg).toDouble();
+    p.mount.customHome = settings_.value("mountGeometry/customHome", p.mount.customHome).toBool();
+    p.mount.autoHomeSync = settings_.value("mountGeometry/autoHomeSync", p.mount.autoHomeSync).toBool();
+    p.mount.homeToleranceDeg = settings_.value("mountGeometry/homeToleranceDeg", p.mount.homeToleranceDeg).toDouble();
     p.mount.parkAxis1Deg = settings_.value("mountGeometry/parkAxis1Deg", p.mount.parkAxis1Deg).toDouble();
     p.mount.parkAxis2Deg = settings_.value("mountGeometry/parkAxis2Deg", p.mount.parkAxis2Deg).toDouble();
     p.mount.customPark = settings_.value("mountGeometry/customPark", p.mount.customPark).toBool();
     p.mount.allowAutomaticPierFlip = settings_.value("mountGeometry/allowAutomaticPierFlip", p.mount.allowAutomaticPierFlip).toBool();
+    p.mount.maxGotoAxisDeltaDeg = settings_.value("mountGeometry/maxGotoAxisDeltaDeg", p.mount.maxGotoAxisDeltaDeg).toDouble();
     return p;
 }
 void AppSettings::saveProfile(const TelescopeProfile &p) const {
@@ -56,10 +60,14 @@ void AppSettings::saveProfile(const TelescopeProfile &p) const {
     settings_.setValue("mountGeometry/preferredPierSide", p.mount.preferredPierSide);
     settings_.setValue("mountGeometry/homeAxis1Deg", p.mount.homeAxis1Deg);
     settings_.setValue("mountGeometry/homeAxis2Deg", p.mount.homeAxis2Deg);
+    settings_.setValue("mountGeometry/customHome", p.mount.customHome);
+    settings_.setValue("mountGeometry/autoHomeSync", p.mount.autoHomeSync);
+    settings_.setValue("mountGeometry/homeToleranceDeg", p.mount.homeToleranceDeg);
     settings_.setValue("mountGeometry/parkAxis1Deg", p.mount.parkAxis1Deg);
     settings_.setValue("mountGeometry/parkAxis2Deg", p.mount.parkAxis2Deg);
     settings_.setValue("mountGeometry/customPark", p.mount.customPark);
     settings_.setValue("mountGeometry/allowAutomaticPierFlip", p.mount.allowAutomaticPierFlip);
+    settings_.setValue("mountGeometry/maxGotoAxisDeltaDeg", p.mount.maxGotoAxisDeltaDeg);
 }
 bool AppSettings::oalEnabled() const { return settings_.value("server/enabled", false).toBool(); }
 quint16 AppSettings::oalPort() const { return settings_.value("server/port", 8080).value<quint16>(); }

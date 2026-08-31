@@ -1,6 +1,8 @@
 #include <QCoreApplication>
 #include <QJsonDocument>
+#include <QDateTime>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QString>
 
 #ifdef Q_OS_WIN
@@ -51,6 +53,12 @@ struct AutoVariant {
 VARIANT vBool(bool x) { VARIANT v; VariantInit(&v); v.vt=VT_BOOL; v.boolVal=x?VARIANT_TRUE:VARIANT_FALSE; return v; }
 VARIANT vInt(int x) { VARIANT v; VariantInit(&v); v.vt=VT_I4; v.lVal=x; return v; }
 VARIANT vDouble(double x) { VARIANT v; VariantInit(&v); v.vt=VT_R8; v.dblVal=x; return v; }
+VARIANT vUtcDate(const QDateTime &dt) {
+    VARIANT v; VariantInit(&v); v.vt=VT_DATE; const auto u=dt.toUTC(); SYSTEMTIME st{};
+    const auto d=u.date(); const auto t=u.time(); st.wYear=WORD(d.year()); st.wMonth=WORD(d.month()); st.wDay=WORD(d.day());
+    st.wHour=WORD(t.hour()); st.wMinute=WORD(t.minute()); st.wSecond=WORD(t.second()); st.wMilliseconds=WORD(t.msec());
+    double date=0.0; if(SystemTimeToVariantTime(&st,&date))v.date=date; else v.vt=VT_EMPTY; return v;
+}
 VARIANT vString(const QString &x) { VARIANT v; VariantInit(&v); v.vt=VT_BSTR; v.bstrVal=SysAllocString(reinterpret_cast<const OLECHAR*>(x.utf16())); return v; }
 void clearArgs(std::vector<VARIANT> &args) { for (auto &v : args) VariantClear(&v); }
 
@@ -153,15 +161,53 @@ public:
     QJsonObject status() {
         if(!telescope_.valid())return errorJson("NOT_CONNECTED","ASCOM telescope is not connected");
         return ok({{"raHours",getDouble(L"RightAscension",0.0)},{"decDeg",getDouble(L"Declination",0.0)},
-                   {"tracking",getBool(L"Tracking",false)},{"slewing",getBool(L"Slewing",false)},
-                   {"parked",getBool(L"AtPark",false)},{"sideOfPier",getInt(L"SideOfPier",-1)},
-                   {"equatorialSystem",getInt(L"EquatorialSystem",-1)},{"progId",progId_}});
+                   {"azimuthDeg",getDouble(L"Azimuth",999.0)},{"altitudeDeg",getDouble(L"Altitude",999.0)},
+                   {"siderealTimeHours",getDouble(L"SiderealTime",999.0)},
+                   {"tracking",getBool(L"Tracking",false)},{"trackingRate",getInt(L"TrackingRate",-1)},
+                   {"slewing",getBool(L"Slewing",false)},{"parked",getBool(L"AtPark",false)},{"sideOfPier",getInt(L"SideOfPier",-1)},
+                   {"equatorialSystem",getInt(L"EquatorialSystem",-1)},{"alignmentMode",getInt(L"AlignmentMode",-1)},
+                   {"siteLatitude",getDouble(L"SiteLatitude",999.0)},{"siteLongitude",getDouble(L"SiteLongitude",999.0)},
+                   {"siteElevation",getDouble(L"SiteElevation",-99999.0)},{"utcDate",getString(L"UTCDate")},
+                   {"canSync",getBool(L"CanSync",false)},{"canSlew",getBool(L"CanSlew",false)},{"canSlewAsync",getBool(L"CanSlewAsync",false)},
+                   {"canSetTracking",getBool(L"CanSetTracking",false)},{"canPark",getBool(L"CanPark",false)},
+                   {"canUnpark",getBool(L"CanUnpark",false)},{"canSetPark",getBool(L"CanSetPark",false)},
+                   {"atHome",getBool(L"AtHome",false)},{"progId",progId_}});
     }
     QJsonObject slew(double ra,double dec){if(!telescope_.valid())return notConnected();QString e;const bool async=getBool(L"CanSlewAsync",false);const wchar_t*name=async?L"SlewToCoordinatesAsync":L"SlewToCoordinates";if(!telescope_.call(name,{vDouble(ra),vDouble(dec)},nullptr,&e))return errorJson("SLEW_FAILED",e);return ok({{"async",async}});}
     QJsonObject sync(double ra,double dec){return method2(L"SyncToCoordinates",vDouble(ra),vDouble(dec),"SYNC_FAILED");}
-    QJsonObject tracking(bool enabled){if(!telescope_.valid())return notConnected();QString e;if(!telescope_.put(L"Tracking",vBool(enabled),&e))return errorJson("TRACKING_FAILED",e);return ok();}
+    QJsonObject tracking(bool enabled,const QString &rate){
+        if(!telescope_.valid())return notConnected();QString e;int driveRate=0;
+        if(rate.compare("lunar",Qt::CaseInsensitive)==0)driveRate=1;
+        else if(rate.compare("solar",Qt::CaseInsensitive)==0)driveRate=2;
+        QString rateWarning;
+        if(enabled){QString re;if(!telescope_.put(L"TrackingRate",vInt(driveRate),&re))rateWarning=re;}
+        if(!telescope_.put(L"Tracking",vBool(enabled),&e))return errorJson("TRACKING_FAILED",e);
+        QJsonObject d{{"enabled",enabled},{"requestedRate",rate},{"trackingRate",getInt(L"TrackingRate",-1)}};
+        if(!rateWarning.isEmpty())d["rateWarning"]=rateWarning;
+        return ok(d);
+    }
+    QJsonObject setSiteTime(double lat,double lon,double elev,const QString &utcText){
+        if(!telescope_.valid())return notConnected();QString e;QJsonArray warnings;
+        // Latitude/longitude are safety-critical for horizon side, hour angle and
+        // pier selection. Treat those as mandatory; elevation and UTC are useful
+        // but some legacy drivers expose them read-only.
+        if(!telescope_.put(L"SiteLatitude",vDouble(lat),&e))return errorJson("SITE_LATITUDE_FAILED",e);
+        if(!telescope_.put(L"SiteLongitude",vDouble(lon),&e))return errorJson("SITE_LONGITUDE_FAILED",e);
+        QString optional;
+        if(!telescope_.put(L"SiteElevation",vDouble(elev),&optional))warnings.append("SiteElevation: "+optional);
+        const auto utc=QDateTime::fromString(utcText,Qt::ISODateWithMs);
+        if(utc.isValid()){VARIANT dv=vUtcDate(utc);if(dv.vt==VT_DATE){optional.clear();if(!telescope_.put(L"UTCDate",dv,&optional))warnings.append("UTCDate: "+optional);}else warnings.append("UTCDate: COM DATE conversion failed");}
+        else warnings.append("UTCDate: invalid ISO UTC date");
+        auto r=status();if(r.value("ok").toBool()&&!warnings.isEmpty()){auto d=r.value("data").toObject();d["warnings"]=warnings;r["data"]=d;}
+        return r;
+    }
     QJsonObject abort(){return method0(L"AbortSlew","ABORT_FAILED");}
     QJsonObject park(bool parked){return method0(parked?L"Park":L"Unpark",parked?"PARK_FAILED":"UNPARK_FAILED");}
+    QJsonObject setParkHere(){
+        if(!telescope_.valid())return notConnected();
+        if(!getBool(L"CanSetPark",false))return errorJson("SET_PARK_UNSUPPORTED","ASCOM driver reports CanSetPark=false");
+        return method0(L"SetPark","SET_PARK_FAILED");
+    }
     QJsonObject pulseGuide(int direction,int ms){return method2(L"PulseGuide",vInt(direction),vInt(ms),"PULSE_GUIDE_FAILED");}
     QJsonObject manualSlew(int axis1Direction,int axis2Direction,int rateLevel){
         if(!telescope_.valid())return notConnected();
@@ -217,8 +263,10 @@ int main(int argc,char **argv){
             else if(cmd=="slew")r=s.slew(q.value("raHours").toDouble(),q.value("decDeg").toDouble());
             else if(cmd=="abort")r=s.abort();
             else if(cmd=="sync")r=s.sync(q.value("raHours").toDouble(),q.value("decDeg").toDouble());
-            else if(cmd=="tracking")r=s.tracking(q.value("enabled").toBool());
+            else if(cmd=="tracking")r=s.tracking(q.value("enabled").toBool(),q.value("rate").toString("sidereal"));
+            else if(cmd=="setSiteTime")r=s.setSiteTime(q.value("latitudeDeg").toDouble(),q.value("longitudeDeg").toDouble(),q.value("elevationM").toDouble(),q.value("utc").toString());
             else if(cmd=="park")r=s.park(q.value("parked").toBool());
+            else if(cmd=="setParkHere")r=s.setParkHere();
             else if(cmd=="pulseGuide")r=s.pulseGuide(q.value("direction").toInt(),q.value("durationMs").toInt());
             else if(cmd=="manualSlew")r=s.manualSlew(q.value("axis1Direction").toInt(),q.value("axis2Direction").toInt(),q.value("rateLevel").toInt());
             else if(cmd=="destinationPierSide")r=s.destinationPierSide(q.value("raHours").toDouble(),q.value("decDeg").toDouble());

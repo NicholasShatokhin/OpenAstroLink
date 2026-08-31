@@ -21,7 +21,7 @@ public:
     explicit OalMountClient(QUrl base) : base_(std::move(base)) {}
     QString id() const override{return "oal-mount-client";} QString displayName() const override{return "Remote OAL mount";} QString backendName() const override{return "oal";} ConnectionState connectionState() const override{return state_;}
     bool connectDevice(QString *error=nullptr) override;void disconnectDevice() override{state_=ConnectionState::Disconnected;}
-    bool status(MountStatus&,QString *error=nullptr) override;bool slewTo(const EquatorialCoord&,QString *error=nullptr) override;bool abortMotion(QString *error=nullptr) override;bool syncTo(const EquatorialCoord&,QString *error=nullptr) override;bool setTracking(bool,QString *error=nullptr) override;bool park(bool,QString *error=nullptr) override;bool pulseGuide(GuideDirection,int,QString *error=nullptr) override;
+    bool status(MountStatus&,QString *error=nullptr) override;bool slewTo(const EquatorialCoord&,QString *error=nullptr) override;bool abortMotion(QString *error=nullptr) override;bool syncTo(const EquatorialCoord&,QString *error=nullptr) override;bool setTracking(bool,TrackingRate rate=TrackingRate::Sidereal,QString *error=nullptr) override;bool park(bool,QString *error=nullptr) override;bool pulseGuide(GuideDirection,int,QString *error=nullptr) override;
 private:bool accepted(const HttpJsonClient::Reply&,QString*)const;QUrl route(const QString&)const;QUrl base_;ConnectionState state_{ConnectionState::Disconnected};HttpJsonClient http_;
 };
 class OalFocuserClient final : public IFocuser {

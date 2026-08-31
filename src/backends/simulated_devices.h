@@ -35,7 +35,7 @@ public:
     bool slewTo(const EquatorialCoord &target, QString *error = nullptr) override;
     bool abortMotion(QString *error = nullptr) override;
     bool syncTo(const EquatorialCoord &target, QString *error = nullptr) override;
-    bool setTracking(bool enabled, QString *error = nullptr) override;
+    bool setTracking(bool enabled, TrackingRate rate = TrackingRate::Sidereal, QString *error = nullptr) override;
     bool park(bool enabled, QString *error = nullptr) override;
     bool pulseGuide(GuideDirection direction, int durationMs, QString *error = nullptr) override;
 private:

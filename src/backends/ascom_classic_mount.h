@@ -19,8 +19,10 @@ public:
     bool slewTo(const EquatorialCoord &target,QString *error=nullptr) override;
     bool abortMotion(QString *error=nullptr) override;
     bool syncTo(const EquatorialCoord &target,QString *error=nullptr) override;
-    bool setTracking(bool enabled,QString *error=nullptr) override;
+    bool setTracking(bool enabled,TrackingRate rate=TrackingRate::Sidereal,QString *error=nullptr) override;
+    bool setSiteTime(const ObserverLocation &site,const QDateTime &utc,QString *error=nullptr) override;
     bool park(bool enabled,QString *error=nullptr) override;
+    bool setCurrentParkPosition(QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
     bool manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
     QString destinationPierSide(const EquatorialCoord &target,QString *error=nullptr) override;
@@ -36,6 +38,7 @@ private:
     QString progId_,name_;
     int equatorialSystem_{-1};
     EquatorialFrame nativeFrame_{EquatorialFrame::J2000};
+    bool equatorialFrameAssumed_{false};
     ConnectionState state_{ConnectionState::Disconnected};
     QProcess host_;
     mutable QMutex ioMutex_;

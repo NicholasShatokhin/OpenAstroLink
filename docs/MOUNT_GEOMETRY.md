@@ -23,17 +23,14 @@ The axis-sign fields describe installation orientation. They must not be replace
 
 ## Mechanical Home and Park
 
-Park is deliberately not stored as celestial RA/DEC. It is a fixed mechanical axis position. The default profile is:
+Home/Park is deliberately not stored as celestial RA/DEC for native raw-axis mounts. A repeatable GEM Home pose (counterweight axis down, DEC/telescope axis along the polar axis) establishes both a persistent mechanical reference and, when `autoHomeSync` is enabled, a startup sky model without a manual near-pole Sync.
 
-```
-Axis 1 = 90 deg
-Axis 2 = 0 deg
-```
-
-The Profile tab can change Home/Park axis coordinates. The Mount tab provides **Set current mechanical axes as Park** and **Restore default mechanical Park (90°, 0°)**. Native EQDrive and direct SynScan/EQDrive Wi-Fi use this mechanical park. Classic ASCOM continues to use the ASCOM driver's own Park/Unpark implementation.
+Use **Calibrate current physical pose as persistent Home / Park** at the desired physical pose. Native EQDrive stores the current raw axes as both OAL Home and Park. Classic ASCOM has no OAL raw axes, so the same action calls the ASCOM driver's standard `SetPark` capability. To obtain identical native and ASCOM park behavior, calibrate each backend once at the same physical pose without moving the mount between backend switches.
 
 ## Safety status
 
-Native EQDrive and direct Wi-Fi celestial GOTO no longer impose the temporary 15-degree HIL envelope. They use the shortest mechanical-axis path (up to 180 degrees). Automatic meridian flips remain disabled, so long slews must be supervised until pier-side and physical-limit behavior is fully HIL-qualified.
+From v0.2.10.38, the configurable native GOTO envelope is a **true angular sky separation**. This fixes the pole singularity: a target only a few degrees away on the celestial sphere can require a very large RA-axis rotation near Dec ±90°. The raw native transport therefore has a separate fixed 180° per-axis mechanical hard cap.
+
+The preferred API/profile name is `maxGotoSkyDeltaDeg`; `maxGotoAxisDeltaDeg` remains a backward-compatible alias. Automatic meridian-flip planning remains disabled by default, so large supervised slews should still be HIL-qualified before unattended use.
 
 Alt-azimuth coordinate conversion is present, but production two-axis sidereal tracking and field-derotator control are future work. Fork-equatorial and equatorial-platform profiles share the equatorial hour-angle foundation without GEM pier-flip geometry.

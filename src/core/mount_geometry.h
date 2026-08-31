@@ -28,6 +28,12 @@ public:
 
     bool sync(const EquatorialCoord &sky, const MechanicalAxes &actualAxes,
               const QDateTime &utc = QDateTime::currentDateTimeUtc(), QString *error = nullptr);
+    // Restore the equatorial coordinate model from a repeatable mechanical
+    // Home pose (counterweight down, DEC/telescope axis toward the celestial
+    // pole for a GEM).  This avoids requiring a manual near-pole Sync every
+    // startup; a later plate-solve Sync may refine the model.
+    bool syncHome(const MechanicalAxes &actualAxes,
+                  const QDateTime &utc = QDateTime::currentDateTimeUtc(), QString *error = nullptr);
     bool skyFromAxes(const MechanicalAxes &actualAxes, EquatorialCoord &skyJ2000,
                      const QDateTime &utc = QDateTime::currentDateTimeUtc(), QString *error = nullptr) const;
     bool axesForSky(const EquatorialCoord &sky, const MechanicalAxes &currentAxes,

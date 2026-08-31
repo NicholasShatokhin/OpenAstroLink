@@ -1,7 +1,33 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.38 — нормалізація site для монтування, sky-angle safety та спільний persistent Park
 
-**Поточний пакет: v0.2.10.35.1 — MSVC build hotfix для ZWO ASI (внутрішня OAS-версія лишається 0.2.10.35)**
+- Виправлено safety semantics native GOTO біля полюса: користувацький ліміт тепер означає **реальну кутову відстань по небу**, а не raw-обертання моторної RA/DEC осі. Поблизу небесного полюса зміщення на 3–5° по небу може коректно вимагати >100° обертання RA; transport має окремий mechanical hard cap 180°. `maxGotoSkyDeltaDeg` — нова бажана назва API, `maxGotoAxisDeltaDeg` лишається compatibility alias.
+- Classic ASCOM автоматично порівнює власні `SiteLatitude/SiteLongitude` з observatory profile OAL при connect і перед кожним GOTO. Якщо driver дозволяє site writes, OAL автоматично передає site/time. Якщо EQMOD блокує запис, GOTO не виконується і лог прямо просить увімкнути **ASCOM Options → Allow Site Writes** або задати ті самі координати в EQMOD Properties.
+- У ASCOM diagnostics додані Azimuth, Altitude та SiderealTime самого driver поряд із RA/DEC, pier side, tracking, site та UTC — East/West mismatch тепер видно без здогадок.
+- `EquatorialSystem` декодується за ASCOM (`Topocentric=1`, `J2000=2`). Старий EQMOD часто рекламує `equOther=0`; для `EQMOD.*` OAL явно застосовує compatibility assumption topocentric/JNow і пише це в diagnostics. Все одно рекомендовано явно вибрати JNOW або J2000 у EQMOD Setup.
+- Додано backend-neutral дію **Calibrate current physical pose as persistent Home / Park**. Native raw-axis зберігає цю позу як OAL Home+Park і вмикає auto-Home restore; Classic ASCOM використовує стандартні `CanSetPark/SetPark`. Достатньо один раз відкалібрувати кожен backend у тій самій фізичній позі, не рухаючи телескоп між перемиканнями; надалі Park зберігається.
+- Інверсія Axis1/Axis2 явно native-only і блокується для Classic ASCOM, бо EQMOD/ASCOM сам володіє motor↔sky transform.
+- Лишається поведінка v0.37: repeatable Home відновлює native sky model при connect, operational profile changes не скидають Sync, GOTO може auto-unpark, Mount tab має вертикальний scroll.
+
+**Поточний пакет: v0.2.10.38 — site normalization, sky-angle GOTO safety, спільний persistent Home/Park**
+
+## v0.2.10.36.1 package hotfix — Qt 6.10 QTimer signal call
+
+**Hotfix пакета:** виправляє Windows Qt 6.10/MSVC build failure через явний виклик `QTimer::timeout()`. Версія core/protocol лишається `0.2.10.36`; runtime-поведінка та схема протоколу не змінювались.
+
+
+## v0.2.10.36 — діагностика монтування, SER та tracking-rate HIL
+
+- Live/Finder може опційно записувати сирий потік до SER до debayer/stretch, тому science Bayer/mono пікселі не змінюються.
+- Додано опційні Mil-Dot та кутову вимірювальну сітки в Live View.
+- Tracking тепер має Sidereal, Lunar і Solar режими. Для утримання Місяця першим треба тестувати Lunar; Sidereal веде зоряне небо, а не сам Місяць.
+- Ліміт raw-axis GOTO native EQDrive зроблено налаштовуваним 0.1–180° і винесено на Mount. Консервативний default 15° лишається, доки знаки/геометрія установки не кваліфіковані.
+- GOTO/Sync/connect/tracking пишуть у лог UTC, local time, site, LST, J2000, JNow, Az/Alt, реальну кутову відстань по небу, pier side, raw axes та backend diagnostics. Sync поблизу полюса окремо попереджає, що RA там погано обумовлена.
+- Classic ASCOM RA/DEC тепер позначаються як валідні для live-позиції у Stellarium. Додано діагностику ASCOM site/time/alignment/tracking-rate та кнопку явного застосування OAL site/UTC до writable ASCOM driver.
+- Remote Live View при 10 fps бере останній доступний preview замість застарілих frame ID, усуваючи race з preview-cache.
+
+
 
 ## v0.2.10.35.1 — MSVC build hotfix для ZWO ASI
 

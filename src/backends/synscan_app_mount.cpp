@@ -51,7 +51,7 @@ bool SynScanAppMount::status(MountStatus&s,QString*error){
 bool SynScanAppMount::slewTo(const EquatorialCoord&t,QString*e){return command(QString("SlewToCoordinatesAsync,%1,%2").arg(t.raDeg/15.0,0,'f',9).arg(t.decDeg,0,'f',9),nullptr,e,4000);}
 bool SynScanAppMount::abortMotion(QString*e){return command("AbortSlew",nullptr,e);}
 bool SynScanAppMount::syncTo(const EquatorialCoord&t,QString*e){return command(QString("SyncToCoordinates,%1,%2").arg(t.raDeg/15.0,0,'f',9).arg(t.decDeg,0,'f',9),nullptr,e,4000);}
-bool SynScanAppMount::setTracking(bool enabled,QString*e){return command(QString("TrackingSet,%1").arg(enabled?1:0),nullptr,e);}
+bool SynScanAppMount::setTracking(bool enabled,TrackingRate,QString*e){return command(QString("TrackingSet,%1").arg(enabled?1:0),nullptr,e);}
 bool SynScanAppMount::park(bool enabled,QString*e){return command(enabled?"Park":"Unpark",nullptr,e,5000);}
 bool SynScanAppMount::pulseGuide(GuideDirection dir,int ms,QString*e){int d=0;switch(dir){case GuideDirection::North:d=0;break;case GuideDirection::South:d=1;break;case GuideDirection::East:d=2;break;case GuideDirection::West:d=3;break;}return command(QString("PulseGuide,%1,%2").arg(d).arg(std::clamp(ms,1,5000)),nullptr,e,std::max(3000,ms+1500));}
 }

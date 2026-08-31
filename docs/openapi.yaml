@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.35
+  version: 0.2.10.38
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -154,6 +154,34 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/EquatorialCoord' }
       responses: { '200': { $ref: '#/components/responses/Success' } }
+  /mounts/{id}/tracking:
+    post:
+      summary: Enable/disable mount tracking and select drive rate
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                rate: { type: string, enum: [sidereal, lunar, solar], default: sidereal }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /mounts/{id}/site-time:
+    post:
+      summary: Apply observatory site and UTC to a backend with writable site/time properties (notably Classic ASCOM)
+      parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                latitudeDeg: { type: number, minimum: -90, maximum: 90 }
+                longitudeDeg: { type: number, minimum: -180, maximum: 180 }
+                elevationM: { type: number }
+                utc: { type: string, format: date-time }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
   /focusers/{id}/status:
     get:
       parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
@@ -202,6 +230,13 @@ paths:
                   enum: [AUTO, RGGB, BGGR, GRBG, GBRG]
                   default: AUTO
                   description: AUTO uses camera/driver CFA metadata when available; an explicit pattern works as a camera-neutral fallback.
+                recordSer:
+                  type: boolean
+                  default: false
+                  description: Record raw pre-debayer Live View frames to uncompressed SER.
+                serPath:
+                  type: string
+                  description: Optional node-local SER output path; defaults under Pictures/OpenAstroLink/SER.
       responses: { '202': { $ref: '#/components/responses/Success' } }
   /frames/{id}/preview:
     get:
@@ -354,10 +389,26 @@ components:
         preferredPierSide: { type: string, enum: [east, west], default: east }
         homeAxis1Deg: { type: number, default: 90 }
         homeAxis2Deg: { type: number, default: 0 }
+        customHome: { type: boolean, default: false }
+        autoHomeSync: { type: boolean, default: false }
+        homeToleranceDeg: { type: number, minimum: 0.1, maximum: 15, default: 2 }
         parkAxis1Deg: { type: number, default: 90 }
         parkAxis2Deg: { type: number, default: 0 }
         customPark: { type: boolean, default: false }
         allowAutomaticPierFlip: { type: boolean, default: false }
+        maxGotoSkyDeltaDeg:
+          type: number
+          minimum: 0.1
+          maximum: 180
+          default: 15
+          description: Preferred v0.2.10.38+ name. Maximum true angular sky separation for one native coordinate GOTO; raw motor motion can be larger near the celestial pole.
+        maxGotoAxisDeltaDeg:
+          type: number
+          minimum: 0.1
+          maximum: 180
+          default: 15
+          deprecated: true
+          description: Legacy wire/settings alias for maxGotoSkyDeltaDeg. Kept for compatibility; no longer means a raw motor-axis delta.
     TelescopeProfile:
       type: object
       properties:

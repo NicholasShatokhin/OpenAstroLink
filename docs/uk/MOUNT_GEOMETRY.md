@@ -23,17 +23,14 @@ Foundation v0.2.10.25 визначає:
 
 ## Механічні Home та Park
 
-Park навмисно не зберігається як небесні RA/DEC. Це фіксоване положення механічних осей. Значення за замовчуванням:
+Для native raw-axis mount Home/Park навмисно не зберігається як небесні RA/DEC. Повторювана GEM Home-поза (вісь противаг вниз, DEC/труба вздовж полярної осі) задає persistent mechanical reference і, якщо `autoHomeSync` увімкнено, дозволяє відновити sky model при старті без ручного Sync біля полюса.
 
-```
-Axis 1 = 90 deg
-Axis 2 = 0 deg
-```
-
-У Profile можна задати Home/Park, а на вкладці Mount є **Set current mechanical axes as Park** та **Restore default mechanical Park (90°, 0°)**. Native EQDrive і direct SynScan/EQDrive Wi-Fi використовують цей mechanical park. Classic ASCOM продовжує використовувати власний Park/Unpark ASCOM-драйвера.
+Використовуй **Calibrate current physical pose as persistent Home / Park** у бажаній фізичній позі. Native EQDrive зберігає поточні raw axes одночасно як OAL Home і Park. Classic ASCOM не має OAL raw axes, тому та сама дія викликає стандартний ASCOM `SetPark`. Щоб native й ASCOM паркувались однаково, один раз відкалібруй кожен backend у тій самій позі, не рухаючи монтування між перемиканнями.
 
 ## Безпека
 
-Для celestial GOTO native EQDrive та direct Wi-Fi тимчасовий HIL-limit 15° знято. Використовується найкоротший шлях механічної осі (до 180°). Automatic meridian flip все ще вимкнений, тому довгі переходи треба виконувати під наглядом до повної HIL-кваліфікації pier-side та фізичних limits.
+Починаючи з v0.2.10.38, налаштовуваний native GOTO envelope — це **реальна кутова відстань по небу**. Це прибирає сингулярність біля полюса: ціль лише за кілька градусів на небі може вимагати дуже великого повороту RA-мотора при Dec ≈ ±90°. Raw transport має окремий fixed mechanical hard cap 180° на вісь.
+
+Бажана назва API/profile — `maxGotoSkyDeltaDeg`; `maxGotoAxisDeltaDeg` лишається backward-compatible alias. Automatic meridian flip поки вимкнений за замовчуванням, тому великі slew треба HIL-підтвердити перед unattended use.
 
 Перетворення координат Alt-Az уже є, але production two-axis sidereal tracking та керування field derotator ще залишаються наступними задачами. Fork-equatorial та equatorial-platform використовують екваторіальний hour-angle foundation без GEM pier-flip геометрії.

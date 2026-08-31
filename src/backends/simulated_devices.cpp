@@ -74,7 +74,7 @@ bool SimulatedMount::status(MountStatus &s, QString *error) { QMutexLocker l(&mu
 bool SimulatedMount::slewTo(const EquatorialCoord &t, QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}status_.slewing=true;status_.coordinate=t;status_.slewing=false;status_.parked=false;return true;}
 bool SimulatedMount::abortMotion(QString*){QMutexLocker l(&mutex_);status_.slewing=false;return state_==ConnectionState::Connected;}
 bool SimulatedMount::syncTo(const EquatorialCoord &t, QString *error){return slewTo(t,error);}
-bool SimulatedMount::setTracking(bool e, QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}status_.tracking=e;return true;}
+bool SimulatedMount::setTracking(bool e, TrackingRate, QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}status_.tracking=e;return true;}
 bool SimulatedMount::park(bool e, QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}status_.parked=e;status_.tracking=!e;return true;}
 bool SimulatedMount::pulseGuide(GuideDirection d,int ms,QString *error){QMutexLocker l(&mutex_);if(state_!=ConnectionState::Connected){if(error)*error="Mount disconnected";return false;}const double arcsec=0.5*ms/1000.0; if(d==GuideDirection::East)status_.coordinate.raDeg+=arcsec/3600.0; if(d==GuideDirection::West)status_.coordinate.raDeg-=arcsec/3600.0; if(d==GuideDirection::North)status_.coordinate.decDeg+=arcsec/3600.0; if(d==GuideDirection::South)status_.coordinate.decDeg-=arcsec/3600.0; return true;}
 

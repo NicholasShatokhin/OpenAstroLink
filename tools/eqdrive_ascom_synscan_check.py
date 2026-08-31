@@ -10,10 +10,10 @@ def need(path,*tokens):
         checks.append((path,token))
     return text
 
-cmake=need('CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.35','OAS_ENABLE_NATIVE_EQDRIVE','OAS_ENABLE_ASCOM_CLASSIC','oal_driver_eqdrive','oas-ascom-host','src/backends/synscan_app_mount.cpp','src/backends/synscan_network_mount.cpp')
+cmake=need('CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.38','OAS_ENABLE_NATIVE_EQDRIVE','OAS_ENABLE_ASCOM_CLASSIC','oal_driver_eqdrive','oas-ascom-host','src/backends/synscan_app_mount.cpp','src/backends/synscan_network_mount.cpp')
 assert 'RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"' in cmake
 manifest=json.loads((root/'drivers/eqdrive/oal_driver_eqdrive.manifest.json').read_text())
-assert manifest['driverId']=='oal.eqdrive' and manifest['version']=='0.2.10.32' and 'mount' in manifest['deviceClasses']
+assert manifest['driverId']=='oal.eqdrive' and manifest['version']=='0.2.10.38' and 'mount' in manifest['deviceClasses']
 checks += [('eqdrive manifest','driver/version/mount')]
 
 need('drivers/skywatcher/motor_controller_protocol.h','decodeU24','decodePosition','parseStatus','getVersion','getCountsPerRev','setMotionMode','setGotoIncrement','setStepPeriod')

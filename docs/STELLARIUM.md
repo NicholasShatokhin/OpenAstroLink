@@ -1,6 +1,6 @@
 # Stellarium integration
 
-Version: 0.2.10.35
+Version: 0.2.10.38
 
 OpenAstroLink includes a direct TCP bridge compatible with Stellarium's external Telescope Control protocol. It is deliberately a mount bridge, not a replacement for the OAL observatory API.
 
@@ -41,3 +41,15 @@ The bridge uses the same active mount and therefore remains subject to OAL resou
 ## Live position
 
 The bridge publishes the active mount position to Stellarium every 500 ms and sends an immediate position update when a Stellarium client connects. The packet is normalized to J2000. Raw-axis EQDrive needs one OAL Sync before a valid encoder-to-sky position exists.
+
+## Repeatable Home workflow (v0.2.10.38)
+
+For a native raw-axis equatorial mount that is physically returned to the same Home pose before power-up (counterweight axis down, telescope/DEC axis toward the celestial pole), calibrate **Set current mechanical axes as Home** once and enable **Assume saved Home on connect**. On later connects OpenAstroLink compares the raw axes with the saved Home and, when within the configured tolerance, restores the encoder-to-sky model automatically. A plate-solve Sync can still refine pointing but is not required merely to make Stellarium GOTO operational.
+
+Changing the sky-separation GOTO safety limit, Park coordinates, or Home preference no longer invalidates Sync. Changing an axis sign, geometry, pier branch, latitude, or longitude still invalidates the transform and may require either automatic Home restoration (when currently at Home) or a new Sync.
+
+## v0.2.10.38: near-pole safety and ASCOM site
+
+The native safety envelope now checks true angular separation on the celestial sphere, not raw RA-axis rotation, so a small move near the pole is not rejected solely because RA is singular there. The raw transport retains a separate 180° per-axis hard cap.
+
+For Classic ASCOM, OAL verifies the driver's own site before GOTO. If EQMOD reports different latitude/longitude, the command is blocked until the site is corrected; EQMOD Setup may require **Allow Site Writes**. OAL Axis1/Axis2 inversion does not apply to ASCOM.

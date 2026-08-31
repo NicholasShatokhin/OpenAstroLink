@@ -39,6 +39,18 @@ int main(){
     if(std::abs(wrap180(back.raDeg-91.0))>2e-3 || std::abs(back.decDeg)>2e-3)return fail("GEM round-trip mismatch");
     const auto park=m.parkAxes();if(!near(park.axis1Deg,90.0)||!near(park.axis2Deg,0.0))return fail("Mechanical park mismatch");
 
+    // A repeatable mechanical Home can restore an equatorial model without a
+    // manual near-pole Sync.  Operational-only changes must preserve it.
+    MountGeometryConfig homeCfg=gem;homeCfg.axis1Sign=-1;homeCfg.customHome=true;homeCfg.autoHomeSync=true;homeCfg.homeAxis1Deg=12.5;homeCfg.homeAxis2Deg=-3.0;
+    MountGeometryModel home(homeCfg,site);const MechanicalAxes homeActual{12.5,-3.0,true};
+    if(!home.syncHome(homeActual,utc,&err))return fail("GEM automatic Home sync failed");
+    EquatorialCoord homeSky;if(!home.skyFromAxes(homeActual,homeSky,utc,&err))return fail("Home reverse transform failed");
+    if(std::abs(std::abs(homeSky.decDeg)-90.0)>2e-3)return fail("Home must map to the local celestial pole");
+    auto operational=homeCfg;operational.maxGotoAxisDeltaDeg=90.0;operational.parkAxis1Deg=1.0;home.configure(operational,site);
+    if(!home.synced())return fail("Operational mount profile change incorrectly invalidated Sync");
+    auto transformChange=operational;transformChange.axis1Sign=1;home.configure(transformChange,site);
+    if(home.synced())return fail("Axis-sign change must invalidate Sync");
+
     MountGeometryConfig alt;alt.type=MountGeometryType::AltAzimuth;
     MountGeometryModel a(alt,site);
     // A sync absorbs the installation encoder-zero offset, so arbitrary actual axes are valid.

@@ -3,6 +3,7 @@
 #include "core/astro_types.h"
 #include <QStringList>
 #include <QSize>
+#include <QDateTime>
 #include <memory>
 
 namespace oas {
@@ -37,8 +38,14 @@ public:
     virtual bool slewTo(const EquatorialCoord &target, QString *error = nullptr) = 0;
     virtual bool abortMotion(QString *error = nullptr) = 0;
     virtual bool syncTo(const EquatorialCoord &target, QString *error = nullptr) = 0;
-    virtual bool setTracking(bool enabled, QString *error = nullptr) = 0;
+    virtual bool setTracking(bool enabled, TrackingRate rate = TrackingRate::Sidereal, QString *error = nullptr) = 0;
     virtual bool park(bool enabled, QString *error = nullptr) = 0;
+    // Optional ASCOM-style persistent park calibration at the current physical
+    // pose. Native raw-axis mounts persist this through the OAL profile instead.
+    virtual bool setCurrentParkPosition(QString *error = nullptr) {
+        if (error) *error = "Mount backend cannot set a persistent park position";
+        return false;
+    }
     virtual bool pulseGuide(GuideDirection direction, int durationMs, QString *error = nullptr) = 0;
     // Optional ASCOM-style two-axis manual slew. axis directions are -1/0/+1
     // and rateLevel is a backend-normalized hand-controller level 1..9.
@@ -48,6 +55,13 @@ public:
         return false;
     }
     virtual void configureGeometry(const MountGeometryConfig &, const ObserverLocation &) {}
+    // Optional hardware/backend site+clock synchronization. Native raw-axis
+    // mounts use the OAL profile directly; Classic ASCOM can expose writable
+    // SiteLatitude/SiteLongitude/SiteElevation/UTCDate properties.
+    virtual bool setSiteTime(const ObserverLocation &, const QDateTime &, QString *error = nullptr) {
+        if (error) *error = "Mount backend does not expose writable site/time properties";
+        return false;
+    }
     // Optional predictive pier-side query. Classic ASCOM drivers can expose
     // DestinationSideOfPier; other backends may leave this unknown.
     virtual QString destinationPierSide(const EquatorialCoord &, QString *error = nullptr) {

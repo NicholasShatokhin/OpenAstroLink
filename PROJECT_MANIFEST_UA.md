@@ -1,3 +1,40 @@
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.38
+
+## v0.2.10.38
+
+- Package: `0.2.10.38-mount-site-shared-park`
+- Core version: `0.2.10.38`
+- Native GOTO safety працює за реальною кутовою відстанню по небу; raw transport має окремий mechanical cap 180°.
+- Classic ASCOM перевіряє та, якщо driver дозволяє, автоматично синхронізує site/time перед GOTO; для EQMOD є явна підказка `Allow Site Writes`.
+- ASCOM diagnostics містять driver Az/Alt/LST та явний compatibility fallback `equOther(0)` → topocentric/JNow для EQMOD.
+- Persistent Park уніфікований на рівні OAL: native зберігає Home+Park, Classic ASCOM використовує стандартний `SetPark`.
+- Remote profile має бажане поле `maxGotoSkyDeltaDeg` і legacy alias `maxGotoAxisDeltaDeg`.
+
+## Hotfix пакета v0.2.10.36.1
+
+- Package: `0.2.10.36.1-gui-qtimer-msvc-hotfix`
+- Версія core лишається: `0.2.10.36`
+- Виправлення: прибрано некоректний явний виклик Qt 6.10 сигналу `QTimer::timeout()` після запуску таймера годинника монтування.
+
+Англійська документація є канонічною. `PROJECT_MANIFEST_UA.md` — українське дзеркало.
+
+- Package: `0.2.10.36-mount-diagnostics-ser-overlays`
+- Core version: `0.2.10.36`
+- Основний HIL-фокус: діагностика координат монтування, ASCOM telemetry/site-time, sidereal/lunar/solar tracking, SER і вимірювальні overlays Live View
+
+## v0.2.10.36
+
+- Запис сирого pre-debayer Live View у SER.
+- Опційні Mil-Dot та кутова вимірювальна сітки.
+- Sidereal/Lunar/Solar tracking для native EQDrive/direct SynScan і Classic ASCOM, де підтримується.
+- Налаштовуваний qualification limit raw-axis GOTO.
+- Повна діагностика site/time/LST/координат/backend та warning для Sync біля полюса.
+- Валідна Classic ASCOM позиція у Stellarium та явне застосування site/time до ASCOM.
+- Усунення stale-preview race у remote Live View.
+
+
+## Previous package history
+
 # Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.35.1 hotfix package
 
 Канонічна документація — англійська. `PROJECT_MANIFEST_UA.md` є українським дзеркалом.

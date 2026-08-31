@@ -25,7 +25,7 @@ public:
     bool slewTo(const EquatorialCoord&,QString *error=nullptr) override;
     bool abortMotion(QString *error=nullptr) override;
     bool syncTo(const EquatorialCoord&,QString *error=nullptr) override;
-    bool setTracking(bool,QString *error=nullptr) override;
+    bool setTracking(bool,TrackingRate rate=TrackingRate::Sidereal,QString *error=nullptr) override;
     bool park(bool,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection,int,QString *error=nullptr) override;
 private: ConnectionState state_{ConnectionState::Disconnected};

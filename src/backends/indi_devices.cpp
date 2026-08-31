@@ -374,7 +374,7 @@ bool IndiMount::syncTo(const EquatorialCoord &target, QString *error) {
                               {{"RA", target.raDeg / 15.0}, {"DEC", target.decDeg}}, error);
 }
 
-bool IndiMount::setTracking(bool enabled, QString *error) {
+bool IndiMount::setTracking(bool enabled, TrackingRate, QString *error) {
     if (!client_.propertyExists("TELESCOPE_TRACK_STATE", 700)) {
         if (error) *error = "INDI mount does not expose TELESCOPE_TRACK_STATE";
         return false;

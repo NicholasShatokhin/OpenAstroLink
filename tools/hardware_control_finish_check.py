@@ -14,7 +14,7 @@ check('Canon shutdown state handler',has(canon,'EdsSetCameraStateEventHandler','
 check('Camera disconnect wakes pending exposure',has(canon,'c->eventCv.notify_all()','Canon camera was switched off or USB transport was lost during exposure'))
 check('Controller drops native device on physical disconnect',has(app,'Main camera physically disconnected','camera_.reset()','operations_.isResourceLocked'))
 apptext=(r/app).read_text(); idx=apptext.find('Main camera physically disconnected'); check('Persisted binding not cleared by physical disconnect','saveCameraBinding' not in apptext[max(0,idx-500):idx+900])
-check('Native geometry qualification GOTO 15',has('src/backends/oal_native_devices.cpp','return rawAxisGoto(target,15.0,e);'))
+check('Native geometry configurable GOTO safety',has('src/backends/oal_native_devices.cpp','maxGotoAxisDeltaDeg'))
 check('EQDrive default qualification GOTO 15',has('drivers/eqdrive/oal_driver_eqdrive.cpp','gMaxNativeGotoDeg{15.0}'))
 check('EQDrive manifest qualification GOTO 15',has('drivers/eqdrive/oal_driver_eqdrive.manifest.json','"maxNativeGotoDeg": 15.0'))
 check('Direct WiFi old HIL gate removed','HIL-limited to' not in (r/'src/backends/synscan_network_mount.cpp').read_text())

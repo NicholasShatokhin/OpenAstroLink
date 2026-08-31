@@ -76,19 +76,23 @@ public:
     bool slewTo(const EquatorialCoord &, QString *error=nullptr) override;
     bool abortMotion(QString *error=nullptr) override;
     bool syncTo(const EquatorialCoord &, QString *error=nullptr) override;
-    bool setTracking(bool, QString *error=nullptr) override;
+    bool setTracking(bool, TrackingRate rate=TrackingRate::Sidereal, QString *error=nullptr) override;
+    bool setSiteTime(const ObserverLocation &, const QDateTime &, QString *error=nullptr) override;
     bool park(bool, QString *error=nullptr) override;
     bool pulseGuide(GuideDirection, int durationMs, QString *error=nullptr) override;
     bool manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
-    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; parking_=false; }
+    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override;
 private:
     bool rawAxisStatus(MechanicalAxes &axes, bool *slewing=nullptr, QString *error=nullptr) const;
     bool rawAxisGoto(const MechanicalAxes &axes, double maxAxisDeltaDeg, QString *error=nullptr);
+    bool tryAutoHomeSync(QString *error=nullptr);
     bool geometryAware_{false};
     MountGeometryModel geometry_;
     bool parked_{false};
     bool parking_{false};
     MechanicalAxes parkTarget_{};
+    QString alignmentSource_;
+    QString homeAlignmentNote_;
 };
 
 class NativeOalFocuser final : public IFocuser, private NativeOalDeviceBase {

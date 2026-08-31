@@ -34,7 +34,7 @@ bool SerialLx200Mount::status(MountStatus&s,QString*e){if(state_!=ConnectionStat
 bool SerialLx200Mount::slewTo(const EquatorialCoord&t,QString*e){if(command(QByteArray(":Sr")+raString(t.raDeg)+"#",1000,e).isEmpty())return false;if(command(QByteArray(":Sd")+decString(t.decDeg)+"#",1000,e).isEmpty())return false;auto r=command(":MS#",2000,e);const bool ok=!r.isEmpty()&&r[0]=='0';if(ok){slewTarget_=t;slewActive_=true;}return ok;}
 bool SerialLx200Mount::abortMotion(QString*e){QString local;command(":Q#",1000,&local);slewActive_=false;if(e)*e=local;return local.isEmpty();}
 bool SerialLx200Mount::syncTo(const EquatorialCoord&t,QString*e){if(command(QByteArray(":Sr")+raString(t.raDeg)+"#",1000,e).isEmpty())return false;if(command(QByteArray(":Sd")+decString(t.decDeg)+"#",1000,e).isEmpty())return false;return !command(":CM#",2000,e).isEmpty();}
-bool SerialLx200Mount::setTracking(bool,QString*e){if(e)*e="Tracking control is not standardized by LX200 backend";return false;}
+bool SerialLx200Mount::setTracking(bool,TrackingRate,QString*e){if(e)*e="Tracking control is not standardized by LX200 backend";return false;}
 bool SerialLx200Mount::park(bool,QString*e){if(e)*e="Park is not standardized by this LX200 backend";return false;}
 bool SerialLx200Mount::pulseGuide(GuideDirection,int,QString*e){if(e)*e="PulseGuide is not implemented for this serial profile";return false;}
 }

@@ -1,3 +1,40 @@
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.38
+
+## v0.2.10.38
+
+- Package: `0.2.10.38-mount-site-shared-park`
+- Core version: `0.2.10.38`
+- Native GOTO safety uses true sky separation; raw transport retains a separate 180° mechanical cap.
+- Classic ASCOM site/time is verified and synchronized before GOTO when the driver permits site writes; EQMOD gets an actionable `Allow Site Writes` diagnostic otherwise.
+- Classic ASCOM adds driver Az/Alt/LST telemetry and an explicit EQMOD `equOther(0)` → topocentric/JNow compatibility assumption.
+- Persistent park calibration is unified at the OAL control surface: native stores Home+Park, Classic ASCOM calls standard `SetPark`.
+- Remote profile supports preferred `maxGotoSkyDeltaDeg` plus the legacy `maxGotoAxisDeltaDeg` alias.
+
+## Package hotfix v0.2.10.36.1
+
+- Package: `0.2.10.36.1-gui-qtimer-msvc-hotfix`
+- Core version remains: `0.2.10.36`
+- Fix: remove the invalid explicit Qt 6.10 `QTimer::timeout()` signal invocation after starting the mount clock timer.
+
+English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.
+
+- Package: `0.2.10.36-mount-diagnostics-ser-overlays`
+- Core version: `0.2.10.36`
+- Main HIL focus: mount coordinate diagnostics, ASCOM telemetry/site-time, sidereal/lunar/solar tracking, SER and Live View measurement overlays
+
+## v0.2.10.36
+
+- Raw pre-debayer SER recording for Live View.
+- Optional Mil-Dot and angular measurement overlays.
+- Sidereal/Lunar/Solar tracking rates across native EQDrive/direct SynScan and Classic ASCOM where supported.
+- Configurable native raw-axis GOTO qualification limit.
+- Full mount coordinate/site/time/LST/backend diagnostic logging and near-pole Sync warning.
+- Classic ASCOM live coordinate validity for Stellarium plus explicit site/time synchronization.
+- Remote Live View stale-preview race mitigation.
+
+
+## Previous package history
+
 # Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.35.1 hotfix package
 
 English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the Ukrainian mirror.

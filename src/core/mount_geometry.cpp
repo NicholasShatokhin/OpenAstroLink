@@ -57,7 +57,19 @@ double localSiderealTimeDeg(const QDateTime &utc,double longitudeDeg){
     return wrap360(gmst+longitudeDeg);
 }
 
-void MountGeometryModel::configure(MountGeometryConfig c,ObserverLocation o){config_=std::move(c);observer_=o;synced_=false;pierSide_="unknown";}
+void MountGeometryModel::configure(MountGeometryConfig c,ObserverLocation o){
+    // Preserve a valid alignment when only operational/safety settings change
+    // (Park/Home coordinates, GOTO envelope, auto-home preference, pier-flip
+    // policy).  Only parameters that alter the encoder<->sky transform must
+    // invalidate Sync.
+    const bool transformUnchanged =
+        c.type==config_.type && c.axis1Sign==config_.axis1Sign && c.axis2Sign==config_.axis2Sign &&
+        c.preferredPierSide.compare(config_.preferredPierSide,Qt::CaseInsensitive)==0 &&
+        std::abs(o.latitudeDeg-observer_.latitudeDeg)<1e-10 &&
+        std::abs(o.longitudeDeg-observer_.longitudeDeg)<1e-10;
+    config_=std::move(c);observer_=o;
+    if(!transformUnchanged){synced_=false;pierSide_="unknown";}
+}
 
 MechanicalAxes MountGeometryModel::canonicalAxesForSky(const EquatorialCoord &skyJNow,const QDateTime&utc,QString*pier,QString*error)const{
     const double lst=localSiderealTimeDeg(utc,observer_.longitudeDeg);
@@ -107,6 +119,27 @@ bool MountGeometryModel::sync(const EquatorialCoord&sky,const MechanicalAxes&act
     if(!actual.valid){if(error)*error="Mechanical axis position is not available";return false;}
     const auto jnow=convertEquatorialFrame(sky,EquatorialFrame::JNow,utc);QString side;
     const auto canonical=canonicalAxesForSky(jnow,utc,&side,error);if(!canonical.valid)return false;
+    syncActual_=actual;syncCanonical_=canonical;synced_=true;pierSide_=side;return true;
+}
+
+bool MountGeometryModel::syncHome(const MechanicalAxes&actual,const QDateTime&utc,QString*error){
+    if(!actual.valid){if(error)*error="Mechanical axis position is not available";return false;}
+    if(config_.type!=MountGeometryType::GermanEquatorial &&
+       config_.type!=MountGeometryType::ForkEquatorial &&
+       config_.type!=MountGeometryType::EquatorialPlatform){
+        if(error)*error="Automatic Home alignment is currently defined only for equatorial mount geometries";
+        return false;
+    }
+    const double poleDec=observer_.latitudeDeg>=0.0?90.0:-90.0;
+    const double lst=localSiderealTimeDeg(utc,observer_.longitudeDeg);
+    const EquatorialCoord poleOnMeridian{lst,poleDec,EquatorialFrame::JNow};
+    QString side=config_.preferredPierSide.toLower();
+    if(config_.type!=MountGeometryType::GermanEquatorial)side="none";
+    else if(side!="east"&&side!="west")side="east";
+    MechanicalAxes canonical;
+    if(config_.type==MountGeometryType::GermanEquatorial)canonical=equatorialAxes(poleOnMeridian,lst,true,side);
+    else canonical=equatorialAxes(poleOnMeridian,lst,false,{});
+    if(!canonical.valid){if(error)*error="Could not construct canonical equatorial Home reference";return false;}
     syncActual_=actual;syncCanonical_=canonical;synced_=true;pierSide_=side;return true;
 }
 

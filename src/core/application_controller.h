@@ -83,8 +83,10 @@ public:
     bool focuserStatus(FocuserStatus &status,QString *error=nullptr) const override;
     bool moveFocuser(int position,QString *error=nullptr) override;
     bool haltFocuser(QString *error=nullptr) override;
-    bool setMountTracking(bool enabled,QString *error=nullptr) override;
+    bool setMountTracking(bool enabled,TrackingRate rate=TrackingRate::Sidereal,QString *error=nullptr) override;
+    bool setMountSiteTime(const ObserverLocation &site,const QDateTime &utc,QString *error=nullptr) override;
     bool parkMount(bool parked,QString *error=nullptr) override;
+    bool setCurrentMountAsPark(QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
     bool manualMountSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
 
@@ -139,6 +141,7 @@ signals:
 private:
     void disconnectDevices(bool clearAutoConnect);
     bool ensureResourcesAvailable(const QStringList &resources,QString *error=nullptr) const;
+    bool ensureMountBackendSiteTime(QString *error=nullptr);
     void commitCapturedFrame(const CameraFrame &frame,bool emitFullState=true,bool verbose=true);
     void publishOperationalPreview(const CameraFrame &frame,const QString &purpose);
     void scheduleCanonHotplugRediscovery(quint64 generation);

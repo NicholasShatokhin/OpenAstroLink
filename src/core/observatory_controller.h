@@ -68,8 +68,13 @@ public:
     virtual bool focuserStatus(FocuserStatus &status, QString *error = nullptr) const = 0;
     virtual bool moveFocuser(int position, QString *error = nullptr) = 0;
     virtual bool haltFocuser(QString *error = nullptr) = 0;
-    virtual bool setMountTracking(bool enabled, QString *error = nullptr) = 0;
+    virtual bool setMountTracking(bool enabled, TrackingRate rate = TrackingRate::Sidereal, QString *error = nullptr) = 0;
+    virtual bool setMountSiteTime(const ObserverLocation &site, const QDateTime &utc, QString *error = nullptr) = 0;
     virtual bool parkMount(bool parked, QString *error = nullptr) = 0;
+    // One-time persistent calibration of the active backend's physical park.
+    // Native raw-axis mounts save current axes as both Home and Park; ASCOM
+    // backends delegate to the standard SetPark method when supported.
+    virtual bool setCurrentMountAsPark(QString *error = nullptr) = 0;
     virtual bool pulseGuide(GuideDirection direction, int durationMs, QString *error = nullptr) = 0;
     virtual bool manualMountSlew(int axis1Direction, int axis2Direction, int rateLevel, QString *error = nullptr) = 0;
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.35 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.38 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,7 @@ set(OAS_CORE_SOURCES
     src/core/settings.cpp
     src/core/equatorial_frames.cpp
     src/core/mount_geometry.cpp
+    src/core/ser_writer.cpp
     src/core/equatorial_frames.h
     src/core/application_controller.cpp
     src/core/operation_manager.cpp

@@ -15,7 +15,7 @@ Core використовує стандартне обертання преце
 
 ## Classic ASCOM
 
-Classic ASCOM драйвери експонують `EquatorialSystem`; OAL helper тепер його читає. `equJ2000` передається без перетворення, а `equTopocentric` на compatibility boundary обробляється як of-date frame. Інші legacy ASCOM frames поки залишаються compatibility path до окремої реалізації transform.
+Classic ASCOM driver експонує `EquatorialSystem`; OAL helper його читає. `equJ2000=2` використовується як J2000, `equTopocentric=1` — як поточний topocentric/of-date frame (у поточному Core наближено JNow). EQMOD часто рекламує legacy `equOther=0`; для `EQMOD.*` OAL явно трактує це як topocentric/JNow compatibility fallback і показує assumption у diagnostics. Для production краще явно вибрати JNOW або J2000 у EQMOD Setup.
 
 ## Stellarium
 

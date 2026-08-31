@@ -3,7 +3,8 @@ from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
 checks={
-    'mount checkbox members': ('src/gui/main_window.h','QCheckBox *mountTracking_{}; QCheckBox *mountParked_{};'),
+    'mount checkbox members': ('src/gui/main_window.h','QCheckBox *mountTracking_{};'),
+    'mount parked member': ('src/gui/main_window.h','QCheckBox *mountParked_{};'),
     'mount signal blocker': ('src/gui/main_window.cpp','QSignalBlocker b(mountTracking_)'),
     'focuser dirty target': ('src/gui/main_window.cpp','!focusTargetDirty_'),
     'actual focuser label': ('src/gui/main_window.cpp','Actual position:'),

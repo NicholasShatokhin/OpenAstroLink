@@ -43,14 +43,32 @@ The helper uses the Classic ASCOM Telescope automation surface for:
 
 - `Connected`;
 - `RightAscension`, `Declination`;
-- `Tracking`, `Slewing`, `AtPark`, `SideOfPier`;
+- `Tracking`, `Slewing`, `AtPark`, `AtHome`, `SideOfPier`;
 - `SlewToCoordinatesAsync` (or synchronous fallback when necessary);
 - `AbortSlew`;
 - `SyncToCoordinates`;
-- `Park` / `Unpark`;
-- `PulseGuide`.
+- `Park` / `Unpark` and persistent `SetPark` when `CanSetPark` is true;
+- `PulseGuide`;
+- `SiteLatitude`, `SiteLongitude`, `SiteElevation`, `UTCDate`;
+- driver-reported `Azimuth`, `Altitude`, `SiderealTime`, `EquatorialSystem` and capabilities for diagnostics.
 
 Unsupported calls or driver COM exceptions are returned to OAL as explicit errors.
+
+## Site, epoch and EQMOD compatibility
+
+OpenAstroLink keeps its observatory profile as the canonical location. On Classic ASCOM connect and immediately before a GOTO, OAL compares the driver-reported site with that profile. A wrong site can produce a physically mirrored East/West slew even when the RA/DEC command itself is correct. If the ASCOM driver permits site writes, OAL automatically writes the profile site/time and verifies the result.
+
+EQMOD commonly ships with **Allow Site Writes** disabled. If the site differs and the write is rejected, OAL deliberately blocks GOTO and reports an actionable error. Open **ASCOM Properties...**, set the same latitude/longitude as OAL and/or enable **ASCOM Options → Allow Site Writes**, then reconnect.
+
+`EquatorialSystem` is interpreted according to ASCOM: Topocentric=1 and J2000=2. Older/default EQMOD configurations can advertise `equOther=0`. For `EQMOD.*` only, OAL uses an explicit compatibility assumption that this means the default EQMOD topocentric/JNow-style coordinate stream and records that assumption in diagnostics. For reproducibility, explicitly select JNOW or J2000 in EQMOD setup rather than leaving the epoch Unknown.
+
+Axis-sign inversion in the OAL Mount tab applies only to native raw-axis drivers. It never changes Classic ASCOM behavior because EQMOD/ASCOM owns its own motor-to-sky transform.
+
+## Persistent shared Park
+
+The Mount tab action **Calibrate current physical pose as persistent Home / Park** has backend-specific storage but a common physical meaning. For native EQDrive it stores the current raw axes as OAL Home and Park and enables automatic Home alignment. For Classic ASCOM it calls standard `SetPark` when the driver reports `CanSetPark`.
+
+To make native and EQMOD/ASCOM park to the same physical pose, put the mount in that pose once, calibrate the native backend, switch backend without moving the mount, and calibrate Classic ASCOM once. Both calibrations persist; this is not a per-session operation.
 
 ## Build/runtime
 
