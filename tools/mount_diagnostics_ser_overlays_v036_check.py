@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
 checks=[
- ('release version','CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.38'),
+ ('release version','CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.44'),
  ('SER writer source','src/core/ser_writer.cpp','LUCAM-RECORDER'),
  ('SER raw pre-debayer order','src/core/application_controller.cpp','appendSer(frame,serError)'),
  ('SER live request','src/core/astro_types.h','bool recordSer{false}'),

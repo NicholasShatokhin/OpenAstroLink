@@ -48,15 +48,30 @@ struct MountGeometryConfig {
     // telescope/DEC axis aligned with the celestial pole.  When customHome
     // and autoHomeSync are enabled, Core can restore a usable sky model on
     // connect without asking for a manual near-pole Sync every session.
-    double homeAxis1Deg{90.0};
+    double homeAxis1Deg{0.0};
     double homeAxis2Deg{0.0};
     bool customHome{false};
     bool autoHomeSync{false};
     double homeToleranceDeg{2.0};
-    double parkAxis1Deg{90.0};
+    double parkAxis1Deg{0.0};
     double parkAxis2Deg{0.0};
     bool customPark{false};
     bool allowAutomaticPierFlip{false};
+    // Coordinate-model ABI for direct Sky-Watcher/EQDrive Motor Controller mounts.
+    // v6 (OpenAstroLink 0.2.10.44) keeps the controller counts present at
+    // direct-MC connect as the session Home/Park reference, exposed as
+    // Axis1=0°, Axis2=0°. Sky coordinates are mapped through a telescope
+    // direction vector rotated into the polar-aligned mount frame (the same
+    // geometry used by mature SkyWatcher/INDI implementations), instead of
+    // guessing an hour-angle phase. Axis1 is mount-frame azimuth; Axis2 is
+    // signed polar distance. Native serial EQDrive and direct UDP/11880 use
+    // this model; high-level SynScan hand-controller/App backends remain
+    // RA/DEC backends.
+    int nativeCoordinateModelVersion{1};
+    // When an ASCOM backend exposes a valid observatory site, prefer that site
+    // as the authoritative source for OAL coordinate conversions. This avoids
+    // maintaining two independently editable locations for EQMOD.
+    bool preferBackendSite{true};
     // User-controlled sky-separation safety envelope for coordinate GOTO.
     // The legacy field name is kept for wire/settings compatibility, but from
     // v0.2.10.38 its value is interpreted as ANGULAR SKY SEPARATION, not raw

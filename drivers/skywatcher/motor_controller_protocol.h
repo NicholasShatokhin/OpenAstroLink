@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <optional>
 #include <string>
 
@@ -114,6 +115,22 @@ inline std::string setMotionMode(int axis,bool gotoMode,bool highSpeed,bool forw
     const char func=gotoMode?(highSpeed?'0':'2'):(highSpeed?'3':'1');
     return command('G',axis,std::string(1,func)+(forward?"0":"1"));
 }
+
+struct GotoPlan {
+    std::uint32_t counts{0};
+    std::uint32_t brakeCounts{0};
+    bool forward{true};
+};
+
+// Convert a public mechanical delta into the controller-side GOTO quantities.
+// This helper is deliberately shared by serial EQDrive and UDP/11880 so the
+// transport cannot silently invent a different axis polarity or step count.
+inline std::optional<GotoPlan> makeGotoPlan(double deltaDeg,double countsPerRev) {
+    if(!std::isfinite(deltaDeg)||!std::isfinite(countsPerRev)||countsPerRev<=0.0)return std::nullopt;
+    const auto counts=std::uint32_t(std::max(1.0,std::round(std::abs(deltaDeg)*countsPerRev/360.0)));
+    return GotoPlan{counts,std::min<std::uint32_t>(counts,200u),deltaDeg>0.0};
+}
+
 inline std::string setGotoIncrement(int axis,std::uint32_t counts){return command('H',axis,encodeU24(counts));}
 inline std::string setBrakeIncrement(int axis,std::uint32_t counts){return command('M',axis,encodeU24(counts));}
 inline std::string setStepPeriod(int axis,std::uint32_t period){return command('I',axis,encodeU24(std::max<std::uint32_t>(1,period)));}

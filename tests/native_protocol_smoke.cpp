@@ -68,6 +68,14 @@ int main() {
     const auto mcSlewRunning = skywatcher_mc::parseStatus("=111\r");
     assert(mcSlewRunning.valid && mcSlewRunning.running && !mcSlewRunning.gotoMode && mcSlewRunning.initialized);
 
+    const auto gotoPos = skywatcher_mc::makeGotoPlan(44.620195, 9216000.0);
+    const auto gotoNeg = skywatcher_mc::makeGotoPlan(-44.620195, 9216000.0);
+    assert(gotoPos && gotoNeg);
+    assert(gotoPos->counts == gotoNeg->counts);
+    assert(gotoPos->brakeCounts == gotoNeg->brakeCounts);
+    assert(gotoPos->forward && !gotoNeg->forward);
+    assert(gotoNeg->counts == 1142277u);
+
     std::cout << "Native telescope protocol smoke tests passed.\n";
     return 0;
 }

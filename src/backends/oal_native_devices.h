@@ -83,7 +83,7 @@ public:
     bool manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
     void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override;
 private:
-    bool rawAxisStatus(MechanicalAxes &axes, bool *slewing=nullptr, QString *error=nullptr) const;
+    bool rawAxisStatus(MechanicalAxes &axes, bool *slewing=nullptr, QString *error=nullptr, QJsonObject *diagnostics=nullptr) const;
     bool rawAxisGoto(const MechanicalAxes &axes, double maxAxisDeltaDeg, QString *error=nullptr);
     bool tryAutoHomeSync(QString *error=nullptr);
     bool geometryAware_{false};
@@ -93,6 +93,7 @@ private:
     MechanicalAxes parkTarget_{};
     QString alignmentSource_;
     QString homeAlignmentNote_;
+    MechanicalAxes lastCommandedTarget_{};
 };
 
 class NativeOalFocuser final : public IFocuser, private NativeOalDeviceBase {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.38
+  version: 0.2.10.44
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -387,21 +387,29 @@ components:
         axis1Sign: { type: integer, enum: [-1, 1], default: 1 }
         axis2Sign: { type: integer, enum: [-1, 1], default: 1 }
         preferredPierSide: { type: string, enum: [east, west], default: east }
-        homeAxis1Deg: { type: number, default: 90 }
+        homeAxis1Deg: { type: number, default: 0 }
         homeAxis2Deg: { type: number, default: 0 }
         customHome: { type: boolean, default: false }
         autoHomeSync: { type: boolean, default: false }
         homeToleranceDeg: { type: number, minimum: 0.1, maximum: 15, default: 2 }
-        parkAxis1Deg: { type: number, default: 90 }
+        parkAxis1Deg: { type: number, default: 0 }
         parkAxis2Deg: { type: number, default: 0 }
         customPark: { type: boolean, default: false }
         allowAutomaticPierFlip: { type: boolean, default: false }
+        nativeCoordinateModelVersion:
+          type: integer
+          default: 1
+          description: Direct Motor Controller coordinate-model ABI. v4 exposes one mechanical axis system with standard Home/Park Axis1=0°, Axis2=0°; controller step-count references remain transport details.
+        preferBackendSite:
+          type: boolean
+          default: true
+          description: For ASCOM, adopt a valid site reported by the mount backend into the OAL profile instead of maintaining a second independent observatory location.
         maxGotoSkyDeltaDeg:
           type: number
           minimum: 0.1
           maximum: 180
           default: 15
-          description: Preferred v0.2.10.38+ name. Maximum true angular sky separation for one native coordinate GOTO; raw motor motion can be larger near the celestial pole.
+          description: Preferred v0.2.10.44+ name. Maximum true angular sky separation for one native coordinate GOTO; raw motor motion can be larger near the celestial pole.
         maxGotoAxisDeltaDeg:
           type: number
           minimum: 0.1

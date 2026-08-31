@@ -38,7 +38,7 @@ double decodeDec(qint32 v) {
 
 StellariumTelescopeServer::StellariumTelescopeServer(ObservatoryController *controller, QObject *parent)
     : QObject(parent), controller_(controller) {
-    positionTimer_.setInterval(500);
+    positionTimer_.setInterval(250);
     connect(&server_, &QTcpServer::newConnection, this, &StellariumTelescopeServer::acceptConnections);
     connect(&positionTimer_, &QTimer::timeout, this, &StellariumTelescopeServer::broadcastPosition);
 }
@@ -151,8 +151,9 @@ void StellariumTelescopeServer::broadcastPosition() {
     if (!controller_->mountStatus(status, nullptr) || !status.coordinateValid) return;
     const QByteArray packet = makePositionPacket(status);
     for (auto *socket : buffers_.keys()) {
-        if (socket && socket->state() == QAbstractSocket::ConnectedState)
-            socket->write(packet);
+        if (socket && socket->state() == QAbstractSocket::ConnectedState) {
+            if (socket->write(packet) > 0) socket->flush();
+        }
     }
 }
 } // namespace oas

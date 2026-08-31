@@ -1,5 +1,35 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.44 — виправлення паритету SynScan Wi-Fi/native Motor Controller
+
+- Прибрано Wi-Fi-специфічний шар polarity з v0.2.10.43. UDP/11880 і нативний EQDrive через serial звертаються до тих самих осей Motor Controller, тому однакові controller counts тепер мають однаковий механічний зміст на обох transport.
+- Serial і Wi-Fi GOTO тепер використовують спільний `skywatcher_mc::makeGotoPlan()` для перетворення механічної дельти на напрямок, кількість кроків і brake count. Відрізняється лише I/O transport.
+- Додано HIL diagnostics Wi-Fi: остання дельта кожної осі, raw count increment, forward/reverse та firmware payload обох осей.
+- Збережено захист UDP shutdown із v0.2.10.43.
+
+**Поточний пакет: v0.2.10.44 — SynScan Wi-Fi/native Motor Controller parity fix**
+
+## v0.2.10.43 — hotfix polarity DEC для SynScan Wi-Fi
+
+- Геометрія v6 у native `oal.eqdrive` не змінюється: serial HIL вже наводить правильно.
+- Direct `synscan-wifi` тепер відокремлює **polarity controller counts transport-рівня** від спільних axis signs sky-геометрії. Для поточного EQDrive Wi-Fi HIL-профілю (`9216000` counts/rev на обох осях, timer `53694`) застосовується `Axis1=+1`, `Axis2=-1`. Це відповідає фактичному напрямку DEC і не повертає вигадану 90° поправку в небесну модель.
+- Для звичайного Sky-Watcher UDP/11880 лишається стандарт `+1/+1`, бо офіційний протокол визначає Wi-Fi як той самий Motor Controller command set, що й serial. Обидва signs можна явно перевизначити через `OAL_SYNSCAN_WIFI_AXIS1_SIGN` / `OAL_SYNSCAN_WIFI_AXIS2_SIGN`.
+- GOTO, manual slew, tracking direction та live axis decoding використовують одну й ту саму transport polarity, тому фізичний рух і координати в status/Stellarium більше не розходяться. Park як і раніше повертає до startup Home/Park counts.
+- UDP disconnect захищено від виклику `QUdpSocket::hasPendingDatagrams()` після виходу socket зі стану `BoundState`.
+
+**Поточний пакет: v0.2.10.43 — SynScan Wi-Fi DEC transport polarity hotfix**
+
+## v0.2.10.42 — полярна telescope-frame геометрія direct-MC
+
+- Native `oal.eqdrive` serial та direct `synscan-wifi` UDP/11880 використовують **фактичні Motor Controller counts у момент connect** як фізичний session Home/Park. Ця стартова поза показується як `Axis1=0°, Axis2=0°`; жодної вигаданої фіксованої 90° DEC-поправки немає.
+- Виправлено залишкову помилку наведення east/west. Coordinate-model ABI **v6** тепер використовує перевірену SkyWatcher/INDI telescope-direction-vector геометрію: JNow sky -> horizontal direction vector -> polar-aligned mount frame. `Axis1` — азимут у полярній системі монтування, `Axis2` — signed polar distance. Це замінює помилкове v5 припущення `H+90°`.
+- Обидві еквівалентні GEM-гілки як і раніше перевіряються, і обирається та, що потребує найкоротшого фізичного руху контролера. HIL-регресія 2026-08-31, де східна ціль біля Денеба відправляла трубу на північ, тепер мапиться на близьку flipped-гілку.
+- Точне обернене перетворення виконується для кожного live encoder sample, тому Stellarium має бачити RA/DEC, що змінюються протягом native slew.
+- Стартовий direct-MC Home автоматично відновлює валідну sky model; ручний Sync на Polaris для звичайного старту не потрібен. Plate-solve Sync лишається як пізніше уточнення pointing.
+- High-level SynScan backends лишаються окремими: `oal.skywatcher` hand-controller і `synscan-app` використовують власну RA/DEC alignment model SynScan. Лише direct Motor Controller Wi-Fi (`synscan-wifi`, UDP/11880) ділить v6 із native EQDrive serial.
+- Classic ASCOM як і раніше має default endpoint `EQMOD.Telescope`, а валідний EQMOD site за замовчуванням є authoritative.
+
+
 ## v0.2.10.38 — нормалізація site для монтування, sky-angle safety та спільний persistent Park
 
 - Виправлено safety semantics native GOTO біля полюса: користувацький ліміт тепер означає **реальну кутову відстань по небу**, а не raw-обертання моторної RA/DEC осі. Поблизу небесного полюса зміщення на 3–5° по небу може коректно вимагати >100° обертання RA; transport має окремий mechanical hard cap 180°. `maxGotoSkyDeltaDeg` — нова бажана назва API, `maxGotoAxisDeltaDeg` лишається compatibility alias.
@@ -121,7 +151,7 @@ OpenAstroLink (OAL) — local-first стек керування обсерват
 - На вкладці Mount можна вводити/показувати `J2000 / catalog` або `JNow / of-date`; node переводить JNow у J2000.
 - Stellarium bridge трактується як J2000. Classic ASCOM читає `EquatorialSystem`; J2000 передається напряму, а topocentric/of-date ASCOM driver наразі наближено трактується як JNow із прецесією на compatibility boundary (повна apparent/topocentric корекція ще не реалізована).
 - `MountGeometry` профілі охоплюють GEM, fork-equatorial, Alt-Az, Alt-Az+derotator, equatorial platform та custom two-axis; sky geometry більше не зашивається в raw-axis driver.
-- Home/Park зберігаються у механічних координатах окремо від RA/DEC; default Park — Axis1=90°, Axis2=0°, а GUI вміє зберегти поточні осі як Park.
+- Home/Park зберігаються у механічних координатах окремо від RA/DEC; default direct-MC Home/Park — Axis1=0°, Axis2=0°, а GUI вміє зберегти поточні осі як Park.
 - Native EQDrive і direct SynScan/EQDrive Wi-Fi використовують одну Core geometry model; Sync на відому точку визначає encoder offsets/signs установки.
 - Явний **Refresh native device discovery** після нульового QHY scan може hard-reload `oal.qhy` DLL разом із QHYCCD dependency, але тільки коли QHY не відкрита. Періодичного vendor polling немає.
 - Classic ASCOM під час slew тепер логуватиме RA/DEC/pier/tracking, щоб відокремити поведінку EQMOD від OAL coordinate conversion.

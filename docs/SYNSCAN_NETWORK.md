@@ -6,6 +6,20 @@ protocol endpoints.
 
 ## Direct mount Wi-Fi — `synscan-wifi`
 
+### EQDrive Wi-Fi transport polarity
+
+OpenAstroLink keeps Motor Controller **transport polarity** separate from the mount sky geometry. Generic Sky-Watcher UDP/11880 follows the protocol default `Axis1=+1`, `Axis2=+1`. The HIL-qualified EQDrive Wi-Fi profile reporting `9216000` counts/rev on both axes and timer frequency `53694` uses `Axis1=+1`, `Axis2=-1`; this corrects the physical DEC direction while preserving the same v6 sky transform and the same startup Home/Park reference.
+
+For unusual adapters the transport signs can be forced before launching the node:
+
+```text
+OAL_SYNSCAN_WIFI_AXIS1_SIGN=1|-1
+OAL_SYNSCAN_WIFI_AXIS2_SIGN=1|-1
+```
+
+The active signs and their source are exposed in mount diagnostics as `transportAxis1Sign`, `transportAxis2Sign`, and `transportPolaritySource`.
+
+
 `synscan-wifi` connects **directly to the mount / EQDrive / SynScan Wi-Fi
 adapter**. SynScan Pro is not required.
 

@@ -396,6 +396,7 @@ void ApplicationController::setProfile(const TelescopeProfile&p){
     const auto old=profile_;
     const bool transformChanged =
         old.mount.type!=p.mount.type || old.mount.axis1Sign!=p.mount.axis1Sign || old.mount.axis2Sign!=p.mount.axis2Sign ||
+        old.mount.nativeCoordinateModelVersion!=p.mount.nativeCoordinateModelVersion ||
         old.mount.preferredPierSide.compare(p.mount.preferredPierSide,Qt::CaseInsensitive)!=0 ||
         std::abs(old.observer.latitudeDeg-p.observer.latitudeDeg)>1e-10 ||
         std::abs(old.observer.longitudeDeg-p.observer.longitudeDeg)>1e-10;
@@ -459,16 +460,40 @@ bool ApplicationController::connectGuideCamera(const QString&b,const QString&e,Q
 bool ApplicationController::connectMount(const QString&b,const QString&e,QString*err){
     if(!ensureResourcesAvailable({"mount"},err))return false;
     std::shared_ptr<IMount>d;QString driverId,deviceId;
+    QString resolvedEndpoint=e.trimmed();
+    if(b=="ascom-classic"&&resolvedEndpoint.isEmpty())resolvedEndpoint="EQMOD.Telescope";
+    bool migratedDirectMcModel=false;
+    auto migrateDirectMotorControllerModel=[this,&migratedDirectMcModel](){
+        if(profile_.mount.nativeCoordinateModelVersion>=6)return;
+        // v6 keeps one public mechanical-axis convention: the controller
+        // counts present when the direct Motor Controller is connected are
+        // Axis1=0°, Axis2=0° Home/Park.  Sky mapping is rebuilt with the
+        // polar-aligned telescope-vector transform instead of the v5 guessed
+        // hour-angle phase.  Clear legacy custom poses one time because older
+        // coordinate models may have encoded incompatible offsets.
+        const bool hadLegacyCustomPose=profile_.mount.customHome||profile_.mount.customPark;
+        profile_.mount.nativeCoordinateModelVersion=6;
+        profile_.mount.axis1Sign=1;profile_.mount.axis2Sign=1;
+        profile_.mount.customHome=false;profile_.mount.customPark=false;
+        profile_.mount.homeAxis1Deg=0.0;profile_.mount.homeAxis2Deg=0.0;
+        profile_.mount.parkAxis1Deg=0.0;profile_.mount.parkAxis2Deg=0.0;
+        profile_.mount.autoHomeSync=true;
+        settings_.saveProfile(profile_);emit profileChanged();migratedDirectMcModel=true;
+        emit logMessage(hadLegacyCustomPose
+            ? "Native direct-MC coordinate model migrated to v6: startup controller counts define the physical Home/Park as 0°,0°; legacy custom Home/Park cleared; sky mapping now uses the polar-aligned telescope-vector transform."
+            : "Native direct-MC coordinate model migrated to v6: startup controller counts define Axis1=0°, Axis2=0° and sky mapping now uses the polar-aligned telescope-vector transform; axis signs reset to +1/+1.");
+    };
     if(parseNativeBackendKey(b,driverId,deviceId)){
+        if(driverId=="oal.eqdrive")migrateDirectMotorControllerModel();
         auto desc=nativeDescriptor(driverLoader_,b,"mount",err);if(desc.isEmpty())return false;
         d=std::make_shared<NativeOalMount>(driverLoader_,desc,profile_.mount,profile_.observer);
     }
     else if(b=="simulated")d=std::make_shared<SimulatedMount>();
     else if(b=="serial-lx200")d=std::make_shared<SerialLx200Mount>(e);
     else if(b=="synscan-app")d=std::make_shared<SynScanAppMount>(e);
-    else if(b=="synscan-wifi")d=std::make_shared<SynScanNetworkMount>(e,profile_.mount,profile_.observer);
+    else if(b=="synscan-wifi"){migrateDirectMotorControllerModel();d=std::make_shared<SynScanNetworkMount>(e,profile_.mount,profile_.observer);}
 #ifdef OAS_HAVE_ASCOM_CLASSIC
-    else if(b=="ascom-classic")d=std::make_shared<AscomClassicMount>(e);
+    else if(b=="ascom-classic")d=std::make_shared<AscomClassicMount>(resolvedEndpoint);
 #endif
     else if(b=="ascom-alpaca")d=std::make_shared<AlpacaMount>(QUrl(e));
     else if(b=="oal")d=std::make_shared<OalMountClient>(QUrl(e));
@@ -477,12 +502,13 @@ bool ApplicationController::connectMount(const QString&b,const QString&e,QString
 #endif
     else{if(err)*err="Unknown mount backend";return false;}
     if(!d->connectDevice(err))return false;
-    mount_=std::move(d);settings_.saveMountBinding({mount_->backendName(),e,true});
+    mount_=std::move(d);settings_.saveMountBinding({mount_->backendName(),resolvedEndpoint,true});
     emit logMessage("Mount connected: "+mount_->displayName());
 
-    // Classic ASCOM/EQMOD owns its own horizon/hour-angle transform. A stale
-    // site can mirror East/West even when the RA/DEC target is correct, so OAL
-    // automatically pushes the canonical profile site/time on connect.
+    // Classic ASCOM/EQMOD owns its own horizon/hour-angle transform. By
+    // default OAL therefore adopts a valid backend site into the OAL profile,
+    // keeping one authoritative observatory location instead of two divergent
+    // copies. Users can disable this preference to push the OAL site instead.
     if(mount_->backendName()=="ascom-classic"){
         QString autoSiteError;
         if(!ensureMountBackendSiteTime(&autoSiteError))
@@ -493,7 +519,7 @@ bool ApplicationController::connectMount(const QString&b,const QString&e,QString
         emit logMessage("Mount diagnostic CONNECT: "+mountDiagnosticSnapshot(mount_->backendName(),st,profile_.observer,QDateTime::currentDateTimeUtc()));
         if(!st.diagnostics.isEmpty()){
             const QString align=st.diagnostics.value("alignmentSource").toString();
-            if(align=="auto-home")emit logMessage("Mount automatic Home alignment restored: "+st.diagnostics.value("homeAlignmentNote").toString());
+            if(align=="auto-home"||align=="eqdrive-zero-home"||align=="polar-home-sync")emit logMessage("Mount automatic/Home alignment restored: "+st.diagnostics.value("homeAlignmentNote").toString());
             else if(st.diagnostics.value("autoHomeSyncEnabled").toBool()&&!st.coordinateValid)emit logMessage("Mount automatic Home alignment not active: "+st.diagnostics.value("homeAlignmentNote").toString());
             const double blat=st.diagnostics.value("siteLatitude").toDouble(999.0),blon=st.diagnostics.value("siteLongitude").toDouble(999.0);
             if(std::abs(blat)<=90.0&&std::abs(blon)<=180.0&&(std::abs(blat-profile_.observer.latitudeDeg)>0.01||std::abs(blon-profile_.observer.longitudeDeg)>0.01))
@@ -517,35 +543,40 @@ bool ApplicationController::ensureResourcesAvailable(const QStringList&resources
 bool ApplicationController::ensureMountBackendSiteTime(QString*error){
     if(!mount_||mount_->backendName()!="ascom-classic"){if(error)error->clear();return true;}
     MountStatus st;QString statusError;
-    bool mismatch=false;
-    if(mount_->status(st,&statusError)){
-        const double lat=st.diagnostics.value("siteLatitude").toDouble(999.0);
-        const double lon=st.diagnostics.value("siteLongitude").toDouble(999.0);
-        if(std::abs(lat)<=90.0&&std::abs(lon)<=180.0)
-            mismatch=std::abs(lat-profile_.observer.latitudeDeg)>0.01||std::abs(lon-profile_.observer.longitudeDeg)>0.01;
-    }
-    if(!mismatch){if(error)error->clear();return true;}
-    QString applyError;
-    const auto utc=QDateTime::currentDateTimeUtc();
-    if(!mount_->setSiteTime(profile_.observer,utc,&applyError)){
-        QString hint;
-        if(st.diagnostics.value("progId").toString().startsWith("EQMOD.",Qt::CaseInsensitive))
-            hint=" EQMOD normally requires 'ASCOM Options -> Allow Site Writes' to be enabled; alternatively set the same latitude/longitude in EQMOD ASCOM Setup.";
-        const QString msg=QString("ASCOM backend site differs from OAL site and automatic correction failed: %1.%2").arg(applyError,hint);
-        if(error)*error=msg;return false;
-    }
-    MountStatus after;QString verifyError;
-    if(mount_->status(after,&verifyError)){
-        const double lat=after.diagnostics.value("siteLatitude").toDouble(999.0);
-        const double lon=after.diagnostics.value("siteLongitude").toDouble(999.0);
-        if(std::abs(lat)<=90.0&&std::abs(lon)<=180.0&&
-           (std::abs(lat-profile_.observer.latitudeDeg)>0.01||std::abs(lon-profile_.observer.longitudeDeg)>0.01)){
-            const QString msg=QString("ASCOM backend ignored the requested site: backend=(%1,%2), OAL=(%3,%4)")
-                .arg(lat,0,'f',6).arg(lon,0,'f',6).arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6);
-            if(error)*error=msg;return false;
+    if(!mount_->status(st,&statusError)){if(error)*error="Could not read ASCOM site/status: "+statusError;return false;}
+    const double lat=st.diagnostics.value("siteLatitude").toDouble(999.0);
+    const double lon=st.diagnostics.value("siteLongitude").toDouble(999.0);
+    const double elev=st.diagnostics.value("siteElevation").toDouble(profile_.observer.elevationM);
+    const bool validSite=std::isfinite(lat)&&std::isfinite(lon)&&std::abs(lat)<=90.0&&std::abs(lon)<=180.0;
+
+    if(profile_.mount.preferBackendSite){
+        if(validSite){
+            const bool changed=std::abs(lat-profile_.observer.latitudeDeg)>1e-8||std::abs(lon-profile_.observer.longitudeDeg)>1e-8||
+                               (std::isfinite(elev)&&std::abs(elev-profile_.observer.elevationM)>1e-6);
+            if(changed){
+                profile_.observer.latitudeDeg=lat;profile_.observer.longitudeDeg=lon;if(std::isfinite(elev))profile_.observer.elevationM=elev;
+                settings_.saveProfile(profile_);emit profileChanged();
+                emit logMessage(QString("ASCOM backend site adopted into OpenAstroLink profile (backend authoritative): lat=%1 lon=%2 elev=%3m")
+                    .arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6).arg(profile_.observer.elevationM,0,'f',1));
+            }
+            if(error)error->clear();return true;
         }
+        // Equatorial GOTO remains usable even if this particular ASCOM driver
+        // cannot expose its site. Do not invent or overwrite a location.
+        emit logMessage("ASCOM backend-site preference is enabled, but this driver did not expose a valid SiteLatitude/SiteLongitude; keeping the current OAL profile site.");
+        if(error)error->clear();return true;
     }
-    emit logMessage(QString("ASCOM site/time automatically synchronized from OAL profile: lat=%1 lon=%2 elev=%3m UTC=%4")
+
+    if(!validSite){if(error)error->clear();return true;}
+    const bool mismatch=std::abs(lat-profile_.observer.latitudeDeg)>0.01||std::abs(lon-profile_.observer.longitudeDeg)>0.01;
+    if(!mismatch){if(error)error->clear();return true;}
+    QString applyError;const auto utc=QDateTime::currentDateTimeUtc();
+    if(!mount_->setSiteTime(profile_.observer,utc,&applyError)){
+        QString hint;if(st.diagnostics.value("progId").toString().startsWith("EQMOD.",Qt::CaseInsensitive))
+            hint=" EQMOD normally requires 'ASCOM Options -> Allow Site Writes' to be enabled; alternatively set the same latitude/longitude in EQMOD ASCOM Setup.";
+        if(error)*error=QString("ASCOM backend site differs from OAL site and automatic correction failed: %1.%2").arg(applyError,hint);return false;
+    }
+    emit logMessage(QString("ASCOM site/time synchronized from OAL profile: lat=%1 lon=%2 elev=%3m UTC=%4")
         .arg(profile_.observer.latitudeDeg,0,'f',6).arg(profile_.observer.longitudeDeg,0,'f',6).arg(profile_.observer.elevationM,0,'f',1).arg(utc.toString(Qt::ISODateWithMs)));
     if(error)error->clear();return true;
 }

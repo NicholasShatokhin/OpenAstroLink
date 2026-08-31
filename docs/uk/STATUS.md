@@ -1,4 +1,24 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.38
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.44
+
+## v0.2.10.44 HIL follow-up
+
+- Скасовано непідтверджену гіпотезу v0.2.10.43 про окрему DEC polarity для Wi-Fi. Той самий фізичний Motor Controller тепер має єдину інтерпретацію raw counts/механічних осей для serial та UDP/11880.
+- Native serial і direct Wi-Fi GOTO використовують один `makeGotoPlan()`, тому transport більше не може розійтися за напрямком або кількістю кроків.
+- Direct Wi-Fi status показує точні останні GOTO delta/counts/forward для HIL-порівняння.
+
+## v0.2.10.43 HIL follow-up
+
+- Native serial EQDrive confirmed correct under coordinate model v6.
+- Direct `synscan-wifi` HIL indicates mirrored DEC transport polarity on the EQDrive Wi-Fi profile (`9216000/9216000`, timer `53694`); backend now applies Axis2 transport sign `-1` only for that profile and keeps generic UDP/11880 at `+1/+1`.
+- UDP socket shutdown is guarded against post-close datagram polling.
+
+
+## v0.2.10.42 HIL follow-up
+
+- За замовчуванням site з EQMOD/Classic ASCOM є авторитетним; OAL приймає latitude/longitude/elevation backend і використовує їх у власних координатних перетвореннях. Порожній Classic ASCOM endpoint автоматично стає `EQMOD.Telescope`.
+- Native EQDrive serial та direct SynScan/EQDrive Wi-Fi використовують direct-MC coordinate model v6 з однією механічною системою: controller counts у момент direct-MC connect визначають session Home/Park `Axis1=0°, Axis2=0°`; controller position packets лишаються integer step-count diagnostics.
+- GEM planner v6 перевіряє обидві еквівалентні гілки й вибирає найкоротший фізичний маршрут; Stellarium отримує live native telemetry кожні 250 ms під час slew.
+- High-level SynScan hand-controller та SynScan App лишаються RA/DEC backend'ами і не використовують direct-MC axis model.
 
 
 ## v0.2.10.38 — HIL follow-up
@@ -82,7 +102,7 @@
 - Профілі: German equatorial, fork equatorial, Alt-Az, Alt-Az+derotator, equatorial platform, custom two-axis.
 - Native EQDrive та direct SynScan/EQDrive Wi-Fi використовують `MountGeometryModel` у OAL Core; hardware driver відповідає за raw axes/motion.
 - GEM: UTC/longitude → local sidereal time → hour angle → pier branch → mechanical axes; один Sync визначає encoder offset/signs конкретної установки.
-- Mechanical Park default Axis1=90°, Axis2=0°, configurable; GUI може зберегти поточні mechanical axes як Park. Classic ASCOM зберігає Park semantics свого ASCOM-драйвера.
+- Mechanical Home/Park direct-MC default Axis1=0°, Axis2=0°, configurable; GUI може зберегти поточні mechanical axes як Park. Classic ASCOM зберігає Park semantics свого ASCOM-драйвера.
 - Automatic meridian flip за замовчуванням вимкнений. Тимчасовий 15° test envelope для native/direct GOTO знято; довгі переходи використовують shortest-axis envelope і мають виконуватися під наглядом до повної HIL-кваліфікації pier/limits.
 - Alt-Az coordinate conversion уже є; production two-axis tracking/derotator control ще попереду.
 - Classic ASCOM operation slew логуватиме RA/DEC/pier/tracking під час руху.

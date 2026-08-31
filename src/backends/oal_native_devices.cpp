@@ -217,32 +217,37 @@ bool NativeOalMount::connectDevice(QString *error) {
     return true;
 }
 void NativeOalMount::disconnectDevice(){if(state_==ConnectionState::Disconnected)return;invokeOk("mount.abort",{},nullptr,nullptr);invokeOk("device.disconnect",{},nullptr,nullptr);parking_=false;parked_=false;state_=ConnectionState::Disconnected;}
-bool NativeOalMount::rawAxisStatus(MechanicalAxes &axes,bool *slewing,QString *error) const {
+bool NativeOalMount::rawAxisStatus(MechanicalAxes &axes,bool *slewing,QString *error,QJsonObject *diagnostics) const {
     QJsonObject d;if(!invokeOk("mount.axisStatus",{},&d,error))return false;
     axes={d.value("axis1Deg").toDouble(),d.value("axis2Deg").toDouble(),true};
     if(slewing)*slewing=d.value("running1").toBool()||d.value("running2").toBool()||d.value("goto1").toBool()||d.value("goto2").toBool();
+    if(diagnostics){for(const char *key:{"axis1ControllerCounts","axis2ControllerCounts","axis1HomeZeroCounts","axis2HomeZeroCounts","countsPerRev1","countsPerRev2","timerFreq","firmware","wireProtocol"})if(d.contains(key))(*diagnostics)[key]=d.value(key);}
     return true;
 }
 bool NativeOalMount::rawAxisGoto(const MechanicalAxes &axes,double limit,QString *error){
     return invokeOk("mount.gotoAxes",{{"axis1Deg",axes.axis1Deg},{"axis2Deg",axes.axis2Deg},{"maxAxisDeltaDeg",limit}},nullptr,error);
 }
 bool NativeOalMount::tryAutoHomeSync(QString *error){
-    if(!geometryAware_||!geometry_.config().autoHomeSync||!geometry_.config().customHome)return false;
+    if(!geometryAware_||!geometry_.config().autoHomeSync)return false;
+    const bool standardEqDriveHome=(driverId()=="oal.eqdrive"&&!geometry_.config().customHome&&geometry_.config().nativeCoordinateModelVersion>=4);
+    if(!geometry_.config().customHome&&!standardEqDriveHome)return false;
     MechanicalAxes actual;QString e;
     if(!rawAxisStatus(actual,nullptr,&e)){homeAlignmentNote_="Home reference status unavailable: "+e;if(error)*error=e;return false;}
+    const double expected1=standardEqDriveHome?0.0:geometry_.config().homeAxis1Deg;
+    const double expected2=standardEqDriveHome?0.0:geometry_.config().homeAxis2Deg;
     auto delta=[](double a,double b){double d=std::fmod(a-b,360.0);if(d>180)d-=360;if(d<-180)d+=360;return std::abs(d);};
-    const double d1=delta(actual.axis1Deg,geometry_.config().homeAxis1Deg);
-    const double d2=delta(actual.axis2Deg,geometry_.config().homeAxis2Deg);
+    const double d1=delta(actual.axis1Deg,expected1);
+    const double d2=delta(actual.axis2Deg,expected2);
     const double tol=std::clamp(geometry_.config().homeToleranceDeg,0.1,15.0);
-    if(d1>tol||d2>tol){homeAlignmentNote_=QString("Home reference not applied: current axes differ from saved Home by dAxis1=%1deg dAxis2=%2deg (tolerance %3deg)").arg(d1,0,'f',4).arg(d2,0,'f',4).arg(tol,0,'f',2);if(error)*error=homeAlignmentNote_;return false;}
+    if(d1>tol||d2>tol){homeAlignmentNote_=QString("Home reference not applied: current axes differ from %1 Home by dAxis1=%2deg dAxis2=%3deg (tolerance %4deg)").arg(standardEqDriveHome?"standard EQDrive mechanical zero":"saved").arg(d1,0,'f',4).arg(d2,0,'f',4).arg(tol,0,'f',2);if(error)*error=homeAlignmentNote_;return false;}
     if(!geometry_.syncHome(actual,QDateTime::currentDateTimeUtc(),&e)){homeAlignmentNote_="Home reference rejected: "+e;if(error)*error=e;return false;}
-    alignmentSource_="auto-home";
-    homeAlignmentNote_=QString("Home reference accepted: dAxis1=%1deg dAxis2=%2deg tolerance=%3deg").arg(d1,0,'f',4).arg(d2,0,'f',4).arg(tol,0,'f',2);
+    alignmentSource_=standardEqDriveHome?"eqdrive-zero-home":"auto-home";
+    homeAlignmentNote_=QString("%1 Home reference accepted: dAxis1=%2deg dAxis2=%3deg tolerance=%4deg").arg(standardEqDriveHome?"standard EQDrive mechanical zero":"saved").arg(d1,0,'f',4).arg(d2,0,'f',4).arg(tol,0,'f',2);
     if(error)error->clear();return true;
 }
 bool NativeOalMount::status(MountStatus &s, QString *error){
     if(geometryAware_){
-        MechanicalAxes axes;bool moving=false;if(!rawAxisStatus(axes,&moving,error))return false;
+        MechanicalAxes axes;bool moving=false;QJsonObject axisDiagnostics;if(!rawAxisStatus(axes,&moving,error,&axisDiagnostics))return false;
         if(parking_&&!moving){
             auto delta=[](double a,double b){double d=std::fmod(a-b,360.0);if(d>180)d-=360;if(d<-180)d+=360;return std::abs(d);};
             parked_=delta(axes.axis1Deg,parkTarget_.axis1Deg)<=0.25&&delta(axes.axis2Deg,parkTarget_.axis2Deg)<=0.25;parking_=false;
@@ -254,6 +259,11 @@ bool NativeOalMount::status(MountStatus &s, QString *error){
         s.diagnostics["homeAxis1Deg"]=geometry_.config().homeAxis1Deg;
         s.diagnostics["homeAxis2Deg"]=geometry_.config().homeAxis2Deg;
         s.diagnostics["homeToleranceDeg"]=geometry_.config().homeToleranceDeg;
+        s.diagnostics["nativeCoordinateModelVersion"]=geometry_.config().nativeCoordinateModelVersion;
+        s.diagnostics["standardEqDriveZeroHome"]=(driverId()=="oal.eqdrive"&&!geometry_.config().customHome&&geometry_.config().nativeCoordinateModelVersion>=4);
+        for(auto it=axisDiagnostics.begin();it!=axisDiagnostics.end();++it)s.diagnostics[it.key()]=it.value();
+        s.diagnostics["axis1Deg"]=axes.axis1Deg;s.diagnostics["axis2Deg"]=axes.axis2Deg;
+        if(lastCommandedTarget_.valid){s.diagnostics["lastTargetAxis1Deg"]=lastCommandedTarget_.axis1Deg;s.diagnostics["lastTargetAxis2Deg"]=lastCommandedTarget_.axis2Deg;}
         if(!homeAlignmentNote_.isEmpty())s.diagnostics["homeAlignmentNote"]=homeAlignmentNote_;
         EquatorialCoord sky;if(geometry_.skyFromAxes(axes,sky,QDateTime::currentDateTimeUtc(),nullptr)){s.coordinate=sky;s.coordinateValid=true;}else{s.coordinate={0,0,EquatorialFrame::J2000};s.coordinateValid=false;}
         // Tracking state is still owned by the driver. Query compatibility status
@@ -275,6 +285,7 @@ bool NativeOalMount::slewTo(const EquatorialCoord&t,QString*e){
     const double skyLimit=std::clamp(geometry_.config().maxGotoAxisDeltaDeg,0.1,180.0);
     if(skySep>skyLimit){if(e)*e=QString("Sky GOTO exceeds safety limit %1 deg: separation=%2 deg").arg(skyLimit,0,'f',1).arg(skySep,0,'f',3);return false;}
     if(!geometry_.axesForSky(t,current,target,utc,e))return false;
+    lastCommandedTarget_=target;
     // Near the celestial pole a small angular displacement can legitimately
     // require a large RA-axis rotation because RA is singular at Dec=+/-90.
     // Safety is therefore expressed in true sky separation. The transport keeps
@@ -285,7 +296,21 @@ bool NativeOalMount::abortMotion(QString*e){const bool ok=invokeOk("mount.abort"
 bool NativeOalMount::syncTo(const EquatorialCoord&t,QString*e){
     if(!geometryAware_)return invokeOk("mount.sync",{{"raDeg",t.raDeg},{"decDeg",t.decDeg}},nullptr,e);
     MechanicalAxes axes;if(!rawAxisStatus(axes,nullptr,e))return false;
-    const bool ok=geometry_.sync(t,axes,QDateTime::currentDateTimeUtc(),e);
+    const auto utc=QDateTime::currentDateTimeUtc();
+    const auto jnow=convertEquatorialFrame(t,EquatorialFrame::JNow,utc);
+    if(driverId()=="oal.eqdrive"&&geometry_.config().nativeCoordinateModelVersion>=4&&
+       geometry_.config().type==MountGeometryType::GermanEquatorial&&std::abs(jnow.decDeg)>80.0){
+        const bool standard=!geometry_.config().customHome;
+        const double h1=standard?0.0:geometry_.config().homeAxis1Deg,h2=standard?0.0:geometry_.config().homeAxis2Deg;
+        auto delta=[](double a,double b){double d=std::fmod(a-b,360.0);if(d>180)d-=360;if(d<-180)d+=360;return std::abs(d);};
+        const double tol=std::clamp(geometry_.config().homeToleranceDeg,0.1,15.0);
+        if(delta(axes.axis1Deg,h1)<=tol&&delta(axes.axis2Deg,h2)<=tol){
+            const bool ok=geometry_.syncHome(axes,utc,e);
+            if(ok){alignmentSource_="polar-home-sync";homeAlignmentNote_="Near-pole Sync at Home: RA was intentionally ignored because RA is singular at the celestial pole; mechanical Home preserved the polar-frame orientation.";}
+            return ok;
+        }
+    }
+    const bool ok=geometry_.sync(t,axes,utc,e);
     if(ok){alignmentSource_="manual-sync";homeAlignmentNote_.clear();}
     return ok;
 }
@@ -323,10 +348,11 @@ bool NativeOalMount::park(bool v,QString*e){
         if(parking_&&!abortMotion(e))return false;
         parking_=false;parked_=false;return true;
     }
-    if(!geometry_.config().customPark){if(e)*e="Mechanical Park is not calibrated. Move the mount manually to a safe park position and use 'Set current mechanical axes as Park' first.";return false;}
+    const bool standardEqDrivePark=(driverId()=="oal.eqdrive"&&geometry_.config().nativeCoordinateModelVersion>=4&&!geometry_.config().customPark);
+    if(!geometry_.config().customPark&&!standardEqDrivePark){if(e)*e="Mechanical Park is not calibrated. Move the mount manually to a safe park position and use 'Set current mechanical axes as Park' first.";return false;}
     // Never enter a park slew while sidereal tracking remains active.
     if(!invokeOk("mount.setTracking",{{"enabled",false},{"axis1Direction",0}},nullptr,e))return false;
-    const auto target=geometry_.parkAxes();if(!rawAxisGoto(target,180.0,e))return false;parkTarget_=target;parking_=true;parked_=false;return true;
+    const auto target=standardEqDrivePark?MechanicalAxes{0.0,0.0,true}:geometry_.parkAxes();if(!rawAxisGoto(target,180.0,e))return false;parkTarget_=target;parking_=true;parked_=false;return true;
 }
 bool NativeOalMount::pulseGuide(GuideDirection dir,int ms,QString*e){QString d;switch(dir){case GuideDirection::North:d="north";break;case GuideDirection::South:d="south";break;case GuideDirection::East:d="east";break;case GuideDirection::West:d="west";break;}return invokeOk("mount.pulseGuide",{{"direction",d},{"durationMs",ms}},nullptr,e);}
 bool NativeOalMount::manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString*e){

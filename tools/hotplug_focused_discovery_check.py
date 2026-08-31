@@ -27,7 +27,7 @@ need('drivers/skywatcher/oal_driver_skywatcher.cpp',
      'QByteArrayLiteral(":e1\\r")',
      "true,'\\r'",
      'direct Sky-Watcher Motor Controller protocol detected')
-need('drivers/qhy/oal_driver_qhy.manifest.json', '0.2.10.38')
+need('drivers/qhy/oal_driver_qhy.manifest.json', '0.2.10.44')
 need('drivers/gemini/oal_driver_gemini.manifest.json', '0.2.10.32')
 need('drivers/skywatcher/oal_driver_skywatcher.manifest.json', '0.2.10.32')
 

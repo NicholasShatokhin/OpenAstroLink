@@ -5,6 +5,20 @@ OpenAstroLink навмисно розділяє два різні network backen
 
 ## Прямий Wi-Fi монтування — `synscan-wifi`
 
+### Transport polarity для EQDrive Wi-Fi
+
+OpenAstroLink відокремлює **transport polarity** Motor Controller від небесної геометрії монтування. Для generic Sky-Watcher UDP/11880 використовується protocol default `Axis1=+1`, `Axis2=+1`. HIL-кваліфікований EQDrive Wi-Fi профіль, що повідомляє `9216000` counts/rev на обох осях і timer frequency `53694`, використовує `Axis1=+1`, `Axis2=-1`; це виправляє фізичний напрямок DEC, не змінюючи v6 sky transform та startup Home/Park reference.
+
+Для нестандартних адаптерів signs можна явно задати перед запуском node:
+
+```text
+OAL_SYNSCAN_WIFI_AXIS1_SIGN=1|-1
+OAL_SYNSCAN_WIFI_AXIS2_SIGN=1|-1
+```
+
+Активні signs і джерело налаштування доступні в mount diagnostics як `transportAxis1Sign`, `transportAxis2Sign` та `transportPolaritySource`.
+
+
 `synscan-wifi` підключається **безпосередньо до mount / EQDrive / SynScan Wi-Fi
 адаптера**. SynScan Pro для цього не потрібен.
 

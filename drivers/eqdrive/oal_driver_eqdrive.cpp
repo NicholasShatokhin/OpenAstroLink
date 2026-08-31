@@ -43,6 +43,13 @@ struct Device {
     quint32 countsPerRev1{0};
     quint32 countsPerRev2{0};
     quint32 timerFreq{0};
+    // Controller count values observed when this direct-MC session is connected
+    // in the user-defined polar Home pose. Public Axis1/Axis2 degrees are
+    // measured from these counts, so the exact controller firmware origin never
+    // leaks into the mechanical coordinate model.
+    qint32 sessionHomeCounts1{0};
+    qint32 sessionHomeCounts2{0};
+    bool sessionHomeValid{false};
     int configuredAxisDirection1{1};
     int configuredAxisDirection2{1};
     bool coordinateSynced{false};
@@ -105,6 +112,27 @@ QString f(double value,int precision=6){return QLocale::c().toString(value,'f',p
 
 QString protocolName(const Device&d){return d.protocol==WireProtocol::MotorController?QStringLiteral("skywatcher-motor-controller"):QStringLiteral("eqdrive-astep");}
 
+// Public OAL axis coordinates are mechanical angles relative to the physical
+// pose in which the user powers/connects the direct Motor Controller.  The
+// intended observatory workflow is: polar-align mechanically, put the GEM in
+// counterweight-down Home, then connect/power the controller.  We therefore
+// capture the controller's actual startup counts for BOTH axes and expose that
+// pose as Axis1=0°, Axis2=0°.  No guessed 90° DEC offset is permitted.
+//
+// Controller counts remain diagnostic transport data only; there is exactly one
+// public angular system. Official EQDrive ASTEP already reports mechanical
+// degrees and does not use these session count references.
+double wrapMechanical180(double x){x=std::fmod(x,360.0);if(x>180.0)x-=360.0;if(x<=-180.0)x+=360.0;return x;}
+qint32 mcHomeZeroCounts(const Device&d,int axis){
+    if(!d.sessionHomeValid)return 0;
+    return axis==1?d.sessionHomeCounts1:d.sessionHomeCounts2;
+}
+double mcCountsToMechanicalDeg(const Device&d,int axis,qint32 counts){
+    const double cpr=axis==1?double(d.countsPerRev1):double(d.countsPerRev2);
+    if(cpr<=0.0)return 0.0;
+    return wrapMechanical180((double(counts)-double(mcHomeZeroCounts(d,axis)))*360.0/cpr);
+}
+
 bool mcExchange(const Device&d,const std::string&cmd,QByteArray*reply,int timeoutMs){
     if(!d.session)return false;
     QByteArray r;
@@ -139,7 +167,7 @@ bool identifyMotorController(Device&d,int timeoutMs){
     return true;
 }
 
-bool mcReadAxis(const Device&d,int axis,double&axisDeg,bool&running,bool&gotoMode,bool&initialized,QString*error=nullptr){
+bool mcReadAxis(const Device&d,int axis,double&axisDeg,bool&running,bool&gotoMode,bool&initialized,QString*error=nullptr,qint32*controllerCounts=nullptr){
     QByteArray p,st;
     if(!mcExchange(d,oal::skywatcher_mc::getPosition(axis),&p,gCommandTimeoutMs)||
        !mcExchange(d,oal::skywatcher_mc::getStatus(axis),&st,gCommandTimeoutMs)){
@@ -151,16 +179,18 @@ bool mcReadAxis(const Device&d,int axis,double&axisDeg,bool&running,bool&gotoMod
     if(!pos||!status.valid){if(error)*error="Could not parse EQMOD-compatible motor-controller axis state";return false;}
     const double cpr=axis==1?double(d.countsPerRev1):double(d.countsPerRev2);
     if(cpr<=0){if(error)*error="Invalid motor-controller counts-per-revolution";return false;}
-    axisDeg=double(*pos)*360.0/cpr;running=status.running;gotoMode=status.gotoMode;initialized=status.initialized;return true;
+    if(controllerCounts)*controllerCounts=*pos;
+    axisDeg=mcCountsToMechanicalDeg(d,axis,*pos);
+    running=status.running;gotoMode=status.gotoMode;initialized=status.initialized;return true;
 }
 
-std::optional<std::pair<double,double>> mcPositionRaw(const Device&d){
+std::optional<std::pair<double,double>> mcPositionMechanical(const Device&d){
     double a1=0,a2=0;bool r=false,g=false,i=false;QString e;
     if(!mcReadAxis(d,1,a1,r,g,i,&e)||!mcReadAxis(d,2,a2,r,g,i,&e))return std::nullopt;
     return std::pair<double,double>{a1,a2};
 }
 std::optional<std::pair<double,double>> positionAny(const Device&d){
-    return d.protocol==WireProtocol::MotorController?mcPositionRaw(d):positionRaw(d);
+    return d.protocol==WireProtocol::MotorController?mcPositionMechanical(d):positionRaw(d);
 }
 
 bool mcStopAxis(const Device&d,int axis,QString*error=nullptr){
@@ -185,16 +215,15 @@ bool mcGotoAxisDelta(const Device&d,int axis,double deltaDeg,QString*error=nullp
     if(cpr<=0){if(error)*error="Invalid motor-controller axis scale";return false;}
     double beforeDeg=0;bool rr=false,gg=false,ii=false;if(!mcReadAxis(d,axis,beforeDeg,rr,gg,ii,error))return false;
     if(!mcStopAxis(d,axis,nullptr)||!mcWaitStopped(d,axis,2500,error))return false;
-    const quint32 counts=quint32(std::max(1.0,std::round(std::abs(deltaDeg)*cpr/360.0)));
-    const bool forward=deltaDeg>0;
+    const auto plan=oal::skywatcher_mc::makeGotoPlan(deltaDeg,cpr);
+    if(!plan){if(error)*error="Could not construct Motor Controller GOTO plan";return false;}
     QByteArray reply;
     const auto send=[&](const std::string&cmd){if(mcExchange(d,cmd,&reply,gCommandTimeoutMs))return true;if(error)*error=d.session->lastExchangeDiagnostic();return false;};
     // Match EQMOD/INDI's SlewTo command sequence. Step-period programming is
     // intentionally omitted here; it is for continuous slew/tracking mode.
-    if(!send(oal::skywatcher_mc::setMotionMode(axis,true,false,forward)))return false;
-    if(!send(oal::skywatcher_mc::setGotoIncrement(axis,counts)))return false;
-    const quint32 brake=std::min<quint32>(counts,200u);
-    if(!send(oal::skywatcher_mc::setBrakeIncrement(axis,brake)))return false;
+    if(!send(oal::skywatcher_mc::setMotionMode(axis,true,false,plan->forward)))return false;
+    if(!send(oal::skywatcher_mc::setGotoIncrement(axis,plan->counts)))return false;
+    if(!send(oal::skywatcher_mc::setBrakeIncrement(axis,plan->brakeCounts)))return false;
     if(!send(oal::skywatcher_mc::startMotion(axis)))return false;
     QElapsedTimer verify;verify.start();while(verify.elapsed()<900){QThread::msleep(60);double now=beforeDeg;bool running=false,gotoMode=false,init=false;QString probe;if(!mcReadAxis(d,axis,now,running,gotoMode,init,&probe))continue;if((running&&gotoMode)||std::abs(now-beforeDeg)>1e-4)return true;}
     if(error)*error=QString("EQDrive axis %1 acknowledged GOTO but encoder did not move").arg(axis);return false;
@@ -362,7 +391,7 @@ ProbeResult probePort(const QString&port,Device&out,bool keepOpen){
 std::optional<Device> getDevice(const QString&id){QMutexLocker l(&gMutex);auto it=gDevices.find(id);if(it==gDevices.end())return std::nullopt;return it.value();}
 void updateDevice(const Device&d){QMutexLocker l(&gMutex);gDevices[d.id]=d;}
 std::optional<Device> connectedForPort(const QString&p){QMutexLocker l(&gMutex);for(const auto&d:gDevices)if(d.connected&&d.port==p&&d.session&&d.session->isOpen())return d;return std::nullopt;}
-void copyRuntime(Device&d,const Device&old){d.connected=old.connected;d.coordinateSynced=old.coordinateSynced;d.syncAxis1Deg=old.syncAxis1Deg;d.syncAxis2Deg=old.syncAxis2Deg;d.syncRaDeg=old.syncRaDeg;d.syncDecDeg=old.syncDecDeg;d.syncUtcMs=old.syncUtcMs;}
+void copyRuntime(Device&d,const Device&old){d.connected=old.connected;d.coordinateSynced=old.coordinateSynced;d.syncAxis1Deg=old.syncAxis1Deg;d.syncAxis2Deg=old.syncAxis2Deg;d.syncRaDeg=old.syncRaDeg;d.syncDecDeg=old.syncDecDeg;d.syncUtcMs=old.syncUtcMs;d.sessionHomeCounts1=old.sessionHomeCounts1;d.sessionHomeCounts2=old.sessionHomeCounts2;d.sessionHomeValid=old.sessionHomeValid;}
 void refreshDevices(){
     QHash<QString,Device> old;{QMutexLocker l(&gMutex);old=gDevices;}
     QHash<QString,Device> found;
@@ -397,9 +426,9 @@ bool start(void*,const char*configJson){
 }
 void stop(void*){QMutexLocker l(&gMutex);for(auto it=gDevices.begin();it!=gDevices.end();++it){if(it.value().session)it.value().session->close();it.value().session.reset();it.value().connected=false;}}
 
-const char*manifest(void*){return json(QJsonObject{{"driverId","oal.eqdrive"},{"name","OpenAstroLink native EQDrive dual-protocol driver"},{"version","0.2.10.38"},{"abiVersion",2},{"threadModel","per-device-serial"},{"protocol","Sky-Watcher/EQMOD Motor Controller + EQDrive ASTEP"}});}
+const char*manifest(void*){return json(QJsonObject{{"driverId","oal.eqdrive"},{"name","OpenAstroLink native EQDrive dual-protocol driver"},{"version","0.2.10.44"},{"abiVersion",2},{"threadModel","per-device-serial"},{"protocol","Sky-Watcher/EQMOD Motor Controller + EQDrive ASTEP"}});}
 const char*devices(void*){refreshDevices();QJsonArray a;QMutexLocker l(&gMutex);for(const auto&d:gDevices)a.append(QJsonObject{{"id",d.id},{"type","mount"},{"name",d.description},{"serialNumber",d.serial},{"firmware",d.firmware},{"transport",QJsonObject{{"kind","serial"},{"protocol",protocolName(d)},{"port",d.port},{"baudRate",d.baudRate},{"dtr",d.dtr},{"rts",d.rts},{"persistentSession",d.connected}}}});return json(a);}
-const char*capabilities(void*,const char*deviceId){const auto d=getDevice(QString::fromUtf8(deviceId?deviceId:""));if(!d)return json(QJsonObject{});const bool mc=d->protocol==WireProtocol::MotorController;return json(QJsonObject{{"schemaVersion","1.0"},{"mount",QJsonObject{{"position",QJsonObject{{"supported",true},{"frame","raw-axis-plus-compat-sync-anchor"},{"requiresSync",true}}},{"rawAxes",QJsonObject{{"supported",true},{"units","degrees"},{"axis1","hour/azimuth axis"},{"axis2","declination/altitude axis"}}},{"slew",QJsonObject{{"supported",true},{"abortSupported",true},{"requiresSync",true},{"implementation",mc?"raw-axis EQMOD-compatible Motor Controller goto":"raw-axis official ASTEP Goto"}}},{"sync",QJsonObject{{"supported",true},{"implementation","compatibility sync anchor; OAL Core geometry preferred"}}},{"tracking",QJsonObject{{"supported",true},{"modes",QJsonArray{"off","equatorial"}}}},{"park",QJsonObject{{"supported",false}}},{"pulseGuide",QJsonObject{{"supported",!mc},{"implementation",mc?"not yet enabled for Motor Controller transport":"temporary ASTEP Speed offset"},{"maxDurationMs",5000}}},{"manualSlew",QJsonObject{{"supported",true},{"rateLevels",9},{"axes",2}}},{"pierSide",QJsonObject{{"supported",false}}},{"telemetry",QJsonObject{{"axisDegrees",true},{"driverState",true},{"firmware",d->firmware},{"wireProtocol",protocolName(*d)}}},{"coordinateModel",QJsonObject{{"type","sync-anchor-v3"},{"meridianFlip",false},{"note","Sync once on a known sky position before native RA/DEC GOTO; no automatic pier flip until HIL qualification"}}}}}});}
+const char*capabilities(void*,const char*deviceId){const auto d=getDevice(QString::fromUtf8(deviceId?deviceId:""));if(!d)return json(QJsonObject{});const bool mc=d->protocol==WireProtocol::MotorController;return json(QJsonObject{{"schemaVersion","1.0"},{"mount",QJsonObject{{"position",QJsonObject{{"supported",true},{"frame","raw-axis-plus-compat-sync-anchor"},{"requiresSync",true}}},{"rawAxes",QJsonObject{{"supported",true},{"units","degrees"},{"semantics","mechanical axes; controller step counts are exposed only as diagnostics"},{"axis1","hour axis, Home=0deg"},{"axis2","declination/polar-distance axis, Home=0deg"}}},{"slew",QJsonObject{{"supported",true},{"abortSupported",true},{"requiresSync",true},{"implementation",mc?"raw-axis EQMOD-compatible Motor Controller goto":"raw-axis official ASTEP Goto"}}},{"sync",QJsonObject{{"supported",true},{"implementation","compatibility sync anchor; OAL Core geometry preferred"}}},{"tracking",QJsonObject{{"supported",true},{"modes",QJsonArray{"off","equatorial"}}}},{"park",QJsonObject{{"supported",false}}},{"pulseGuide",QJsonObject{{"supported",!mc},{"implementation",mc?"not yet enabled for Motor Controller transport":"temporary ASTEP Speed offset"},{"maxDurationMs",5000}}},{"manualSlew",QJsonObject{{"supported",true},{"rateLevels",9},{"axes",2}}},{"pierSide",QJsonObject{{"supported",false}}},{"telemetry",QJsonObject{{"axisDegrees",true},{"driverState",true},{"firmware",d->firmware},{"wireProtocol",protocolName(*d)}}},{"coordinateModel",QJsonObject{{"type","gem-polar-telescope-frame-v6"},{"meridianFlip",false},{"startupHome",true},{"note","Direct-MC startup controller counts are the physical Home/Park; OAL Core maps sky coordinates through the polar-aligned telescope frame without a manual startup Sync"}}}}}});}
 const char*health(void*,const char*deviceId){
     const auto od=getDevice(QString::fromUtf8(deviceId?deviceId:""));if(!od)return json(QJsonObject{{"state","missing"},{"connected",false}});Device d=*od;
     if(!d.connected||!d.session||!d.session->isOpen())return json(QJsonObject{{"state","disconnected"},{"connected",false},{"port",d.port}});
@@ -411,25 +440,25 @@ const char*health(void*,const char*deviceId){
 const char*invoke(void*,const char*deviceId,const char*method,const char*requestJson,const OalDriverCallV2*){
     const QString id=QString::fromUtf8(deviceId?deviceId:"");const QString m=QString::fromUtf8(method?method:"");auto od=getDevice(id);if(!od)return fail("DEVICE_NOT_FOUND","EQDrive is no longer present");Device d=*od;const auto req=QJsonDocument::fromJson(QByteArray(requestJson?requestJson:"{}")).object();
     if(m=="device.connect"){
-        Device c;const auto pr=probePort(d.port,c,true);if(pr!=ProbeResult::Found)return fail(pr==ProbeResult::Busy?"PORT_BUSY":"CONNECT_FAILED",pr==ProbeResult::Busy?"EQDrive serial port is already owned by another application":"No supported native EQDrive protocol responded on "+d.port);c.connected=true;if(c.protocol==WireProtocol::MotorController){QString initError;if(!mcInitializeAxes(c,&initError)){if(c.session)c.session->close();return fail("CONNECT_FAILED","EQDrive Motor Controller initialization failed: "+initError);}}c.coordinateSynced=d.coordinateSynced;c.syncAxis1Deg=d.syncAxis1Deg;c.syncAxis2Deg=d.syncAxis2Deg;c.syncRaDeg=d.syncRaDeg;c.syncDecDeg=d.syncDecDeg;c.syncUtcMs=d.syncUtcMs;updateDevice(c);emitEvent(c,"device.connected");return ok(QJsonObject{{"port",c.port},{"baudRate",c.baudRate},{"firmware",c.firmware},{"coordinateSynced",c.coordinateSynced}});
+        Device c;const auto pr=probePort(d.port,c,true);if(pr!=ProbeResult::Found)return fail(pr==ProbeResult::Busy?"PORT_BUSY":"CONNECT_FAILED",pr==ProbeResult::Busy?"EQDrive serial port is already owned by another application":"No supported native EQDrive protocol responded on "+d.port);c.connected=true;if(c.protocol==WireProtocol::MotorController){QString initError;if(!mcInitializeAxes(c,&initError)){if(c.session)c.session->close();return fail("CONNECT_FAILED","EQDrive Motor Controller initialization failed: "+initError);}double a=0;bool r=false,g=false,i=false;qint32 h1=0,h2=0;if(!mcReadAxis(c,1,a,r,g,i,&initError,&h1)||!mcReadAxis(c,2,a,r,g,i,&initError,&h2)){if(c.session)c.session->close();return fail("CONNECT_FAILED","Could not capture direct-MC startup Home counts: "+initError);}c.sessionHomeCounts1=h1;c.sessionHomeCounts2=h2;c.sessionHomeValid=true;logMessage(1,QString("%1: direct-MC startup pose captured as mechanical Home/Park: axis1Counts=%2 axis2Counts=%3 => Axis1=0deg Axis2=0deg").arg(c.port).arg(h1).arg(h2));}c.coordinateSynced=false;c.syncAxis1Deg=0;c.syncAxis2Deg=0;c.syncRaDeg=0;c.syncDecDeg=0;c.syncUtcMs=0;updateDevice(c);emitEvent(c,"device.connected");return ok(QJsonObject{{"port",c.port},{"baudRate",c.baudRate},{"firmware",c.firmware},{"coordinateSynced",c.coordinateSynced},{"startupHomeCaptured",c.protocol==WireProtocol::MotorController}});
     }
     if(m=="device.disconnect"){if(d.protocol==WireProtocol::MotorController&&d.session){mcInstantStopAxis(d,1,nullptr);mcInstantStopAxis(d,2,nullptr);}if(d.session)d.session->close();d.session.reset();d.connected=false;updateDevice(d);emitEvent(d,"device.disconnected");return ok();}
     if(!d.connected||!d.session||!d.session->isOpen())return fail("DEVICE_DISCONNECTED","EQDrive is not connected");
     if(m=="mount.status"){
         if(d.protocol==WireProtocol::MotorController){
-            double a1=0,a2=0;bool r1=false,r2=false,g1=false,g2=false,i1=false,i2=false;QString err;
-            if(!mcReadAxis(d,1,a1,r1,g1,i1,&err)||!mcReadAxis(d,2,a2,r2,g2,i2,&err))return fail("TRANSPORT_ERROR",err);
+            double a1=0,a2=0;bool r1=false,r2=false,g1=false,g2=false,i1=false,i2=false;QString err;qint32 c1=0,c2=0;
+            if(!mcReadAxis(d,1,a1,r1,g1,i1,&err,&c1)||!mcReadAxis(d,2,a2,r2,g2,i2,&err,&c2))return fail("TRANSPORT_ERROR",err);
             const auto sky=skyFromAxes(d,a1,a2,QDateTime::currentMSecsSinceEpoch());
-            return ok(QJsonObject{{"raDeg",sky.first},{"decDeg",sky.second},{"coordinateFrame","sync-anchor-relative"},{"coordinateValid",d.coordinateSynced},{"tracking",(r1&&!g1)},{"slewing",(r1&&g1)||(r2&&g2)},{"parked",false},{"parkSupported",false},{"pierSide","unknown"},{"axis1Deg",a1},{"axis2Deg",a2},{"initialized1",i1},{"initialized2",i2},{"wireProtocol",protocolName(d)},{"coordinateSynced",d.coordinateSynced}});
+            return ok(QJsonObject{{"raDeg",sky.first},{"decDeg",sky.second},{"coordinateFrame","sync-anchor-relative"},{"coordinateValid",d.coordinateSynced},{"tracking",(r1&&!g1)},{"slewing",(r1&&g1)||(r2&&g2)},{"parked",false},{"parkSupported",false},{"pierSide","unknown"},{"axis1Deg",a1},{"axis2Deg",a2},{"axis1ControllerCounts",c1},{"axis2ControllerCounts",c2},{"axis1HomeZeroCounts",mcHomeZeroCounts(d,1)},{"axis2HomeZeroCounts",mcHomeZeroCounts(d,2)},{"initialized1",i1},{"initialized2",i2},{"wireProtocol",protocolName(d)},{"coordinateSynced",d.coordinateSynced}});
         }
         const auto st=statusRaw(d);if(!st)return fail("TRANSPORT_ERROR","Could not read EQDrive St telemetry");const auto sky=skyFromAxes(d,st->axis1Deg,st->axis2Deg,QDateTime::currentMSecsSinceEpoch());
         return ok(QJsonObject{{"raDeg",sky.first},{"decDeg",sky.second},{"coordinateFrame","sync-anchor-relative"},{"coordinateValid",d.coordinateSynced},{"tracking",std::abs(st->speed1DegPerHour)>0.05&&!st->gotoActive1},{"slewing",st->gotoActive1||st->gotoActive2},{"parked",false},{"parkSupported",false},{"pierSide","unknown"},{"axis1Deg",st->axis1Deg},{"axis2Deg",st->axis2Deg},{"speed1DegPerHour",st->speed1DegPerHour},{"speed2DegPerHour",st->speed2DegPerHour},{"driverEnabled1",st->driverEnabled1},{"driverEnabled2",st->driverEnabled2},{"wireProtocol",protocolName(d)},{"coordinateSynced",d.coordinateSynced}});
     }
     if(m=="mount.axisStatus"){
         if(d.protocol==WireProtocol::MotorController){
-            double a1=0,a2=0;bool r1=false,r2=false,g1=false,g2=false,i1=false,i2=false;QString err;
-            if(!mcReadAxis(d,1,a1,r1,g1,i1,&err)||!mcReadAxis(d,2,a2,r2,g2,i2,&err))return fail("TRANSPORT_ERROR",err);
-            return ok(QJsonObject{{"axis1Deg",a1},{"axis2Deg",a2},{"running1",r1},{"running2",r2},{"goto1",g1},{"goto2",g2},{"initialized1",i1},{"initialized2",i2},{"wireProtocol",protocolName(d)}});
+            double a1=0,a2=0;bool r1=false,r2=false,g1=false,g2=false,i1=false,i2=false;QString err;qint32 c1=0,c2=0;
+            if(!mcReadAxis(d,1,a1,r1,g1,i1,&err,&c1)||!mcReadAxis(d,2,a2,r2,g2,i2,&err,&c2))return fail("TRANSPORT_ERROR",err);
+            return ok(QJsonObject{{"axis1Deg",a1},{"axis2Deg",a2},{"axis1ControllerCounts",c1},{"axis2ControllerCounts",c2},{"axis1HomeZeroCounts",mcHomeZeroCounts(d,1)},{"axis2HomeZeroCounts",mcHomeZeroCounts(d,2)},{"countsPerRev1",int(d.countsPerRev1)},{"countsPerRev2",int(d.countsPerRev2)},{"timerFreq",int(d.timerFreq)},{"firmware",d.firmware},{"running1",r1},{"running2",r2},{"goto1",g1},{"goto2",g2},{"initialized1",i1},{"initialized2",i2},{"wireProtocol",protocolName(d)}});
         }
         const auto st=statusRaw(d);if(!st)return fail("TRANSPORT_ERROR","Could not read EQDrive St telemetry");
         return ok(QJsonObject{{"axis1Deg",st->axis1Deg},{"axis2Deg",st->axis2Deg},{"running1",std::abs(st->speed1DegPerHour)>0.05||st->gotoActive1},{"running2",std::abs(st->speed2DegPerHour)>0.05||st->gotoActive2},{"goto1",st->gotoActive1},{"goto2",st->gotoActive2},{"wireProtocol",protocolName(d)}});
@@ -511,8 +540,9 @@ const char*invoke(void*,const char*deviceId,const char*method,const char*request
     if(m=="mount.park")return fail("NOT_SUPPORTED","Native EQDrive park/meridian model is not exposed until the full pier-side model is qualified");
     if(m=="eqdrive.telemetry"){
         if(d.protocol==WireProtocol::MotorController){
-            const auto p=mcPositionRaw(d);if(!p)return fail("TRANSPORT_ERROR","Could not read Motor Controller telemetry");
-            return ok(QJsonObject{{"firmware",d.firmware},{"port",d.port},{"baudRate",d.baudRate},{"wireProtocol",protocolName(d)},{"axis1Deg",p->first},{"axis2Deg",p->second},{"countsPerRev1",int(d.countsPerRev1)},{"countsPerRev2",int(d.countsPerRev2)},{"timerFreq",int(d.timerFreq)}});
+            double a1=0,a2=0;bool r=false,g=false,i=false;qint32 c1=0,c2=0;QString err;
+            if(!mcReadAxis(d,1,a1,r,g,i,&err,&c1)||!mcReadAxis(d,2,a2,r,g,i,&err,&c2))return fail("TRANSPORT_ERROR","Could not read Motor Controller telemetry: "+err);
+            return ok(QJsonObject{{"firmware",d.firmware},{"port",d.port},{"baudRate",d.baudRate},{"wireProtocol",protocolName(d)},{"axis1Deg",a1},{"axis2Deg",a2},{"axis1ControllerCounts",c1},{"axis2ControllerCounts",c2},{"axis1HomeZeroCounts",mcHomeZeroCounts(d,1)},{"axis2HomeZeroCounts",mcHomeZeroCounts(d,2)},{"countsPerRev1",int(d.countsPerRev1)},{"countsPerRev2",int(d.countsPerRev2)},{"timerFreq",int(d.timerFreq)}});
         }
         const auto st=statusRaw(d);if(!st)return fail("TRANSPORT_ERROR","Could not read EQDrive telemetry");QByteArray vin,vbs,cg;exchange(d,"Vin",&vin,gCommandTimeoutMs);exchange(d,"Vbs",&vbs,gCommandTimeoutMs);exchange(d,"Cg",&cg,gCommandTimeoutMs);return ok(QJsonObject{{"firmware",d.firmware},{"port",d.port},{"baudRate",d.baudRate},{"wireProtocol",protocolName(d)},{"configuredDirection1",d.configuredAxisDirection1},{"configuredDirection2",d.configuredAxisDirection2},{"axis1Deg",st->axis1Deg},{"axis2Deg",st->axis2Deg},{"speed1DegPerHour",st->speed1DegPerHour},{"speed2DegPerHour",st->speed2DegPerHour},{"stateHex",QString::number(st->state,16).rightJustified(4,'0')},{"vin",QString::fromLatin1(oal::eqdrive::trimLine(vin))},{"vbs",QString::fromLatin1(oal::eqdrive::trimLine(vbs))},{"config",QString::fromLatin1(oal::eqdrive::trimLine(cg))}});
     }
@@ -530,7 +560,7 @@ bool cancel(void*,const char*deviceId,const char*){
 void release(void*,const char*value){if(value)gHost.deallocate(gHost.hostContext,const_cast<char*>(value));}
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),
                 OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.eqdrive","OpenAstroLink native EQDrive","0.2.10.38",nullptr,
+                "oal.eqdrive","OpenAstroLink native EQDrive","0.2.10.44",nullptr,
                 &manifest,&start,&stop,&devices,&capabilities,&health,&invoke,&cancel,&release};
 }
 

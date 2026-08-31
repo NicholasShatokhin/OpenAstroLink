@@ -1,4 +1,32 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.38
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.44
+
+## v0.2.10.44
+
+- Package: `0.2.10.44-synscan-wifi-native-parity`
+- Core version: `0.2.10.44`
+- Removed the Wi-Fi-only Motor Controller axis-polarity layer introduced in v0.2.10.43.
+- Native serial EQDrive and direct UDP/11880 share the same GOTO-plan function and mechanical count convention.
+- Added exact Wi-Fi per-axis GOTO diagnostics for HIL comparison.
+
+## v0.2.10.43
+
+- Package: `0.2.10.43-synscan-wifi-polarity`
+- Core version: `0.2.10.43`
+- `synscan-wifi` has transport-specific polarity for the HIL EQDrive Wi-Fi profile: Axis1 `+1`, Axis2 `-1`; generic Sky-Watcher UDP/11880 remains `+1/+1`.
+- Native serial EQDrive geometry v6 is unchanged.
+- UDP shutdown no longer polls datagrams after socket close.
+
+
+## v0.2.10.42
+
+- Package: `0.2.10.42-direct-mc-polar-frame`
+- Core version: `0.2.10.42`
+- Native serial EQDrive and direct UDP/11880 capture controller startup counts as the session Home/Park reference; the physical start pose is `Axis1=0°, Axis2=0°` with no guessed 90° DEC offset.
+- Direct-MC coordinate model ABI v6 uses the polar telescope-direction-vector transform and selects the shortest equivalent GEM branch.
+- Direct-MC auto-Home restores a valid sky model on connect, so normal startup does not require a manual Polaris Sync.
+- Stellarium position streaming uses live axis counts during slew.
+- High-level SynScan hand-controller/App backends remain RA/DEC-native; only direct `synscan-wifi` shares the direct-MC model.
+- Classic ASCOM default remains `EQMOD.Telescope`, with EQMOD site authoritative when available.
 
 ## v0.2.10.38
 
@@ -160,7 +188,7 @@ Classic ASCOM (Windows helper/Chooser), SynScan App network, SynScan serial-prot
 
 - Added `MountGeometryType`/`MountGeometryModel` to OAL Core with GEM, fork-equatorial, Alt-Az, Alt-Az+derotator, equatorial-platform and custom two-axis profiles.
 - Native EQDrive and direct SynScan/EQDrive Wi-Fi now consume the shared Core geometry model instead of treating celestial RA/DEC as motor coordinates.
-- Mechanical Home/Park is stored separately from celestial coordinates; default Park is Axis1=90°, Axis2=0°. Current axes can be saved as a custom Park from the Mount GUI.
+- Mechanical Home/Park is stored separately from celestial coordinates; default direct-MC Home/Park is Axis1=0°, Axis2=0°. Current axes can be saved as a custom Park from the Mount GUI.
 - GEM geometry uses UTC/site longitude to derive local sidereal time and hour angle; pier branch and axis signs are installation configuration. Automatic meridian-flip planning remains experimental/off by default.
 - Mount status/API/state now expose geometry type and raw mechanical Axis1/Axis2 when available.
 - Classic ASCOM async slews emit periodic RA/DEC/pier/tracking samples for EQMOD geometry diagnostics.

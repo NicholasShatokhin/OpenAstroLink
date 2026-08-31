@@ -1,5 +1,24 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.38
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.44
 
+## v0.2.10.44 HIL follow-up
+
+- Reverted the unsupported Wi-Fi-only DEC polarity hypothesis from v0.2.10.43. The same physical Motor Controller now has one raw-count/mechanical-axis convention on serial and UDP/11880.
+- Native serial and direct Wi-Fi GOTO share one `makeGotoPlan()` implementation, eliminating transport-specific direction/count drift.
+- Direct Wi-Fi status reports the exact last GOTO deltas, counts and forward bits for HIL comparison.
+
+## v0.2.10.43 HIL follow-up
+
+- Native serial EQDrive is confirmed correct under coordinate model v6.
+- Direct `synscan-wifi` HIL indicates mirrored DEC transport polarity on the EQDrive Wi-Fi profile (`9216000/9216000`, timer `53694`); the backend now applies Axis2 transport sign `-1` only for that profile and keeps generic UDP/11880 at `+1/+1`.
+- UDP socket shutdown is guarded against post-close datagram polling.
+
+
+## v0.2.10.42 HIL follow-up
+
+- EQMOD/Classic ASCOM site is authoritative by default; OAL adopts backend latitude/longitude/elevation and uses it for its own coordinate conversions. Blank Classic ASCOM endpoint defaults to `EQMOD.Telescope`.
+- Native EQDrive serial and direct SynScan/EQDrive Wi-Fi use direct-MC coordinate model v6 with one mechanical axis convention: the controller counts captured at direct-MC connect define session Home/Park `Axis1=0°, Axis2=0°`; controller position packets remain integer step-count diagnostics only.
+- The v6 GEM planner uses polar telescope-direction-vector geometry, evaluates both equivalent GEM branches, and selects the shortest physical route from the current axes. Native Stellarium telemetry is refreshed from live axes at 250 ms while slewing.
+- High-level SynScan hand-controller and SynScan App backends remain RA/DEC-native and do not use the direct Motor Controller mechanical model.
 
 ## v0.2.10.38 HIL follow-up
 

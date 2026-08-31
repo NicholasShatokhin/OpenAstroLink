@@ -30,7 +30,7 @@ public:
     bool park(bool enabled,QString *error=nullptr) override;
     bool pulseGuide(GuideDirection direction,int durationMs,QString *error=nullptr) override;
     bool manualSlew(int axis1Direction,int axis2Direction,int rateLevel,QString *error=nullptr) override;
-    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; }
+    void configureGeometry(const MountGeometryConfig &c,const ObserverLocation &o) override { geometry_.configure(c,o); parked_=false; if(!geometry_.synced()&&state_==ConnectionState::Connected)tryAutoHomeSync(nullptr); }
 private:
     bool resolveEndpoint(QHostAddress &host,quint16 &port,QString *error);
     bool exchange(const QByteArray &command,QByteArray &reply,int timeoutMs=1800,QString *error=nullptr);
@@ -43,6 +43,7 @@ private:
     bool setManualRate(int axis,int direction,int rateLevel,QString *error=nullptr);
     double axisDeltaDeg(int axis,qint32 from,qint32 to) const;
     MechanicalAxes axesFromEncoder(qint32 p1,qint32 p2) const;
+    bool tryAutoHomeSync(QString *error=nullptr);
 
     QString endpoint_;
     ConnectionState state_{ConnectionState::Disconnected};
@@ -50,10 +51,20 @@ private:
     QHostAddress host_;
     quint16 port_{11880};
     quint32 countsPerRev1_{0},countsPerRev2_{0};
+    // No transport-specific axis polarity exists here. UDP/11880 and the
+    // native serial EQDrive path address the same Motor Controller axes; raw
+    // count deltas therefore have identical mechanical meaning.
+    double lastGotoDelta1Deg_{0.0},lastGotoDelta2Deg_{0.0};
+    quint32 lastGotoCounts1_{0},lastGotoCounts2_{0};
+    bool lastGotoForward1_{true},lastGotoForward2_{true};
+    qint32 sessionHomeCounts1_{0},sessionHomeCounts2_{0};
+    bool sessionHomeValid_{false};
     quint32 timerFreq_{0};
     QString firmware1_,firmware2_;
     MountGeometryModel geometry_{};
     bool trackingRequested_{false};
     bool parked_{false};
+    QString alignmentSource_;
+    QString homeAlignmentNote_;
 };
 }

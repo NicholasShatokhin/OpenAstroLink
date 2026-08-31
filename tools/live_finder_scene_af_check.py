@@ -1,6 +1,6 @@
 from pathlib import Path
 checks = {
-    'CMakeLists.txt': ['VERSION 0.2.10.38'],
+    'CMakeLists.txt': ['VERSION 0.2.10.44'],
     'src/core/astro_types.h': ['AutofocusMode { Stars, Scene, Planet, Bahtinov }', 'struct LiveViewRequest', 'int minStars{3}'],
     'src/core/application_controller.cpp': ['camera.live-view', 'Live View operation accepted', 'commitCapturedFrame(frame,false,false)', 'previewFrameCache_.size()>8', 'Canon live view requires the EDSDK EVF transport'],
     'src/oal/oal_server.cpp': ['/api/v1/cameras/<arg>/live-view', 's=="scene"', 'q.minStars'],
@@ -16,4 +16,4 @@ for file, needles in checks.items():
         assert needle in text, f'{file}: missing {needle}'
         print(f'PASS: {file}: {needle}')
         count += 1
-print(f'live/finder/scene-AF v0.2.10.38: PASS ({count} assertions)')
+print(f'live/finder/scene-AF v0.2.10.44: PASS ({count} assertions)')

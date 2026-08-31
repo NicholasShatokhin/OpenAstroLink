@@ -26,7 +26,7 @@ check('Native EQDrive manual slew',has('drivers/eqdrive/oal_driver_eqdrive.cpp',
 check('Native SynScan manual slew',has('drivers/skywatcher/oal_driver_skywatcher.cpp','mount.manualSlew','fixedRate'))
 check('Direct WiFi manual slew',has('src/backends/synscan_network_mount.cpp','SynScanNetworkMount::manualSlew','setManualRate'))
 check('Classic ASCOM MoveAxis',has('tools/ascom_host/main.cpp','manualSlew','MoveAxis'))
-check('Stellarium live J2000 position',has('src/integrations/stellarium_telescope_server.cpp','live mount position stream active','convertEquatorialFrame(status.coordinate,EquatorialFrame::J2000)','positionTimer_.setInterval(500)'))
+check('Stellarium live J2000 position',has('src/integrations/stellarium_telescope_server.cpp','live mount position stream active','convertEquatorialFrame(status.coordinate,EquatorialFrame::J2000)','positionTimer_.setInterval(250)'))
 fail=[n for n,v in checks if not v]
 print(f'{len(checks)-len(fail)}/{len(checks)} PASS')
 sys.exit(1 if fail else 0)

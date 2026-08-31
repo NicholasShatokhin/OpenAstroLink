@@ -33,6 +33,8 @@ TelescopeProfile AppSettings::loadProfile() const {
     p.mount.parkAxis2Deg = settings_.value("mountGeometry/parkAxis2Deg", p.mount.parkAxis2Deg).toDouble();
     p.mount.customPark = settings_.value("mountGeometry/customPark", p.mount.customPark).toBool();
     p.mount.allowAutomaticPierFlip = settings_.value("mountGeometry/allowAutomaticPierFlip", p.mount.allowAutomaticPierFlip).toBool();
+    p.mount.nativeCoordinateModelVersion = settings_.value("mountGeometry/nativeCoordinateModelVersion", p.mount.nativeCoordinateModelVersion).toInt();
+    p.mount.preferBackendSite = settings_.value("mountGeometry/preferBackendSite", p.mount.preferBackendSite).toBool();
     p.mount.maxGotoAxisDeltaDeg = settings_.value("mountGeometry/maxGotoAxisDeltaDeg", p.mount.maxGotoAxisDeltaDeg).toDouble();
     return p;
 }
@@ -67,6 +69,8 @@ void AppSettings::saveProfile(const TelescopeProfile &p) const {
     settings_.setValue("mountGeometry/parkAxis2Deg", p.mount.parkAxis2Deg);
     settings_.setValue("mountGeometry/customPark", p.mount.customPark);
     settings_.setValue("mountGeometry/allowAutomaticPierFlip", p.mount.allowAutomaticPierFlip);
+    settings_.setValue("mountGeometry/nativeCoordinateModelVersion", p.mount.nativeCoordinateModelVersion);
+    settings_.setValue("mountGeometry/preferBackendSite", p.mount.preferBackendSite);
     settings_.setValue("mountGeometry/maxGotoAxisDeltaDeg", p.mount.maxGotoAxisDeltaDeg);
 }
 bool AppSettings::oalEnabled() const { return settings_.value("server/enabled", false).toBool(); }
