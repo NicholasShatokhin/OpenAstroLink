@@ -1,5 +1,14 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.45 — EQMOD GEM geometry, histogram control, SER metadata та observatory stubs
+
+- Direct Motor Controller model v6 із вільним вибором «найкоротшої» еквівалентної GEM-гілки замінено на **v7 EQMOD-style механічну модель HA/Dec та фізичних pointing states**. Для північної установки Home лишається `Axis1=0°, Axis2=0°`, але явно означає `HA=-6h, Dec=+90°`, `pier=west`; гілка цілі визначається hour angle, а не мінімальною математичною дельтою. Native EQDrive serial і direct SynScan Wi-Fi й далі використовують одну й ту саму Core geometry та GOTO plan.
+- Виправлено histogram auto exposure для 16-bit камер: preview conversion тепер зберігає фіксовану шкалу сенсора 0..65535 замість min/max normalization кожного кадру. Корекція стала proportional/damped, має P99 highlight ceiling і контроль saturation; Live View більше не накопичує багато auto-correction для фактично незміненої експозиції потоку.
+- Поруч із кожним SER тепер фіналізується FireCapture-style `.txt` з тією самою базовою назвою: requested/actual exposure, gain, offset, binning, FPS, raw format/CFA, optical profile, site і UTC metadata. У Live View додано offset.
+- Зарезервовано first-class OAL placeholders для filter wheel, rotator, dome/roof, weather, GPS/GNSS, power/switch, cover/calibrator і safety monitor. Поки це навмисно неактивні заглушки без backend.
+
+**Поточний пакет: v0.2.10.45 — EQMOD GEM geometry / capture metadata HIL follow-up**
+
 ## v0.2.10.44 — виправлення паритету SynScan Wi-Fi/native Motor Controller
 
 - Прибрано Wi-Fi-специфічний шар polarity з v0.2.10.43. UDP/11880 і нативний EQDrive через serial звертаються до тих самих осей Motor Controller, тому однакові controller counts тепер мають однаковий механічний зміст на обох transport.
@@ -7,7 +16,7 @@
 - Додано HIL diagnostics Wi-Fi: остання дельта кожної осі, raw count increment, forward/reverse та firmware payload обох осей.
 - Збережено захист UDP shutdown із v0.2.10.43.
 
-**Поточний пакет: v0.2.10.44 — SynScan Wi-Fi/native Motor Controller parity fix**
+**Попередній пакет: v0.2.10.44 — SynScan Wi-Fi/native Motor Controller parity fix**
 
 ## v0.2.10.43 — hotfix polarity DEC для SynScan Wi-Fi
 

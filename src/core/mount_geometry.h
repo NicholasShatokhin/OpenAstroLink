@@ -54,7 +54,7 @@ private:
     bool synced_{false};
     MechanicalAxes syncActual_{};
     MechanicalAxes syncCanonical_{};
-    QString pierSide_{"unknown"};
+    mutable QString pierSide_{"unknown"};
 };
 
 } // namespace oas

@@ -52,4 +52,4 @@ if cxx:
 else:
     print('SKIP: QHYCCD API-shape compile (no C++ compiler)')
 
-print(f'QHY Live stability v0.2.10.44: PASS ({len(checks)} assertions)')
+print(f'QHY Live stability v0.2.10.45: PASS ({len(checks)} assertions)')

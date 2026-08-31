@@ -11,7 +11,11 @@
 namespace oas {
 
 enum class ConnectionState { Disconnected, Connecting, Connected, Error };
-enum class DeviceKind { Camera, Mount, Focuser, Guider, Solver, Unknown };
+enum class DeviceKind {
+    Camera, Mount, Focuser, Guider, Solver,
+    FilterWheel, Rotator, Dome, Weather, Gps, Power,
+    CoverCalibrator, SafetyMonitor, Switch, Unknown
+};
 enum class AutofocusMode { Stars, Scene, Planet, Bahtinov };
 enum class GuideDirection { North, South, East, West };
 enum class TrackingRate { Sidereal, Lunar, Solar };
@@ -58,15 +62,11 @@ struct MountGeometryConfig {
     bool customPark{false};
     bool allowAutomaticPierFlip{false};
     // Coordinate-model ABI for direct Sky-Watcher/EQDrive Motor Controller mounts.
-    // v6 (OpenAstroLink 0.2.10.44) keeps the controller counts present at
-    // direct-MC connect as the session Home/Park reference, exposed as
-    // Axis1=0°, Axis2=0°. Sky coordinates are mapped through a telescope
-    // direction vector rotated into the polar-aligned mount frame (the same
-    // geometry used by mature SkyWatcher/INDI implementations), instead of
-    // guessing an hour-angle phase. Axis1 is mount-frame azimuth; Axis2 is
-    // signed polar distance. Native serial EQDrive and direct UDP/11880 use
-    // this model; high-level SynScan hand-controller/App backends remain
-    // RA/DEC backends.
+    // v7 (OpenAstroLink 0.2.10.45) uses EQMOD-style mechanical GEM coordinates.
+    // The repeatable counterweight-down polar Home is Axis1=0°, Axis2=0° and,
+    // in the northern hemisphere, corresponds to HA=-6h, Dec=+90° on the west
+    // pointing branch.  Target branch/side-of-pier is determined by hour angle;
+    // native serial EQDrive and direct UDP/11880 share this exact Core model.
     int nativeCoordinateModelVersion{1};
     // When an ASCOM backend exposes a valid observatory site, prefer that site
     // as the authoritative source for OAL coordinate conversions. This avoids
@@ -155,6 +155,7 @@ struct CameraFrame {
     QDateTime capturedUtc;
     double exposureSec{0.0};
     int gain{0};
+    int offset{0};
     int binX{1};
     int binY{1};
     QString source;
@@ -280,6 +281,7 @@ inline BayerPattern bayerPatternFromString(const QString &text, BayerPattern fal
 struct LiveViewRequest {
     double exposureSec{0.05};
     int gain{0};
+    int offset{0};
     int binX{1};
     int binY{1};
     double targetFps{5.0};

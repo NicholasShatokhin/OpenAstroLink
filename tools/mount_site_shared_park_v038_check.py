@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
 checks=[
- ('release version','CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.44'),
+ ('release version','CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.45'),
  ('sky safety model','src/backends/oal_native_devices.cpp','Sky GOTO exceeds safety limit'),
  ('sky separation computation','src/backends/oal_native_devices.cpp','const double skySep=skySeparationDeg'),
  ('raw mechanical hard cap','src/backends/oal_native_devices.cpp','rawAxisGoto(target,180.0,e)'),

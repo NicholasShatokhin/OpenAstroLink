@@ -464,24 +464,25 @@ bool ApplicationController::connectMount(const QString&b,const QString&e,QString
     if(b=="ascom-classic"&&resolvedEndpoint.isEmpty())resolvedEndpoint="EQMOD.Telescope";
     bool migratedDirectMcModel=false;
     auto migrateDirectMotorControllerModel=[this,&migratedDirectMcModel](){
-        if(profile_.mount.nativeCoordinateModelVersion>=6)return;
-        // v6 keeps one public mechanical-axis convention: the controller
-        // counts present when the direct Motor Controller is connected are
-        // Axis1=0°, Axis2=0° Home/Park.  Sky mapping is rebuilt with the
-        // polar-aligned telescope-vector transform instead of the v5 guessed
-        // hour-angle phase.  Clear legacy custom poses one time because older
-        // coordinate models may have encoded incompatible offsets.
+        if(profile_.mount.nativeCoordinateModelVersion>=7)return;
+        // v7 keeps one public mechanical-axis convention: the controller
+        // counts present at the standard counterweight-down polar Home are
+        // Axis1=0°, Axis2=0°.  Sky mapping now follows EQMOD-style mechanical
+        // HA/DEC pointing states: northern Home is HA=-6h, Dec=+90° on the
+        // west branch.  v6 incorrectly treated the GEM as a freely branchable
+        // spherical telescope frame.  Clear legacy custom poses one time because
+        // older coordinate models may have encoded incompatible offsets.
         const bool hadLegacyCustomPose=profile_.mount.customHome||profile_.mount.customPark;
-        profile_.mount.nativeCoordinateModelVersion=6;
-        profile_.mount.axis1Sign=1;profile_.mount.axis2Sign=1;
+        profile_.mount.nativeCoordinateModelVersion=7;
+        profile_.mount.axis1Sign=1;profile_.mount.axis2Sign=1;profile_.mount.preferredPierSide="west";
         profile_.mount.customHome=false;profile_.mount.customPark=false;
         profile_.mount.homeAxis1Deg=0.0;profile_.mount.homeAxis2Deg=0.0;
         profile_.mount.parkAxis1Deg=0.0;profile_.mount.parkAxis2Deg=0.0;
         profile_.mount.autoHomeSync=true;
         settings_.saveProfile(profile_);emit profileChanged();migratedDirectMcModel=true;
         emit logMessage(hadLegacyCustomPose
-            ? "Native direct-MC coordinate model migrated to v6: startup controller counts define the physical Home/Park as 0°,0°; legacy custom Home/Park cleared; sky mapping now uses the polar-aligned telescope-vector transform."
-            : "Native direct-MC coordinate model migrated to v6: startup controller counts define Axis1=0°, Axis2=0° and sky mapping now uses the polar-aligned telescope-vector transform; axis signs reset to +1/+1.");
+            ? "Native direct-MC coordinate model migrated to v7: startup controller counts define the physical Home/Park as 0°,0°; legacy custom Home/Park cleared; sky mapping now follows EQMOD mechanical HA/DEC pointing-state geometry."
+            : "Native direct-MC coordinate model migrated to v7: startup controller counts define Axis1=0°, Axis2=0°; northern Home is HA=-6h/Dec=+90° on the EQMOD west branch; axis signs reset to +1/+1.");
     };
     if(parseNativeBackendKey(b,driverId,deviceId)){
         if(driverId=="oal.eqdrive")migrateDirectMotorControllerModel();
@@ -899,14 +900,14 @@ QString ApplicationController::startLiveView(const LiveViewRequest&request,QStri
     // would actuate the shutter continuously. Canon gets a dedicated EVF path
     // in a later driver revision.
     if(camera_->backendName().startsWith("native:oal.canon/")){if(error)*error="Canon live view requires the EDSDK EVF transport; repeated still captures are intentionally disabled to protect the shutter. Use QHY/ASI for finder alignment in this release.";return{};}
-    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,10.0);if(r.recordSer&&r.serPath.trimmed().isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();r.serPath=QDir(base).filePath(QString("OpenAstroLink/SER/Live_%1.ser").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")));}
+    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.offset=std::max(0,r.offset);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,10.0);if(r.recordSer&&r.serPath.trimmed().isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();r.serPath=QDir(base).filePath(QString("OpenAstroLink/SER/Live_%1.ser").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")));}
     // CFA pixels must remain on their native 1x1 lattice for software debayer.
     // Drivers that already return RGB are harmlessly passed through, but forcing
     // 1x1 here keeps raw QHY/ZWO previews color-correct across vendors.
     if(r.debayer&&(r.binX!=1||r.binY!=1)){r.binX=r.binY=1;emit logMessage("Live View debayer enabled: forcing 1x1 readout so the Bayer mosaic remains valid");}
-    auto cam=camera_;
-    const QString id=operations_.submit("camera.live-view",{"camera"},true,[this,cam,r](OperationContext&ctx){
-        OperationOutcome out;int frames=0;QElapsedTimer elapsed;elapsed.start();std::unique_ptr<SerWriter> ser;auto appendSer=[&](const CameraFrame&raw,QString&err){if(!r.recordSer)return true;if(!ser){ser=std::make_unique<SerWriter>();if(!ser->open(r.serPath,raw,profile_,&err))return false;QMetaObject::invokeMethod(this,[this,path=r.serPath](){emit logMessage("SER recording started: "+path);},Qt::QueuedConnection);}return ser->append(raw,&err);};auto closeSer=[&](){if(!ser)return;QString ce;const quint32 n=ser->frameCount();const QString path=ser->path();ser->close(&ce);QMetaObject::invokeMethod(this,[this,path,n,ce](){emit logMessage(QString("SER recording finished: %1 frames → %2%3").arg(n).arg(path,ce.isEmpty()?QString():QString(" — WARNING: "+ce)));},Qt::QueuedConnection);ser.reset();};
+    auto cam=camera_;const QString liveCameraBackend=cam->backendName(),liveCameraName=cam->displayName();
+    const QString id=operations_.submit("camera.live-view",{"camera"},true,[this,cam,r,liveCameraBackend,liveCameraName](OperationContext&ctx){
+        OperationOutcome out;int frames=0;QElapsedTimer elapsed;elapsed.start();std::unique_ptr<SerWriter> ser;auto appendSer=[&](const CameraFrame&raw,QString&err){if(!r.recordSer)return true;if(!ser){ser=std::make_unique<SerWriter>();if(!ser->open(r.serPath,raw,profile_,r,liveCameraBackend,liveCameraName,&err))return false;const QString sidecar=ser->sidecarPath();QMetaObject::invokeMethod(this,[this,path=r.serPath,sidecar](){emit logMessage("SER recording started: "+path+"; metadata sidecar: "+sidecar);},Qt::QueuedConnection);}return ser->append(raw,&err);};auto closeSer=[&](){if(!ser)return;QString ce;const quint32 n=ser->frameCount();const QString path=ser->path(),sidecar=ser->sidecarPath();ser->close(&ce);QMetaObject::invokeMethod(this,[this,path,sidecar,n,ce](){emit logMessage(QString("SER recording finished: %1 frames → %2; metadata → %3%4").arg(n).arg(path).arg(sidecar).arg(ce.isEmpty()?QString():QString(" — WARNING: "+ce)));},Qt::QueuedConnection);ser.reset();};
         const qint64 targetPeriodMs=qint64(std::lround(1000.0/r.targetFps));
         // QHY has a real SDK streaming mode. Use it instead of repeated
         // ExpQHYCCDSingleFrame/GetQHYCCDSingleFrame calls; HIL showed that
@@ -935,7 +936,7 @@ QString ApplicationController::startLiveView(const LiveViewRequest&request,QStri
         }
         ThreadMarshalledCamera proxy(this,cam);
         while(!ctx.isCancellationRequested()){
-            QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.binX=r.binX;e.binY=r.binY;e.saveRaw=false;CameraFrame frame;QString err;
+            QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.offset=r.offset;e.binX=r.binX;e.binY=r.binY;e.saveRaw=false;CameraFrame frame;QString err;
             if(!proxy.capture(e,frame,&err)){if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}closeSer();out.problem={{"code","LIVE_VIEW_CAPTURE_FAILED"},{"message",err}};return out;}
             if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}
             QString serError;if(!appendSer(frame,serError)){closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}
@@ -948,7 +949,7 @@ QString ApplicationController::startLiveView(const LiveViewRequest&request,QStri
         }
         closeSer();out.cancelled=true;return out;
     });
-    emit logMessage(QString("Live View operation accepted: %1 — %2 s, gain %3, target %4 fps, debayer=%5 %6").arg(id).arg(r.exposureSec,0,'g',5).arg(r.gain).arg(r.targetFps,0,'g',3).arg(r.debayer?"ON":"OFF").arg(bayerPatternName(r.bayerPattern))+(r.recordSer?QString(" SER=%1").arg(r.serPath):QString()));return id;
+    emit logMessage(QString("Live View operation accepted: %1 — %2 s, gain %3, offset %4, target %5 fps, debayer=%6 %7").arg(id).arg(r.exposureSec,0,'g',5).arg(r.gain).arg(r.offset).arg(r.targetFps,0,'g',3).arg(r.debayer?"ON":"OFF").arg(bayerPatternName(r.bayerPattern))+(r.recordSer?QString(" SER=%1").arg(r.serPath):QString()));return id;
 }
 SolveResult ApplicationController::solveLast(const SolveHint&h){if(lastFrame_.image.empty()){lastSolve_.message="No captured frame";lastSolve_.success=false;}else lastSolve_=solver_->solve(lastFrame_,profile_,h);auto j=solveToJson(lastSolve_);QJsonArray stars;for(const auto&s:lastSolve_.imageStars)stars.append(QJsonObject{{"x",s.positionPx.x},{"y",s.positionPx.y},{"flux",s.flux},{"peak",s.peak},{"hfrPx",s.hfrPx}});j["imageStars"]=stars;emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();return lastSolve_;}
 QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&request,QString*error){
@@ -1208,7 +1209,28 @@ void ApplicationController::stopStellariumServer(){if(stellariumServer_)stellari
 bool ApplicationController::stellariumRunning()const{return stellariumServer_&&stellariumServer_->isRunning();}
 quint16 ApplicationController::stellariumPort()const{return stellariumServer_&&stellariumServer_->isRunning()?stellariumServer_->port():settings_.stellariumPort();}
 void ApplicationController::refreshState(){emitState();}
-QJsonArray ApplicationController::devicesJson()const{QJsonArray a;auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const QString&role,const DeviceBinding&binding){if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"role",role},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")}});}};add(camera_,"camera","main",settings_.cameraBinding());add(guideCamera_,"camera","guide",settings_.guideCameraBinding());add(mount_,"mount","main",settings_.mountBinding());add(focuser_,"focuser","main",settings_.focuserBinding());return a;}
+QJsonArray ApplicationController::devicesJson()const{
+    QJsonArray a;
+    auto add=[&](const std::shared_ptr<IDevice>&d,const QString&type,const QString&role,const DeviceBinding&binding){
+        if(d){const QString backend=d->backendName();a.append(QJsonObject{{"id",d->id()},{"type",type},{"role",role},{"name",d->displayName()},{"backend",backend},{"endpoint",binding.endpoint},{"connected",d->connectionState()==ConnectionState::Connected},{"nativeOal",backend.startsWith("native:")},{"implemented",true}});}
+    };
+    add(camera_,"camera","main",settings_.cameraBinding());add(guideCamera_,"camera","guide",settings_.guideCameraBinding());add(mount_,"mount","main",settings_.mountBinding());add(focuser_,"focuser","main",settings_.focuserBinding());
+    // Reserve first-class OAL device categories now so API/UI clients can build
+    // stable observatory layouts before hardware-specific drivers land. These
+    // entries are intentionally inert: no fake connect/control semantics.
+    const struct {const char*id;const char*type;const char*name;} stubs[]={
+        {"stub-filter-wheel","filter-wheel","Filter wheel"},
+        {"stub-rotator","rotator","Camera/field rotator"},
+        {"stub-dome","dome","Dome / roll-off roof"},
+        {"stub-weather","weather","Weather station"},
+        {"stub-gps","gps","GPS / GNSS receiver"},
+        {"stub-power","power","Power distribution / switch"},
+        {"stub-cover-calibrator","cover-calibrator","Cover / flat-field calibrator"},
+        {"stub-safety-monitor","safety-monitor","Observatory safety monitor"}
+    };
+    for(const auto&s:stubs)a.append(QJsonObject{{"id",QString::fromLatin1(s.id)},{"type",QString::fromLatin1(s.type)},{"role","main"},{"name",QString::fromLatin1(s.name)},{"backend","stub"},{"endpoint",""},{"connected",false},{"nativeOal",false},{"implemented",false},{"status","placeholder"}});
+    return a;
+}
 QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"connected",bool(camera_)},{"backend",camera_?camera_->backendName():QString()},{"name",camera_?camera_->displayName():QString()}};if(camera_){auto s=camera_->sensorSize();j["width"]=s.width();j["height"]=s.height();j["canAbortExposure"]=camera_->canAbortExposure();}return j;}
 bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}for(auto it=previewFrameCache_.rbegin();it!=previewFrameCache_.rend();++it)if(it->id==id){frame=*it;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
 QJsonObject ApplicationController::stateJson()const{auto strings=[](const QStringList&xs){QJsonArray a;for(const auto&x:xs)a.append(x);return a;};QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"backends",QJsonObject{{"camera",strings(cameraBackends())},{"mount",strings(mountBackends())},{"focuser",strings(focuserBackends())},{"solver",strings(solverBackends())}}},{"solve",solveToJson(lastSolve_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr)){QJsonObject mj{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateFrame",equatorialFrameName(m.coordinate.frame)},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide},{"geometryType",m.geometryType}};if(m.axes.valid){mj["axis1Deg"]=m.axes.axis1Deg;mj["axis2Deg"]=m.axes.axis2Deg;mj["axesValid"]=true;}else mj["axesValid"]=false;if(!m.diagnostics.isEmpty())mj["diagnostics"]=m.diagnostics;j["mount"]=mj;}FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
@@ -1294,5 +1316,12 @@ QJsonArray ApplicationController::nativeDriversJson()const{return driverLoader_?
 QJsonArray ApplicationController::nativeDevicesJson()const{return driverLoader_?driverLoader_->devices():QJsonArray{};}
 QJsonObject ApplicationController::nativeCapabilitiesJson(const QString&driverId,const QString&deviceId,QString*error)const{return driverLoader_?driverLoader_->capabilities(driverId,deviceId,error):QJsonObject{};}
 void ApplicationController::emitState(){if(shuttingDown_)return;auto j=stateJson();emit stateChanged(j);if(oalWsServer_)oalWsServer_->broadcast("state",j);}
-QImage ApplicationController::toQImage(const cv::Mat&i){if(i.empty())return{};cv::Mat rgb;if(i.channels()==1){cv::Mat u8;if(i.depth()==CV_16U){double mn,mx;cv::minMaxLoc(i,&mn,&mx);i.convertTo(u8,CV_8U,255.0/std::max(1.0,mx-mn),-mn*255.0/std::max(1.0,mx-mn));}else i.convertTo(u8,CV_8U);cv::cvtColor(u8,rgb,cv::COLOR_GRAY2RGB);}else{cv::Mat bgr8;if(i.depth()==CV_16U)i.convertTo(bgr8,CV_8U,255.0/65535.0);else if(i.depth()!=CV_8U){double mn=0,mx=0;cv::minMaxLoc(i.reshape(1),&mn,&mx);i.convertTo(bgr8,CV_8U,255.0/std::max(1.0,mx));}else bgr8=i;cv::cvtColor(bgr8,rgb,cv::COLOR_BGR2RGB);}return QImage(rgb.data,rgb.cols,rgb.rows,int(rgb.step),QImage::Format_RGB888).copy();}
+QImage ApplicationController::toQImage(const cv::Mat&i){if(i.empty())return{};cv::Mat rgb;if(i.channels()==1){cv::Mat u8;if(i.depth()==CV_16U){
+        // Preserve the physical sensor level for histogram/exposure control.
+        // The old per-frame min/max normalization made a 1 ms and a 16 ms QHY
+        // frame look almost identical to the histogram assistant, producing the
+        // observed x2/x0.5 oscillation. Display auto-stretch is applied later in
+        // MainWindow::renderCameraFrame and must remain separate from measurement.
+        i.convertTo(u8,CV_8U,255.0/65535.0);
+    }else i.convertTo(u8,CV_8U);cv::cvtColor(u8,rgb,cv::COLOR_GRAY2RGB);}else{cv::Mat bgr8;if(i.depth()==CV_16U)i.convertTo(bgr8,CV_8U,255.0/65535.0);else if(i.depth()!=CV_8U){double mn=0,mx=0;cv::minMaxLoc(i.reshape(1),&mn,&mx);i.convertTo(bgr8,CV_8U,255.0/std::max(1.0,mx));}else bgr8=i;cv::cvtColor(bgr8,rgb,cv::COLOR_BGR2RGB);}return QImage(rgb.data,rgb.cols,rgb.rows,int(rgb.step),QImage::Format_RGB888).copy();}
 } // namespace oas

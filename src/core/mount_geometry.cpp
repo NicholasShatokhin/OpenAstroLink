@@ -52,6 +52,61 @@ EquatorialCoord skyFromPolarAlignedAxes(const MechanicalAxes&a,const ObserverLoc
 
 
 
+
+// Direct Sky-Watcher/EQDrive GEM model v7 (OpenAstroLink 0.2.10.45).
+//
+// The raw motor-controller axes are mechanical hour-angle/declination axes,
+// not an arbitrary spherical telescope frame.  EQMOD's conventional northern
+// Home has counterweights down and the OTA on the celestial pole:
+//     sky HA = -90 deg (-6 h), Dec = +90 deg  <=>  motor Axis1=0, Axis2=0.
+//
+// For a northern GEM the two pointing states are therefore:
+//   HA <= 0 (the HIL/EQMOD "west" branch): Axis1=HA+90, Axis2=+(90-Dec)
+//   HA >  0 (the opposite branch):         Axis1=HA-90, Axis2=-(90-Dec)
+// The southern hemisphere mirrors both motor axes around the south pole.
+//
+// This is deliberately branch-aware.  The previous v6 model converted the
+// target into a polar-aligned spherical vector and then chose whichever of two
+// mathematically equivalent representations had the shortest motor motion.
+// A GEM cannot treat those representations as freely interchangeable: they
+// encode a physical pointing state / side-of-pier.  The 2026-08-31 HIL showed
+// v6 selecting (-45.7,-77.3) for the Moon while EQMOD/ASCOM correctly stayed
+// on its west branch.
+MechanicalAxes eqmodGemAxesForSky(const EquatorialCoord &jnow,
+                                  const ObserverLocation &observer,
+                                  const QDateTime &utc,
+                                  QString *pier){
+    const double ha=wrap180(localSiderealTimeDeg(utc,observer.longitudeDeg)-jnow.raDeg);
+    const bool westBranch=ha<=0.0;
+    if(pier)*pier=westBranch?"west":"east";
+    if(observer.latitudeDeg>=0.0){
+        const double p=std::clamp(90.0-jnow.decDeg,0.0,180.0);
+        return {westBranch?wrap180(ha+90.0):wrap180(ha-90.0),
+                westBranch?p:-p,true};
+    }
+    const double p=std::clamp(90.0+jnow.decDeg,0.0,180.0);
+    return {westBranch?wrap180(-(ha+90.0)):wrap180(-(ha-90.0)),
+            westBranch?-p:p,true};
+}
+
+EquatorialCoord skyFromEqmodGemAxes(MechanicalAxes a,
+                                    const ObserverLocation &observer,
+                                    const QDateTime &utc){
+    const bool north=observer.latitudeDeg>=0.0;
+    double ha=0.0,dec=0.0;
+    if(north){
+        const bool westBranch=a.axis2Deg>=0.0; // Axis2=0 Home is defined west.
+        if(westBranch){ha=wrap180(a.axis1Deg-90.0);dec=90.0-std::abs(a.axis2Deg);}
+        else {ha=wrap180(a.axis1Deg+90.0);dec=90.0-std::abs(a.axis2Deg);}
+    }else{
+        const bool westBranch=a.axis2Deg<=0.0;
+        if(westBranch){ha=wrap180(-a.axis1Deg-90.0);dec=-90.0+std::abs(a.axis2Deg);}
+        else {ha=wrap180(90.0-a.axis1Deg);dec=-90.0+std::abs(a.axis2Deg);}
+    }
+    return {wrap360(localSiderealTimeDeg(utc,observer.longitudeDeg)-ha),
+            std::clamp(dec,-90.0,90.0),EquatorialFrame::JNow};
+}
+
 // Native/direct Sky-Watcher Motor Controller GEM model v6 (OpenAstroLink 0.2.10.44).
 //
 // The controller startup counts are still the user-defined physical Home/Park
@@ -93,7 +148,7 @@ EquatorialCoord skyFromGemTelescopeFrameAxes(MechanicalAxes a,
     return skyFromPolarAlignedAxes({wrap360(az),mountAltitude,true},observer,utc);
 }
 
-// Native direct-MC GEM model v5 (OpenAstroLink 0.2.10.44).
+// Native direct-MC GEM model v5 (OpenAstroLink 0.2.10.40).
 //
 // Mechanical Home is defined as Axis1=0, Axis2=0 with the counterweight
 // shaft down and the telescope/DEC axis aimed along the local celestial pole.
@@ -191,7 +246,7 @@ void MountGeometryModel::configure(MountGeometryConfig c,ObserverLocation o){
     const bool transformUnchanged =
         c.type==config_.type && c.axis1Sign==config_.axis1Sign && c.axis2Sign==config_.axis2Sign &&
         c.nativeCoordinateModelVersion==config_.nativeCoordinateModelVersion &&
-        c.preferredPierSide.compare(config_.preferredPierSide,Qt::CaseInsensitive)==0 &&
+        (c.nativeCoordinateModelVersion>=7||c.preferredPierSide.compare(config_.preferredPierSide,Qt::CaseInsensitive)==0) &&
         std::abs(o.latitudeDeg-observer_.latitudeDeg)<1e-10 &&
         std::abs(o.longitudeDeg-observer_.longitudeDeg)<1e-10;
     config_=std::move(c);observer_=o;
@@ -203,6 +258,8 @@ MechanicalAxes MountGeometryModel::canonicalAxesForSky(const EquatorialCoord &sk
     switch(config_.type){
     case MountGeometryType::GermanEquatorial:{
         QString side=config_.preferredPierSide.toLower();if(side!="east"&&side!="west")side="east";if(pier)*pier=side;
+        if(config_.nativeCoordinateModelVersion>=7)
+            return eqmodGemAxesForSky(skyJNow,observer_,utc,pier);
         if(config_.nativeCoordinateModelVersion>=6)
             return gemTelescopeFrameAxesForSky(skyJNow,observer_,utc);
         if(config_.nativeCoordinateModelVersion>=4)
@@ -231,6 +288,7 @@ EquatorialCoord MountGeometryModel::skyJNowFromCanonicalAxes(const MechanicalAxe
     const double lst=localSiderealTimeDeg(utc,observer_.longitudeDeg);
     switch(config_.type){
     case MountGeometryType::GermanEquatorial:
+        if(config_.nativeCoordinateModelVersion>=7)return skyFromEqmodGemAxes(a,observer_,utc);
         if(config_.nativeCoordinateModelVersion>=6)return skyFromGemTelescopeFrameAxes(a,observer_,utc);
         if(config_.nativeCoordinateModelVersion>=4)return skyFromGemHomeZeroAxes(a,observer_,utc);
         if(config_.nativeCoordinateModelVersion>=2)return skyFromPolarAlignedAxes(a,observer_,utc);
@@ -272,6 +330,7 @@ bool MountGeometryModel::syncHome(const MechanicalAxes&actual,const QDateTime&ut
     const EquatorialCoord poleOnMeridian{lst,poleDec,EquatorialFrame::JNow};
     QString side=config_.preferredPierSide.toLower();
     if(config_.type!=MountGeometryType::GermanEquatorial)side="none";
+    else if(config_.nativeCoordinateModelVersion>=7)side="west";
     else if(side!="east"&&side!="west")side="east";
     MechanicalAxes canonical;
     if(config_.type==MountGeometryType::GermanEquatorial&&config_.nativeCoordinateModelVersion>=4){
@@ -291,6 +350,10 @@ bool MountGeometryModel::skyFromAxes(const MechanicalAxes&actual,EquatorialCoord
     if(!synced_){if(error)*error="Mount geometry has not been synced";return false;}if(!actual.valid){if(error)*error="Mechanical axis position is not available";return false;}
     MechanicalAxes c{syncCanonical_.axis1Deg + (actual.axis1Deg-syncActual_.axis1Deg)/double(config_.axis1Sign>=0?1:-1),
                      syncCanonical_.axis2Deg + (actual.axis2Deg-syncActual_.axis2Deg)/double(config_.axis2Sign>=0?1:-1),true};
+    if(config_.type==MountGeometryType::GermanEquatorial&&config_.nativeCoordinateModelVersion>=7){
+        const bool west=observer_.latitudeDeg>=0.0?c.axis2Deg>=0.0:c.axis2Deg<=0.0;
+        pierSide_=west?"west":"east";
+    }
     auto jnow=skyJNowFromCanonicalAxes(c,utc,error);skyJ2000=convertEquatorialFrame(jnow,EquatorialFrame::J2000,utc);return true;
 }
 
@@ -298,9 +361,10 @@ bool MountGeometryModel::axesForSky(const EquatorialCoord&sky,const MechanicalAx
     if(!synced_){if(error)*error="Mount geometry requires one Sync on a known sky position first";return false;}if(!current.valid){if(error)*error="Mechanical axis position is not available";return false;}
     const auto jnow=convertEquatorialFrame(sky,EquatorialFrame::JNow,utc);QString side=pierSide_;
     auto canonical=canonicalAxesForSky(jnow,utc,&side,error);if(!canonical.valid)return false;
+    if(config_.type==MountGeometryType::GermanEquatorial&&config_.nativeCoordinateModelVersion>=7)pierSide_=side;
 
-    if(config_.type==MountGeometryType::GermanEquatorial&&config_.nativeCoordinateModelVersion>=4){
-        // Evaluate both physically equivalent GEM branches and choose the one
+    if(config_.type==MountGeometryType::GermanEquatorial&&config_.nativeCoordinateModelVersion>=4&&config_.nativeCoordinateModelVersion<7){
+        // Legacy v4-v6 behavior: evaluate both physically equivalent GEM branches and choose the one
         // with the shortest controller motion from the CURRENT pose.  This is
         // what prevents a target a few degrees from the pole from taking an
         // unnecessary ~150° hour-axis route.

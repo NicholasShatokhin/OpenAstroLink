@@ -1,6 +1,13 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.44
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.45
 
-## v0.2.10.44 HIL follow-up
+## v0.2.10.45 HIL follow-up
+
+- Новий HIL спростував припущення, що direct-MC geometry v6 уже правильна: native EQDrive serial і direct SynScan Wi-Fi рухаються однаково, але обидва промахуються, тоді як EQMOD Classic ASCOM на тому самому залізі наводиться правильно.
+- Coordinate model v7 використовує EQMOD-style фізичні GEM pointing states замість вільного вибору найкоротшої з двох математично еквівалентних гілок. Для Moon HIL 2026-08-31 стара модель вибирала приблизно `(-45.69°, -77.30°)`, а v7 дає приблизно `(+44.31°, +77.30°)` на `pier=west`.
+- QHY HIL показує майже лінійну залежність сигналу від exposure до clipping. Histogram guidance тепер вимірює fixed sensor scale і не накопичує повторні auto-apply від незмінних Live View кадрів.
+- SER sidecar metadata та заглушки додаткових observatory device classes реалізовані в коді; реальні драйвери цих класів ще pending.
+
+## v0.2.10.44 superseded transport-parity step
 
 - Скасовано непідтверджену гіпотезу v0.2.10.43 про окрему DEC polarity для Wi-Fi. Той самий фізичний Motor Controller тепер має єдину інтерпретацію raw counts/механічних осей для serial та UDP/11880.
 - Native serial і direct Wi-Fi GOTO використовують один `makeGotoPlan()`, тому transport більше не може розійтися за напрямком або кількістю кроків.

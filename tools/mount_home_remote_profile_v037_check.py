@@ -1,7 +1,7 @@
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 checks={
- 'version':('CMakeLists.txt','VERSION 0.2.10.44'),
+ 'version':('CMakeLists.txt','VERSION 0.2.10.45'),
  'home config':('src/core/astro_types.h','autoHomeSync'),
  'home tolerance':('src/core/astro_types.h','homeToleranceDeg'),
  'home model':('src/core/mount_geometry.cpp','MountGeometryModel::syncHome'),
@@ -22,4 +22,4 @@ for name,(fn,needle) in checks.items():
     text=(root/fn).read_text(encoding='utf-8')
     if needle not in text: raise SystemExit(f'FAIL {name}: {needle!r} missing from {fn}')
     print('PASS',name)
-print(f'mount home/remote profile v0.2.10.44: PASS ({len(checks)} assertions)')
+print(f'mount home/remote profile v0.2.10.45: PASS ({len(checks)} assertions)')

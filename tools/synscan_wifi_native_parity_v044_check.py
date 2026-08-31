@@ -6,7 +6,7 @@ root=Path(__file__).resolve().parents[1]
 def text(rel):
     return (root/rel).read_text(encoding='utf-8',errors='ignore')
 
-assert 'VERSION 0.2.10.44' in text('CMakeLists.txt')
+assert 'VERSION 0.2.10.45' in text('CMakeLists.txt')
 proto=text('drivers/skywatcher/motor_controller_protocol.h')
 native=text('drivers/eqdrive/oal_driver_eqdrive.cpp')
 wifi=text('src/backends/synscan_network_mount.cpp')
@@ -31,14 +31,14 @@ assert 'udp-11880-wire-identical-to-native-eqdrive' in wifi
 assert 'double(qint64(p2)-qint64(sessionHomeCounts2_))*360.0' in wifi
 assert 'double(counts)-double(mcHomeZeroCounts(d,axis))' in native
 
-# Numeric reproduction of the HIL DEC target. Both transports must command the
-# same 1,142,277-count REVERSE movement for -44.620195 degrees.
-delta=-44.620195
+# v7 Moon HIL: once Core chooses the correct EQMOD west branch, both
+# transports must command the same +77.299641-degree DEC movement.
+delta=77.299641
 cpr=9216000.0
 counts=max(1,round(abs(delta)*cpr/360.0))
-assert counts == 1142277, counts
+assert counts == 1978871, counts
 forward=delta>0.0
-assert forward is False
+assert forward is True
 
 # Wi-Fi exposes enough data to compare the next HIL log without inference.
 for token in ('lastGotoAxis1DeltaDeg','lastGotoAxis2DeltaDeg','lastGotoAxis1Counts',
@@ -46,4 +46,4 @@ for token in ('lastGotoAxis1DeltaDeg','lastGotoAxis2DeltaDeg','lastGotoAxis1Coun
               'firmwareAxis1','firmwareAxis2'):
     assert token in wifi, token
 
-print('SynScan Wi-Fi/native Motor Controller parity v0.2.10.44: PASS')
+print('SynScan Wi-Fi/native Motor Controller parity v0.2.10.45: PASS')

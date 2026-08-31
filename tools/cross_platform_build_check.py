@@ -12,7 +12,7 @@ def need(path,*tokens):
             raise SystemExit(f'FAIL {path}: missing {t}')
 
 need(Path('CMakeLists.txt'),
-     'VERSION 0.2.10.44','OAS_CANON_TRANSPORT','CANON_EDSDK_INCLUDE_DIR','CANON_EDSDK_LIBRARY',
+     'VERSION 0.2.10.45','OAS_CANON_TRANSPORT','CANON_EDSDK_INCLUDE_DIR','CANON_EDSDK_LIBRARY',
      'oal_driver_canon_edsdk.cpp','QHYCCD_RUNTIME_DIR','ZWO_ASI_RUNTIME_DIR','ZWO_EAF_RUNTIME_DIR',
      'build_features.json')
 need(Path('drivers/canon/oal_driver_canon_edsdk.cpp'),

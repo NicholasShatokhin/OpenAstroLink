@@ -148,6 +148,7 @@ bool decodeNativeCameraFrame(const std::shared_ptr<OalDriverPluginLoader> &loade
     frame.id=native.frameId.isEmpty()?QString("native-%1").arg(token):native.frameId;
     frame.capturedUtc=native.capturedUnixNs>0?QDateTime::fromMSecsSinceEpoch(native.capturedUnixNs/1000000,Qt::UTC):QDateTime::currentDateTimeUtc();
     frame.exposureSec=native.exposureSec>0.0?native.exposureSec:r.exposureSec;frame.gain=int(native.gain);
+    frame.offset=int(std::lround(native.metadata.value("actualOffset").toDouble(r.offset)));
     int actualBinX=1,actualBinY=1;const int requestedBinX=std::max(1,r.binX),requestedBinY=std::max(1,r.binY);
     const int sensorW=sensorSize.width(),sensorH=sensorSize.height();
     // Infer the bin actually delivered by the native driver from geometry. A
@@ -179,12 +180,12 @@ bool NativeOalCamera::nativeLiveSupported() const {
     return capabilities(nullptr).value("camera").toObject().value("streaming").toObject().value("supported").toBool(false);
 }
 bool NativeOalCamera::startNativeLive(const LiveViewRequest &r,QString *error){
-    QJsonObject req{{"exposureSec",r.exposureSec},{"gain",r.gain},{"binX",r.binX},{"binY",r.binY},{"targetFps",r.targetFps}};
+    QJsonObject req{{"exposureSec",r.exposureSec},{"gain",r.gain},{"offset",r.offset},{"binX",r.binX},{"binY",r.binY},{"targetFps",r.targetFps}};
     if(!invokeOk("camera.liveStart",req,nullptr,error))return false;liveRequest_=r;return true;
 }
 bool NativeOalCamera::nextNativeLiveFrame(CameraFrame &frame,int timeoutMs,QString *error){
     QJsonObject data;if(!invokeOk("camera.liveFrame",{{"timeoutMs",timeoutMs}},&data,error))return false;
-    ExposureRequest r;r.exposureSec=liveRequest_.exposureSec;r.gain=liveRequest_.gain;r.binX=liveRequest_.binX;r.binY=liveRequest_.binY;r.saveRaw=false;
+    ExposureRequest r;r.exposureSec=liveRequest_.exposureSec;r.gain=liveRequest_.gain;r.offset=liveRequest_.offset;r.binX=liveRequest_.binX;r.binY=liveRequest_.binY;r.saveRaw=false;
     return decodeNativeCameraFrame(loader_,driverId_,deviceId_,data,r,sensorSizeCache_,frame,false,error);
 }
 bool NativeOalCamera::stopNativeLive(QString *error){return invokeOk("camera.liveStop",{},nullptr,error);}
@@ -252,7 +253,7 @@ bool NativeOalMount::status(MountStatus &s, QString *error){
             auto delta=[](double a,double b){double d=std::fmod(a-b,360.0);if(d>180)d-=360;if(d<-180)d+=360;return std::abs(d);};
             parked_=delta(axes.axis1Deg,parkTarget_.axis1Deg)<=0.25&&delta(axes.axis2Deg,parkTarget_.axis2Deg)<=0.25;parking_=false;
         }
-        s.connection=state_;s.axes=axes;s.geometryType=mountGeometryTypeName(geometry_.config().type);s.slewing=moving;s.parked=parked_||parking_;s.pierSide=geometry_.pierSide();
+        s.connection=state_;s.axes=axes;s.geometryType=mountGeometryTypeName(geometry_.config().type);s.slewing=moving;s.parked=parked_||parking_;
         s.diagnostics["alignmentSource"]=alignmentSource_.isEmpty()?(geometry_.synced()?"restored":"unsynced"):alignmentSource_;
         s.diagnostics["autoHomeSyncEnabled"]=geometry_.config().autoHomeSync;
         s.diagnostics["customHome"]=geometry_.config().customHome;
@@ -265,7 +266,7 @@ bool NativeOalMount::status(MountStatus &s, QString *error){
         s.diagnostics["axis1Deg"]=axes.axis1Deg;s.diagnostics["axis2Deg"]=axes.axis2Deg;
         if(lastCommandedTarget_.valid){s.diagnostics["lastTargetAxis1Deg"]=lastCommandedTarget_.axis1Deg;s.diagnostics["lastTargetAxis2Deg"]=lastCommandedTarget_.axis2Deg;}
         if(!homeAlignmentNote_.isEmpty())s.diagnostics["homeAlignmentNote"]=homeAlignmentNote_;
-        EquatorialCoord sky;if(geometry_.skyFromAxes(axes,sky,QDateTime::currentDateTimeUtc(),nullptr)){s.coordinate=sky;s.coordinateValid=true;}else{s.coordinate={0,0,EquatorialFrame::J2000};s.coordinateValid=false;}
+        EquatorialCoord sky;if(geometry_.skyFromAxes(axes,sky,QDateTime::currentDateTimeUtc(),nullptr)){s.coordinate=sky;s.coordinateValid=true;}else{s.coordinate={0,0,EquatorialFrame::J2000};s.coordinateValid=false;}s.pierSide=geometry_.pierSide();s.diagnostics["pierSide"]=s.pierSide;
         // Tracking state is still owned by the driver. Query compatibility status
         // for this flag only; axis/sky coordinates come exclusively from Core geometry.
         QJsonObject d;if(invokeOk("mount.status",{},&d,nullptr))s.tracking=d.value("tracking").toBool();

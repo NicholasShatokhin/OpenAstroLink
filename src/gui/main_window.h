@@ -12,7 +12,7 @@ class MainWindow final : public QMainWindow {
 public: explicit MainWindow(ObservatoryController *controller,QWidget *parent=nullptr);
 private:
     QWidget *buildDevicesTab(); QWidget *buildLiveFinderTab(); QWidget *buildCaptureTab(); QWidget *buildMountTab(); QWidget *buildFocusTab(); QWidget *buildPolarTab(); QWidget *buildSchedulerTab(); QWidget *buildOperationsTab(); QWidget *buildServerTab(); QWidget *buildProfileTab();
-    void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap(); void updateHistogram(const QImage &image); void renderCameraFrame(const QImage &image); void updateFinderWizardText();
+    void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap(); void updateHistogram(const QImage &image,bool allowAutoApply=true); void renderCameraFrame(const QImage &image); void updateFinderWizardText();
     void refreshMountStatus(); void refreshFocuserStatus(); void synchronizeMountCoordinatesFrom(const QString &system); void setAutofocusBusy(bool busy); void setCaptureBusy(bool busy); void setAdaptiveSolveBusy(bool busy); void setLiveViewBusy(bool busy);
     void updateMountStatusFromState(const QJsonObject &state); void updateFocuserStatusFromState(const QJsonObject &state); void updateDeviceStatusFromState(const QJsonObject &state); void updateOperation(const QJsonObject &operation);
     ObservatoryController *c_{};
@@ -23,7 +23,7 @@ private:
     QComboBox *mountBackend_{}; QLineEdit *mountEndpoint_{}; QLabel *mountDeviceStatus_{}; QHash<QString,QString> mountEndpointsByBackend_; QString lastMountBackend_;
     QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{}; QLabel *focuserDeviceStatus_{};
     QComboBox *nativeSerialDriver_{}; QComboBox *nativeSerialPort_{};
-    QDoubleSpinBox *liveExposure_{}; QSpinBox *liveGain_{}; QSpinBox *liveBin_{}; QDoubleSpinBox *liveFps_{};
+    QDoubleSpinBox *liveExposure_{}; QSpinBox *liveGain_{}; QSpinBox *liveOffset_{}; QSpinBox *liveBin_{}; QDoubleSpinBox *liveFps_{};
     QCheckBox *liveAutoStretch_{}; QCheckBox *liveCrosshair_{}; QCheckBox *liveHighlight_{}; QCheckBox *liveDebayer_{}; QCheckBox *liveMilDot_{}; QCheckBox *liveAngularGrid_{}; QCheckBox *liveRecordSer_{}; QComboBox *liveBayerPattern_{}; QLineEdit *liveSerPath_{}; QLabel *liveTargetStatus_{}; QLabel *finderWizardText_{};
     QPushButton *liveViewButton_{}; QPushButton *sceneAutofocusButton_{}; QPushButton *finderWizardButton_{}; QPushButton *finderWizardNextButton_{};
     bool liveViewBusy_{false}; QString liveViewOperationId_; int finderWizardStep_{0};

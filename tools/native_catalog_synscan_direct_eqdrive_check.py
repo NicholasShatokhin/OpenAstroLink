@@ -10,7 +10,7 @@ wifi=text('src/backends/synscan_network_mount.cpp')
 assert '11880' in wifi and '11882' not in wifi and 'Motor Controller' in wifi
 app=text('src/backends/synscan_app_mount.cpp');assert '11881' in app and 'ServerVersion' in app
 eq=text('drivers/eqdrive/oal_driver_eqdrive.cpp')
-for token in ['official EQDrive ASTEP','read("St"','read("Pos"','read("Cg"','Goto %1 %2','HIL_SAFETY_LIMIT','Access is denied','gem-polar-telescope-frame-v6']:
+for token in ['official EQDrive ASTEP','read("St"','read("Pos"','read("Cg"','Goto %1 %2','HIL_SAFETY_LIMIT','Access is denied','eqmod-gem-ha-dec-v7']:
     assert token in eq, token
 assert 'EQMOD-compatible Motor Controller protocol' in eq
 assert 'oal.skywatcher' in text('src/core/application_controller.cpp')

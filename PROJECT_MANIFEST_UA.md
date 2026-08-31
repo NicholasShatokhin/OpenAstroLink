@@ -1,4 +1,14 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.44
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.45
+
+## v0.2.10.45
+
+- Пакет: `0.2.10.45-eqmod-gem-histogram-ser-metadata`
+- Core version: `0.2.10.45`
+- Direct EQDrive serial і direct SynScan Wi-Fi використовують coordinate model v7: EQMOD-style механічні HA/Dec pointing states із північним Home `0°,0° = HA -6h / Dec +90° / pier west`.
+- v7 прибирає v6-вибір найкоротшої еквівалентної GEM-гілки, який HIL показав як неправильний фізичний pointing state при тому, що serial і UDP transport уже рухалися однаково.
+- Histogram assistant працює у фіксованій sensor scale, використовує proportional/damped correction, bright-tail saturation protection і робить не більше одного auto-apply на реально отриманий science frame.
+- SER отримує same-basename текстовий metadata sidecar; Live View передає writer-у exposure/gain/offset/bin.
+- Зарезервовано OAL/API/UI заглушки filter wheel, rotator, dome/roof, weather, GPS, power, cover/calibrator та safety monitor.
 
 ## v0.2.10.44
 

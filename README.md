@@ -1,5 +1,14 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.45 — EQMOD GEM geometry, histogram control, SER metadata and observatory stubs
+
+- Replaced the direct-Motor-Controller v6 free-shortest-branch telescope-frame model with **v7 EQMOD-style GEM mechanical HA/Dec pointing states**. Northern mechanical Home remains `Axis1=0°, Axis2=0°`, but is explicitly `HA=-6h, Dec=+90°`, `pier=west`; target branch is selected from hour angle instead of whichever mathematically equivalent branch is shortest. Native EQDrive serial and direct SynScan Wi-Fi still share the exact same Core geometry and low-level GOTO plan.
+- Fixed histogram auto-exposure measurement for 16-bit cameras: preview conversion now preserves a fixed 0..65535 sensor scale instead of min/max normalizing every frame. Exposure correction is proportional/damped, includes a P99 highlight ceiling and saturation retreat, and no longer accumulates repeated auto-corrections from unchanged Live View frames.
+- Every SER recording now finalizes a same-basename FireCapture-style `.txt` sidecar with requested/actual exposure, gain, offset, binning, FPS, raw format/CFA, optical profile, site and UTC recording metadata. Live View gained an explicit offset control.
+- Reserved first-class OAL placeholders for filter wheel, rotator, dome/roof, weather, GPS/GNSS, power/switch, cover/calibrator and safety monitor. They are intentionally non-connectable stubs until real backends are implemented.
+
+**Current package: v0.2.10.45 — EQMOD GEM geometry / capture metadata HIL follow-up**
+
 ## v0.2.10.44 — SynScan Wi-Fi/native Motor Controller parity fix
 
 - Removed the v0.2.10.43 Wi-Fi-only axis-polarity layer. UDP/11880 and native EQDrive serial address the same Motor Controller axes, so identical controller counts now have identical mechanical meaning on both transports.
@@ -7,7 +16,7 @@
 - Added Wi-Fi HIL diagnostics for the last commanded per-axis delta, raw count increment and forward/reverse bit, plus firmware payloads.
 - Retained the UDP socket shutdown guard from v0.2.10.43.
 
-**Current package: v0.2.10.44 — SynScan Wi-Fi/native Motor Controller parity fix**
+**Previous package: v0.2.10.44 — SynScan Wi-Fi/native Motor Controller parity fix**
 
 ## v0.2.10.43 — SynScan Wi-Fi DEC transport polarity hotfix
 

@@ -1,4 +1,14 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.44
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.45
+
+## v0.2.10.45
+
+- Package: `0.2.10.45-eqmod-gem-histogram-ser-metadata`
+- Core version: `0.2.10.45`
+- Direct EQDrive serial and direct SynScan Wi-Fi use coordinate model v7: EQMOD-style mechanical HA/Dec pointing states with northern Home `0°,0° = HA -6h / Dec +90° / pier west`.
+- v7 removes v6 shortest-equivalent-GEM-branch selection, which HIL showed could select the wrong physical pointing state even though serial and UDP transports were mutually identical.
+- Histogram exposure assistant uses fixed sensor scale, proportional/damped correction, bright-tail saturation protection and one auto-apply per actual science frame.
+- SER recordings write same-basename human-readable capture metadata sidecars; Live View carries gain/offset/bin/exposure metadata into the writer.
+- Reserved OAL/API/UI placeholders for filter wheel, rotator, dome/roof, weather, GPS, power, cover/calibrator and safety monitor.
 
 ## v0.2.10.44
 

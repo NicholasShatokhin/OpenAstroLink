@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.44
+  version: 0.2.10.45
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -105,7 +105,7 @@ paths:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /devices:
     get:
-      summary: List connected/exported devices
+      summary: List connected/exported devices and reserved observatory-device placeholders
       responses:
         '200': { $ref: '#/components/responses/Success' }
   /state:
@@ -218,6 +218,7 @@ paths:
               properties:
                 exposureSec: { type: number, minimum: 0.0001, maximum: 10, default: 0.05 }
                 gain: { type: integer, minimum: 0, default: 100 }
+                offset: { type: integer, minimum: 0, default: 0 }
                 binX: { type: integer, minimum: 1, maximum: 4, default: 2 }
                 binY: { type: integer, minimum: 1, maximum: 4, default: 2 }
                 targetFps: { type: number, minimum: 0.2, maximum: 10, default: 5 }
@@ -233,7 +234,7 @@ paths:
                 recordSer:
                   type: boolean
                   default: false
-                  description: Record raw pre-debayer Live View frames to uncompressed SER.
+                  description: Record raw pre-debayer Live View frames to uncompressed SER and write a same-basename human-readable .txt metadata sidecar.
                 serPath:
                   type: string
                   description: Optional node-local SER output path; defaults under Pictures/OpenAstroLink/SER.
@@ -409,7 +410,7 @@ components:
           minimum: 0.1
           maximum: 180
           default: 15
-          description: Preferred v0.2.10.44+ name. Maximum true angular sky separation for one native coordinate GOTO; raw motor motion can be larger near the celestial pole.
+          description: Preferred v0.2.10.45+ name. Maximum true angular sky separation for one native coordinate GOTO; raw motor motion can be larger near the celestial pole.
         maxGotoAxisDeltaDeg:
           type: number
           minimum: 0.1
