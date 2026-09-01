@@ -3,6 +3,7 @@
 #include "algorithms/adaptive_plate_solve.h"
 #include "algorithms/guiding_engine.h"
 #include "algorithms/motion_estimator.h"
+#include "algorithms/planet_detector.h"
 #include "algorithms/star_detector.h"
 #include "algorithms/polar_alignment.h"
 #include "algorithms/scheduler.h"
@@ -101,6 +102,7 @@ public:
     PolarAlignmentResult estimatePolarAlignment() override;
     int polarSampleCount() const{return int(polarSamples_.size());}
 
+    bool setObservationPlan(const ObservationPlan &plan,QString *error=nullptr) override;
     bool setSessionPlan(const QString &name,const std::vector<SessionTarget> &targets,
                         QString *error=nullptr) override;
     bool startSession(QString *error=nullptr) override;
@@ -146,6 +148,20 @@ private:
     void publishOperationalPreview(const CameraFrame &frame,const QString &purpose);
     void scheduleCanonHotplugRediscovery(quint64 generation);
     bool nativeDriverHasCachedDevice(const QString &driverId) const;
+    void scheduleSessionStep();
+    void handleSessionOperationUpdate(const QJsonObject &operation);
+    void startCurrentDsoSlew();
+    void startCurrentDsoSolve();
+    void startCurrentDsoAutofocus();
+    void startCurrentDsoCapture();
+    void startCurrentPlanetarySlew();
+    void startCurrentPlanetaryAcquire(const QString &step="planetary-acquire");
+    void startCurrentPlanetaryAutofocus();
+    void startCurrentPlanetaryCalibration();
+    void startCurrentPlanetarySer();
+    bool planetaryAutofocusDue(const ObservationBlock &block) const;
+    bool sessionRecenterDue(const ObservationBlock &block) const;
+    bool sessionAutofocusDue(const ObservationBlock &block) const;
     static QImage toQImage(const cv::Mat &image);
     void emitState();
     std::shared_ptr<OalDriverPluginLoader> driverLoader_;
@@ -166,6 +182,7 @@ private:
     SolveResult lastSolve_;
     AutofocusEngine autofocusEngine_;
     MotionEstimator motionEstimator_;
+    PlanetDetector planetDetector_;
     StarDetector starDetector_;
     AdaptivePlateSolvePreprocessor adaptiveSolvePreprocessor_;
     GuidingEngine guiding_;
@@ -173,6 +190,15 @@ private:
     std::vector<PolarSample> polarSamples_;
     Scheduler scheduler_;
     OperationManager operations_;
+    int sessionRecenterAttempt_{0};
+    cv::Rect planetaryRoi_{};
+    cv::Point2d planetaryLastCentroid_{};
+    struct PlanetaryMountCalibration {
+        bool valid{false};
+        // Pixel motion produced by +RA-sky and +DEC-sky arcseconds. Columns
+        // form a 2x2 response matrix used by the slow planetary mount loop.
+        cv::Matx22d pixelsPerArcsec{0,0,0,0};
+    } planetaryMountCalibration_;
     AppSettings settings_;
     std::unique_ptr<OalServer> oalServer_;
     std::unique_ptr<OalWsServer> oalWsServer_;

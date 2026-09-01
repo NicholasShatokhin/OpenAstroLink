@@ -1,4 +1,27 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.45
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.47
+
+## v0.2.10.47
+
+- Package: `0.2.10.47-planetary-ser-executor`
+- Core version: `0.2.10.47`
+- Extends `ObservationPlan` with a real mixed-mode planetary executor: GOTO, full-frame planet acquisition, planetary autofocus, fixed-size hardware ROI and finite SER runs.
+- Adds compact bright-object `PlanetDetector` acquisition/tracking foundation.
+- QHY and ZWO ASI native live transports accept hardware ROI; SER remains raw/pre-debayer.
+- Adds `<SER basename>.roi.jsonl` provenance so moved ROI sensor regions are reproducible for calibration frames.
+- Fast loop shifts hardware ROI when the planet drifts. Optional slow loop self-calibrates a 2×2 RA/DEC→pixel response and performs bounded coordinate micro-slew recentering; disabled by default pending HIL.
+- DSO and planetary blocks may be mixed in one plan. Scheduler remains non-durable across restart; safety/weather/meridian and thermal in-exposure focus are OAL 1.0 work.
+
+## v0.2.10.46
+
+- Package: `0.2.10.46-observation-plan-dso-executor`
+- Core version: `0.2.10.46`
+- Introduces the primary `ObservationPlan` / `ObservationBlock` scheduler model; legacy `SessionTarget` remains a compatibility wrapper.
+- Adds the first real node-side supervised DSO executor using ordinary async OAL operations/resource locks: `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW capture`.
+- Solve/recenter measures plate-solved pointing error, performs `Sync + correction slew`, retries to a configurable arcminute tolerance, and can run before the first frame or every N science frames.
+- Autofocus can run before the first frame or every N science frames. DSO science captures request durable camera output (`saveRaw=true`).
+- Session status now exposes block cursor, current step/operation, per-block/global frame counts and terminal failure reason. `/api/v1/sessions/current/plan` returns the loaded plan.
+- `planetary-ser` is a first-class plan mode and wire model, but its autonomous executor is deliberately not enabled yet; ROI/centroid/SER-run orchestration remains the next scheduler stage.
+- Scheduler remains non-durable across node restart; weather/meridian/recovery/unattended safety remain OAL 1.0 roadmap items.
 
 ## v0.2.10.45
 

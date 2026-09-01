@@ -10,7 +10,7 @@ assert example.get('version') == 2, f"user preset example schema must be v2, got
 
 cmake_text = (root / 'CMakeLists.txt').read_text(encoding='utf-8')
 assert 'cmake_minimum_required(VERSION 3.20)' in cmake_text
-assert 'VERSION 0.2.10.45' in cmake_text
+assert 'VERSION 0.2.10.47' in cmake_text
 
 presets = {p['name']: p for p in repo['configurePresets']}
 for name in ('windows-core-release','windows-native-release','windows-observatory-release'):

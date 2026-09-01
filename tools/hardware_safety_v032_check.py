@@ -6,7 +6,7 @@ def need(path,*needles):
     text=(ROOT/path).read_text(encoding='utf-8')
     for n in needles:
         ok=n in text; checks.append((ok,f'{path}: {n}'))
-need('CMakeLists.txt','VERSION 0.2.10.45')
+need('CMakeLists.txt','VERSION 0.2.10.47')
 need('src/core/application_controller.cpp','nativeHealthTimer_->setInterval(1800)','refreshNativeDiscoveryAsync(QStringList{driver})')
 need('drivers/qhy/oal_driver_qhy.cpp','std::try_to_lock','GetQHYCCDParamMinMaxStep(c->handle,CONTROL_EXPOSURE','healthFailures<3','QHY SDK health probe failed three times','device.disconnected')
 need('drivers/gemini/oal_driver_gemini.cpp','Gemini health probe failed','positionCommand()','device.disconnected')

@@ -1,5 +1,26 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.47 — змішаний DSO + автономний planetary SER executor
+
+- `ObservationPlan` тепер виконує в одному node-side плані і `dso-fits`, і `planetary-ser` blocks.
+- Планетарний сценарій: **GOTO → full-frame acquisition/detection → опційний planetary autofocus → reacquisition → hardware ROI → finite SER**.
+- Швидкий tracker може рухати ROI незмінного розміру без руху монтування. Кожна зміна origin ROI записується поруч із SER у `<basename>.roi.jsonl`; людський `.txt` sidecar також зберігається.
+- Опційний повільний mount loop сам калібрує орієнтацію камери малими RA/DEC наведеннями, інвертує виміряну 2×2 pixel-response matrix і коригує великий дрейф. За замовчуванням він вимкнений і потребує HIL-кваліфікації для конкретного mount/backend.
+- Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
+- Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
+
+**Поточний пакет: v0.2.10.47 — mixed DSO / planetary scheduler executor**
+
+## v0.2.10.46 — ObservationPlan та supervised DSO executor
+
+- Основну flat-модель `SessionTarget` замінено на `ObservationPlan` / `ObservationBlock`; legacy session targets лишилися API compatibility wrapper.
+- Додано перший реальний node-side DSO workflow executor: **slew → adaptive plate solve/recenter → autofocus → FITS/RAW science capture × N**. Усі довгі дії використовують наявні `OperationManager` resource locks.
+- Recenter можна запускати перед першим кадром і кожні N science frames, із tolerance в arcmin та retry limit. Використовується solved field center, `Sync`, correction slew та повторний solve до збіжності. Autofocus має аналогічну before-first/every-N policy.
+- Session telemetry тепер показує active block, step, operation ID, per-block/global progress і failure reason. GUI створює DSO blocks напряму.
+- `planetary-ser` вже є у plan/API model, але autonomous ROI/centroid/SER-run execution навмисно лишено наступним scheduler-етапом. Restart durability, meridian/weather recovery та unattended safety — робота OAL 1.0.
+
+**Попередній пакет: v0.2.10.46 — supervised DSO scheduler executor**
+
 ## v0.2.10.45 — EQMOD GEM geometry, histogram control, SER metadata та observatory stubs
 
 - Direct Motor Controller model v6 із вільним вибором «найкоротшої» еквівалентної GEM-гілки замінено на **v7 EQMOD-style механічну модель HA/Dec та фізичних pointing states**. Для північної установки Home лишається `Axis1=0°, Axis2=0°`, але явно означає `HA=-6h, Dec=+90°`, `pier=west`; гілка цілі визначається hour angle, а не мінімальною математичною дельтою. Native EQDrive serial і direct SynScan Wi-Fi й далі використовують одну й ту саму Core geometry та GOTO plan.
@@ -7,7 +28,7 @@
 - Поруч із кожним SER тепер фіналізується FireCapture-style `.txt` з тією самою базовою назвою: requested/actual exposure, gain, offset, binning, FPS, raw format/CFA, optical profile, site і UTC metadata. У Live View додано offset.
 - Зарезервовано first-class OAL placeholders для filter wheel, rotator, dome/roof, weather, GPS/GNSS, power/switch, cover/calibrator і safety monitor. Поки це навмисно неактивні заглушки без backend.
 
-**Поточний пакет: v0.2.10.45 — EQMOD GEM geometry / capture metadata HIL follow-up**
+**Попередній пакет: v0.2.10.45 — EQMOD GEM geometry / capture metadata HIL follow-up**
 
 ## v0.2.10.44 — виправлення паритету SynScan Wi-Fi/native Motor Controller
 
@@ -26,7 +47,7 @@
 - GOTO, manual slew, tracking direction та live axis decoding використовують одну й ту саму transport polarity, тому фізичний рух і координати в status/Stellarium більше не розходяться. Park як і раніше повертає до startup Home/Park counts.
 - UDP disconnect захищено від виклику `QUdpSocket::hasPendingDatagrams()` після виходу socket зі стану `BoundState`.
 
-**Поточний пакет: v0.2.10.43 — SynScan Wi-Fi DEC transport polarity hotfix**
+**Попередній пакет: v0.2.10.43 — SynScan Wi-Fi DEC transport polarity hotfix**
 
 ## v0.2.10.42 — полярна telescope-frame геометрія direct-MC
 

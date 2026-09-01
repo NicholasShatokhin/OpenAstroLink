@@ -1,4 +1,19 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.45
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.47
+
+## v0.2.10.47 mixed scheduler execution
+
+- ✅ DSO FITS/RAW executor збережено.
+- ✅ Planetary SER executor: GOTO, full-frame detection, planet autofocus, hardware ROI, finite raw SER та ROI provenance.
+- ✅ Native live ROI для QHY + ZWO ASI; ZWO HIL на реальному залізі ще попереду.
+- 🟡 Fast ROI tracker реалізований; потрібен real-sky planetary HIL.
+- 🟡 Calibrated slow mount correction реалізований, але default OFF до HIL конкретного backend.
+- ⏳ Durable restart/recovery, weather/roof safety, meridian flip та thermal focus під час експозиції — OAL 1.0.
+
+## v0.2.10.46 scheduler execution
+
+- `ObservationPlan` / `ObservationBlock` тепер основна scheduler-модель; legacy `SessionTarget` ще приймається.
+- Supervised DSO blocks виконуються асинхронно: slew, adaptive solve/recenter з tolerance/retries, autofocus, потім FITS/RAW science frames. Recenter/autofocus можна повторювати кожні N science frames.
+- Planetary SER block data model уже є, але autonomous SER/ROI/centroid execution ще не ввімкнено. Scheduler checkpoints/restart/recovery поки non-durable.
 
 ## v0.2.10.45 HIL follow-up
 
@@ -73,8 +88,8 @@
 |---|---|---|
 | QHY | 🟡 активний HIL | QHY5III462C discovery/connect/single capture підтверджені; користувацькі кадри зберігаються у FITS. У v0.2.10.34 Finder Live View переведено на native QHYCCD continuous stream, а health-probe виконується лише в idle та вимагає три послідовні помилки перед disconnect. Наступний Windows HIL: Live→Stop→Capture і повторний reconnect |
 | Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
-| ZWO ASI | 🟡 | Native ASI SDK, multi-camera; HIL pending |
-| ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
+| ZWO ASI | ✅ реалізовано / 🟡 HIL pending | Native ASI SDK і multi-camera discovery реалізовані; реальної ZWO camera ще не кваліфіковано |
+| ZWO EAF | ✅ реалізовано / 🟡 HIL pending | Native EAF SDK реалізований; реальний ZWO EAF ще не кваліфіковано |
 | Gemini EAF | ✅ базовий HIL | Windows native discovery/connection, прямий рух і рух під час autofocus підтверджені; ще потрібні long-run/reconnect/limits тести |
 | Sky-Watcher/SynScan | ✅ базовий direct Wi-Fi HIL | `synscan-wifi` UDP/11880 підключився і фізично рухав mount; `synscan-app` лишається compatibility path через SynScan Pro/App UDP/11881 |
 | EQDrive native | ✅ базовий HIL / 🟡 geometry | `oal.eqdrive` знайшов і рухав реальний контролер; v0.2.10.25 переводить raw axes через Core GEM/fork/Alt-Az geometry layer та mechanical Park; long-slew/pier-flip HIL ще потрібен |
@@ -101,7 +116,7 @@
 | Polar math | ✅ |
 | Automatic polar wizard | 🟡 orchestration/HIL pending |
 | Guiding | 🟡 basic API, production loop pending |
-| Durable scheduler | 🟡 scaffolding, recovery/flip/dither/refocus pending |
+| Durable scheduler | 🟡 mixed executor | v0.2.10.47 виконує DSO FITS/RAW і planetary SER blocks; planetary tracking/mount correction потребують HIL, durable restart/recovery ще попереду |
 
 ## Mount geometry foundation — v0.2.10.25
 

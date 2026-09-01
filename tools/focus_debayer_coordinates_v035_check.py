@@ -5,7 +5,7 @@ root=Path(__file__).resolve().parents[1]
 read=lambda p:(root/p).read_text(encoding='utf-8')
 cmake=read('CMakeLists.txt'); astro=read('src/core/astro_types.h'); app=read('src/core/application_controller.cpp'); remote=read('src/core/remote_observatory_controller.cpp'); server=read('src/oal/oal_server.cpp'); gui=read('src/gui/main_window.cpp'); gh=read('src/gui/main_window.h'); af=read('src/algorithms/autofocus_engine.cpp'); eqh=read('src/core/equatorial_frames.h'); eqc=read('src/core/equatorial_frames.cpp'); qhy=read('drivers/qhy/oal_driver_qhy.cpp'); zwo=read('drivers/zwo_asi/oal_driver_zwo_asi.cpp'); native=read('src/backends/oal_native_devices.cpp'); openapi=read('docs/openapi.yaml')
 checks={
- 'release version': 'VERSION 0.2.10.45' in cmake,
+ 'release version': 'VERSION 0.2.10.47' in cmake,
  'generic Bayer enum': all(x in astro for x in ('BayerPattern','RGGB','BGGR','GRBG','GBRG')),
  'optional debayer request': 'bool debayer{false}' in astro and 'bayerPattern{BayerPattern::Auto}' in astro,
  'remote debayer transport': '"debayer",r.debayer' in remote and '"bayerPattern",bayerPatternName' in remote,

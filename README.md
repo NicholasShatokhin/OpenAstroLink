@@ -1,5 +1,26 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.47 — mixed DSO + autonomous planetary SER executor
+
+- `ObservationPlan` now executes both `dso-fits` and `planetary-ser` blocks in one node-side plan.
+- Planetary execution is **GOTO → full-frame acquisition/detection → optional planetary autofocus → reacquisition → hardware ROI → finite SER**.
+- A fast tracker may move the fixed-size hardware ROI without moving the mount. Every ROI origin change is written beside the SER as `<basename>.roi.jsonl`, while the human-readable `.txt` capture sidecar remains present.
+- An optional slow mount loop can self-calibrate the camera orientation with bounded RA/DEC micro-slews, invert the measured 2×2 pixel response, and recenter large drift. It is disabled by default and requires HIL qualification for each mount/backend.
+- QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
+- Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
+
+**Current package: v0.2.10.47 — mixed DSO / planetary scheduler executor**
+
+## v0.2.10.46 — ObservationPlan and supervised DSO executor
+
+- Replaced the scheduler's primary flat `SessionTarget` model with `ObservationPlan` / `ObservationBlock`, while retaining legacy session targets as an API compatibility wrapper.
+- Added the first real node-side DSO workflow executor: **slew → adaptive plate solve/recenter → autofocus → FITS/RAW science capture × N**. All long actions reuse `OperationManager` resource locks.
+- Recenter can run before the first frame and every N science frames, with configurable arcminute tolerance and retry limit. It uses the solved field center, `Sync`, a correction slew, and re-solves until converged. Autofocus has matching before-first/every-N policy.
+- Session telemetry now exposes the active block, step, operation ID, per-block/global progress and failure reason. The GUI builds DSO blocks directly.
+- `planetary-ser` already exists in the plan/API model but autonomous ROI/centroid/SER-run execution is intentionally deferred to the next scheduler stage. Restart durability, meridian/weather recovery and unattended safety remain OAL 1.0 work.
+
+**Previous package: v0.2.10.46 — supervised DSO scheduler executor**
+
 ## v0.2.10.45 — EQMOD GEM geometry, histogram control, SER metadata and observatory stubs
 
 - Replaced the direct-Motor-Controller v6 free-shortest-branch telescope-frame model with **v7 EQMOD-style GEM mechanical HA/Dec pointing states**. Northern mechanical Home remains `Axis1=0°, Axis2=0°`, but is explicitly `HA=-6h, Dec=+90°`, `pier=west`; target branch is selected from hour angle instead of whichever mathematically equivalent branch is shortest. Native EQDrive serial and direct SynScan Wi-Fi still share the exact same Core geometry and low-level GOTO plan.
@@ -7,7 +28,7 @@
 - Every SER recording now finalizes a same-basename FireCapture-style `.txt` sidecar with requested/actual exposure, gain, offset, binning, FPS, raw format/CFA, optical profile, site and UTC recording metadata. Live View gained an explicit offset control.
 - Reserved first-class OAL placeholders for filter wheel, rotator, dome/roof, weather, GPS/GNSS, power/switch, cover/calibrator and safety monitor. They are intentionally non-connectable stubs until real backends are implemented.
 
-**Current package: v0.2.10.45 — EQMOD GEM geometry / capture metadata HIL follow-up**
+**Previous package: v0.2.10.45 — EQMOD GEM geometry / capture metadata HIL follow-up**
 
 ## v0.2.10.44 — SynScan Wi-Fi/native Motor Controller parity fix
 
@@ -26,7 +47,7 @@
 - GOTO, manual slew, tracking direction and live axis decoding all use the same transport polarity, so status/Stellarium and physical motion remain mutually consistent. Park still targets the captured startup Home/Park counts.
 - Hardened UDP disconnect handling to avoid calling `QUdpSocket::hasPendingDatagrams()` after the socket has left `BoundState`.
 
-**Current package: v0.2.10.43 — SynScan Wi-Fi DEC transport polarity hotfix**
+**Previous package: v0.2.10.43 — SynScan Wi-Fi DEC transport polarity hotfix**
 
 ## v0.2.10.42 — direct-MC polar telescope-frame geometry
 

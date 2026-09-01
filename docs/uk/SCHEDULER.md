@@ -2,7 +2,7 @@
 
 **Канонічна мова:** англійська; цей файл є українським дзеркалом.  
 **Ціль:** поетапна реалізація від першої supervised beta до OAL 1.0.  
-**Стан реалізації:** у v0.2.10.46 з’явився перший реальний, але ще non-durable DSO executor на node. `ObservationPlan`/`ObservationBlock` стали основною моделлю, а старий `SessionTarget` лишився compatibility wrapper. Реалізований supervised DSO шлях: `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW capture`, з опційним recenter/autofocus між кадрами. Planetary SER blocks уже є в ABI плану, але їх автономний executor, durable checkpoints/restart, meridian recovery та unattended safety ще заплановані.
+**Стан реалізації:** у v0.2.10.47 node має mixed-mode non-durable executor. DSO blocks виконують `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks уже виконують `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, із fixed-size ROI tracking, `.roi.jsonl` provenance координат сенсора та опційним повільним mount recentering, який калібрується за реальним RA/DEC image response. `SessionTarget` лишився legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery та hardening до unattended OAL 1.0 ще заплановані.
 
 ## 1. Мета
 
@@ -17,7 +17,7 @@ Scheduler OpenAstroLink має бути не таймером і не прост
 
 ## 2. Поточна межа реалізації
 
-Починаючи з v0.2.10.46, node має реальний `ObservationPlan` / `ObservationBlock` state machine. DSO blocks виконуються асинхронно через наявний `OperationManager`, тому scheduler використовує ті самі resource locks, що й інтерактивні команди. Перший реалізований шлях:
+Починаючи з v0.2.10.47, node має одну `ObservationPlan` / `ObservationBlock` state machine для DSO та planetary acquisition. Усі довгі кроки виконуються асинхронно через `OperationManager` і використовують ті самі resource locks, що й інтерактивні команди. DSO шлях:
 
 ```text
 PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic corrections] -> next frame/block
@@ -25,7 +25,7 @@ PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic cor
 
 Solve/recenter loop plate-solve-ить реальне поле, вимірює pointing error до target block, робить `Sync + correction slew` і повторює цикл до заданої tolerance в arcmin або ліміту спроб. Recenter та autofocus можна виконувати перед першим science frame і/або кожні N завершених кадрів. Science capture примусово просить durable FITS/RAW output, якщо backend камери це підтримує.
 
-`SessionTarget` ще приймається GUI/API для сумісності й конвертується в DSO blocks. Структури planetary SER вже є, щоб не ламати plan ABI наступною міграцією, але v0.2.10.46 навмисно відхиляє автономний `planetary-ser`, доки не реалізовано ROI/centroid/SER-run orchestration. Scheduler поки **non-durable**: restart/resume node, weather hold, meridian-flip recovery та unattended safety лишаються роботою OAL 1.0.
+`SessionTarget` ще приймається GUI/API для сумісності й конвертується в DSO blocks. Planetary SER blocks тепер виконуються: після GOTO робиться full-frame acquisition, знаходиться яскравий planet/lunar target, опційно запускається planet-mode autofocus, формується fixed-size hardware ROI і записуються finite SER runs. Під час SER origin ROI може рухатися без зміни width/height; кожна зміна пишеться в `.roi.jsonl`. Опційна mount correction використовує виміряну двовісну калібровку, а не припущення про орієнтацію камери. Scheduler поки **non-durable**: restart/resume node, weather hold, meridian-flip recovery та unattended safety лишаються роботою OAL 1.0.
 
 ## 3. Модель плану
 
@@ -154,6 +154,8 @@ Planetary block має бути окремим scheduler operation, а не ем
 - refocus/recenter за часом або кількістю runs.
 
 ## 8. ROI та автоматичне центрування планети
+
+**Реалізація v0.2.10.47:** full-frame bright-object detection, старт hardware ROI, fixed-size ROI shifts під час SER, ROI provenance та опційна двовісно калібрована mount micro-slew correction уже реалізовані. Mount loop за замовчуванням вимкнений до HIL-кваліфікації конкретного backend; ROI-only tracking є стандартним режимом.
 
 ### 8.1 ROI tracking
 

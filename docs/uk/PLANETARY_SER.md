@@ -1,6 +1,10 @@
+# Planetary SER та автономні blocks — v0.2.10.47
+
+`planetary-ser` тепер реально виконується всередині `ObservationPlan`, а не лише як ручний Live View recorder. Supervised flow: `GOTO → full-frame detection планети → опційний planetary autofocus → reacquire → hardware ROI → finite SER`. Native QHY і ZWO ASI streaming приймають ROI. Під час SER fast loop може рухати ROI того самого розміру; кожна зміна пишеться у `<basename>.roi.jsonl` з номером першого кадру. Опційний slow mount loop може сам відкалібрувати локальний RA/DEC→image response малими наведеннями та робити bounded recenter corrections. Mount correction за замовчуванням OFF до HIL; ROI-only tracking — безпечний default.
+
 # Планетарний запис SER
 
-OpenAstroLink v0.2.10.45 може напряму записувати Live View у нестиснений SER для Місяця, планет і lucky imaging.
+OpenAstroLink v0.2.10.47 може напряму записувати Live View у нестиснений SER для Місяця, планет і lucky imaging.
 
 - Запис опційний і вмикається на **Live / Finder**.
 - Кадри пишуться **до** preview debayer та auto-stretch, тому Bayer/mono samples у SER лишаються сирими.

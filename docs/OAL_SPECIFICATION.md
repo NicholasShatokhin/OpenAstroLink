@@ -1,7 +1,11 @@
+## v0.2.10.47 implementation note
+
+The scheduler now executes both DSO FITS/RAW and planetary SER blocks. Planetary blocks acquire the target on a full frame, optionally autofocus in planet mode, derive a hardware ROI, record a finite SER, move the ROI while preserving its size, and write frame-indexed ROI-origin provenance. Slow mount recentering is an optional calibrated loop and is disabled by default until HIL-qualified. These supervised capabilities do not change the OAL 1.0 planned boundary for durable restart/recovery, weather/roof interlocks, meridian handling, authentication or process isolation.
+
 # OpenAstroLink specification and implementation status
 
 **Canonical language:** English  
-**Release covered:** OpenAstroSuite / OpenAstroLink v0.2.10.5  
+**Release covered:** OpenAstroSuite / OpenAstroLink v0.2.10.47
 **Status legend:** ✅ implemented in the current codebase; 🟡 partially implemented / hardware qualification pending; 🧪 experimental; ⏳ specified but not yet implemented.
 
 This document is the implementation-facing specification snapshot. It distinguishes the target OAL protocol/driver architecture from features that are merely planned.
@@ -135,10 +139,10 @@ JSON/Base64 must remain limited to metadata/small previews rather than becoming 
 
 | Driver | Current status | Important boundary |
 |---|---|---|
-| `oal.qhy` | 🟡 implemented, HIL pending | QHYCCD SDK; Windows header isolation included; real camera qualification required |
+| `oal.qhy` | ✅ basic HIL / 🟡 qualification | QHY5III462C discovery, native live stream, FITS capture and SER writing have real-HIL evidence; histogram/metadata/reconnect regression remains |
 | `oal.canon` | 🟡 implemented, HIL pending | EDSDK on Windows; libgphoto2/PTP on Linux |
-| `oal.zwo.asi` | 🟡 implemented, HIL pending | ASI SDK; multi-camera enumeration; real camera qualification required |
-| `oal.zwo.eaf` | 🟡 implemented, HIL pending | EAF SDK; move/halt/status/temp/capabilities |
+| `oal.zwo.asi` | ✅ implemented / 🟡 HIL pending | ASI SDK path and multi-camera enumeration are implemented; no real ZWO camera qualification yet |
+| `oal.zwo.eaf` | ✅ implemented / 🟡 HIL pending | EAF SDK path with move/halt/status/temp/capabilities is implemented; no real ZWO EAF qualification yet |
 | `oal.gemini` | 🟡 protocol path implemented, HIL pending | Direct serial/MyFocuserPro2-compatible path; target firmware must be qualified |
 | `oal.skywatcher` | 🟡 SynScan path implemented, HIL pending | GOTO/status/tracking/sync/abort/pulse guide; normative park unavailable in this profile |
 | Sky-Watcher motor-controller direct axis mode | 🧪 experimental codec foundation | Needs calibrated coordinate/alignment model before production use |
@@ -189,24 +193,29 @@ JSON/Base64 must remain limited to metadata/small previews rather than becoming 
 ⏳ Backlash handling.  
 ⏳ Star-loss/reacquisition and meridian-flip recovery.
 
-## 17. Scheduler / durable execution — P1
+## 17. Scheduler / durable execution — P1 → OAL 1.0
 
-🟡 Session/workflow scaffolding exists.  
-⏳ Durable checkpoints and restart resume.  
-⏳ Meridian flip orchestration.  
-⏳ Dither/refocus triggers.  
-⏳ Weather interruption/recovery.  
-⏳ Solve/recenter/reguide recovery after interruption.
+✅ v0.2.10.47 introduces `ObservationPlan` / `ObservationBlock` / acquisition-step semantics while retaining `SessionTarget` as a compatibility wrapper.
+🟡 A first supervised **DSO FITS/RAW** executor now runs `slew -> adaptive solve/recenter -> autofocus -> capture` and supports per-N-frame recenter/autofocus policies. It is not durable across node restart yet.
+⏳ Extend DSO blocks with real filter-wheel execution, guiding/dither, time/altitude constraints and durable checkpoints.
+⏳ First-class **planetary/lunar SER** blocks with high-speed camera settings, ROI, repeated SER runs and autonomous planet acquisition.  
+⏳ Allow solve/recenter and full autofocus after every frame or every SER run when requested by policy.  
+⏳ Temperature-triggered autofocus and optional calibrated **in-exposure thermal focus compensation**, with every focus move recorded in science provenance.  
+⏳ Planetary target-centering loop using movable camera ROI and/or mount pulse-guide/micro-slew corrections. ROI origin/history must be recorded so calibration frames can reproduce the same sensor region.  
+⏳ Durable checkpoints, restart reconciliation/resume, meridian-flip orchestration, weather hold/recovery and solve/recenter/reguide recovery.  
 
-## 18. Additional device profiles — P1
+The normative scheduler design is in [`SCHEDULER.md`](SCHEDULER.md). Autonomous/unattended scheduling depends on the OAL 1.0 security, safety, guiding, durable-operation and data-plane work described below.
 
-⏳ Filter wheel.  
-⏳ Rotator.  
-⏳ Dome/roof.  
-⏳ Weather/safety.  
-⏳ Power/switch.  
-⏳ Cover/calibrator.  
-⏳ GPS/time.
+## 18. Additional device profiles — P1 → OAL 1.0
+
+✅ First-class inert API/UI placeholders exist for future observatory device categories.  
+⏳ Real filter-wheel drivers/capability profile.  
+⏳ Real rotator drivers/capability profile.  
+⏳ Real dome/roll-off-roof drivers and interlock semantics.  
+⏳ Weather and safety-monitor drivers/policy.  
+⏳ Power/switch drivers.  
+⏳ Cover/calibrator drivers.  
+⏳ GPS/GNSS/time-source drivers.
 
 ## 19. Stellarium integration
 
@@ -226,7 +235,24 @@ JSON/Base64 must remain limited to metadata/small previews rather than becoming 
 ✅ Build environment preflight scripts are provided for Windows and Linux.  
 🟡 Full vendor-SDK build matrix is still being qualified on physical Windows/Linux hosts.
 
-## 21. Release acceptance boundary for v0.2.10.5
+## 20.1 Planned OAL 1.0 production/unattended profile
+
+The following requirements are **specified/planned, not yet complete**, and are part of the path from supervised beta operation to a production unattended OAL 1.0 observatory:
+
+- TLS, authentication, roles/scopes and audit provenance;
+- HTTP idempotency and durable operation recovery;
+- replayable/recoverable WebSocket event streams;
+- observatory-wide emergency stop;
+- weather, roof/dome and power safety interlocks with priority over science plans;
+- production guiding, dither/settle, star-loss recovery and post-meridian-flip recovery;
+- durable mixed DSO/planetary scheduler with restart resume;
+- automatic meridian flips with solve/recenter/reguide/refocus recovery;
+- durable science store, checksums, provenance and resumable downloads;
+- driver crash isolation and public conformance/certification suite.
+
+These items may be developed incrementally, but the product must continue to label unattended operation as unqualified until the relevant safety/recovery gates pass HIL.
+
+## 21. Release acceptance boundary after v0.2.10.47
 
 The release is considered **source/build ready for HIL** when:
 

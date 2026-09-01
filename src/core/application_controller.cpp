@@ -37,6 +37,8 @@
 #include <QSerialPortInfo>
 #include <QMetaObject>
 #include <QPointer>
+#include <QRegularExpression>
+#include <QFileInfo>
 #include <QSysInfo>
 #include <QStandardPaths>
 #include <opencv2/imgproc.hpp>
@@ -54,6 +56,22 @@ double skyAngularSeparationDeg(const EquatorialCoord&a,const EquatorialCoord&b){
     const double da=(b.raDeg-a.raDeg)*d2r,d1=a.decDeg*d2r,d2=b.decDeg*d2r;
     const double c=std::sin(d1)*std::sin(d2)+std::cos(d1)*std::cos(d2)*std::cos(da);
     return std::acos(std::clamp(c,-1.0,1.0))/d2r;
+}
+cv::Rect centeredPlanetaryRoi(const cv::Point2d &center,int width,int height,int sensorW,int sensorH){
+    sensorW=std::max(1,sensorW);sensorH=std::max(1,sensorH);
+    width=width>0?std::min(width,sensorW):std::min(640,sensorW);height=height>0?std::min(height,sensorH):std::min(480,sensorH);
+    if(width>=8)width=std::max(8,(width/8)*8);if(height>=2)height=std::max(2,(height/2)*2);
+    int x=int(std::lround(center.x-0.5*width)),y=int(std::lround(center.y-0.5*height));
+    x=std::clamp(x,0,std::max(0,sensorW-width));y=std::clamp(y,0,std::max(0,sensorH-height));
+    if(x>=2)x=(x/2)*2;if(y>=2)y=(y/2)*2;
+    x=std::clamp(x,0,std::max(0,sensorW-width));y=std::clamp(y,0,std::max(0,sensorH-height));
+    return {x,y,width,height};
+}
+QString planetarySerPath(const ObservationBlock &block,int runIndex,const QString &requested){
+    QString path=requested.trimmed();
+    if(path.isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();QString safe=block.name.trimmed();if(safe.isEmpty())safe="Planet";safe.replace(QRegularExpression("[^A-Za-z0-9_.-]+"),"_");path=QDir(base).filePath(QString("OpenAstroLink/SER/%1_%2_run%3.ser").arg(safe,QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")).arg(runIndex+1,2,10,QChar('0')));}
+    else if(block.planetary.serRuns>1){QFileInfo fi(path);path=QDir(fi.absolutePath()).filePath(QString("%1_run%2.%3").arg(fi.completeBaseName()).arg(runIndex+1,2,10,QChar('0')).arg(fi.suffix().isEmpty()?"ser":fi.suffix()));}
+    return path;
 }
 QString compactJson(const QJsonObject&o){return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));}
 QString mountDiagnosticSnapshot(const QString &backend,const MountStatus &st,const ObserverLocation &observer,const QDateTime &utc){
@@ -242,7 +260,7 @@ public:
 private:QObject *owner_;std::shared_ptr<IMount> inner_;bool direct_{false};
 };
 }
-static QJsonObject sessionJson(const SessionStatus&s){return{{"id",s.id},{"name",s.name},{"active",s.active},{"targetIndex",s.targetIndex},{"targetCount",s.targetCount},{"completedFrames",s.completedFrames},{"state",s.state}};}
+static QJsonObject sessionJson(const SessionStatus&s){return sessionStatusToJson(s);}
 ApplicationController::ApplicationController(QObject *parent):ObservatoryController(parent),scheduler_(this),operations_(this){
     profile_=settings_.loadProfile();
     // Persisted serial overrides are applied before native drivers perform their
@@ -324,6 +342,7 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
             if(oalWsServer_)oalWsServer_->broadcast("autofocusResult",result);
             emit logMessage(result.value("message").toString());
         }
+        handleSessionOperationUpdate(o);
         // Operation progress already has its own WebSocket event. Rebuilding and
         // broadcasting the complete hardware state for every progress tick can
         // starve the HTTP event loop during CPU-heavy adaptive preprocessing.
@@ -900,7 +919,7 @@ QString ApplicationController::startLiveView(const LiveViewRequest&request,QStri
     // would actuate the shutter continuously. Canon gets a dedicated EVF path
     // in a later driver revision.
     if(camera_->backendName().startsWith("native:oal.canon/")){if(error)*error="Canon live view requires the EDSDK EVF transport; repeated still captures are intentionally disabled to protect the shutter. Use QHY/ASI for finder alignment in this release.";return{};}
-    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.offset=std::max(0,r.offset);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,10.0);if(r.recordSer&&r.serPath.trimmed().isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();r.serPath=QDir(base).filePath(QString("OpenAstroLink/SER/Live_%1.ser").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")));}
+    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.offset=std::max(0,r.offset);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,30.0);if(r.roi.width<0||r.roi.height<0)r.roi={};if(r.recordSer&&r.serPath.trimmed().isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();r.serPath=QDir(base).filePath(QString("OpenAstroLink/SER/Live_%1.ser").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")));}
     // CFA pixels must remain on their native 1x1 lattice for software debayer.
     // Drivers that already return RGB are harmlessly passed through, but forcing
     // 1x1 here keeps raw QHY/ZWO previews color-correct across vendors.
@@ -936,7 +955,7 @@ QString ApplicationController::startLiveView(const LiveViewRequest&request,QStri
         }
         ThreadMarshalledCamera proxy(this,cam);
         while(!ctx.isCancellationRequested()){
-            QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.offset=r.offset;e.binX=r.binX;e.binY=r.binY;e.saveRaw=false;CameraFrame frame;QString err;
+            QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.offset=r.offset;e.binX=r.binX;e.binY=r.binY;e.roi=r.roi;e.saveRaw=false;CameraFrame frame;QString err;
             if(!proxy.capture(e,frame,&err)){if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}closeSer();out.problem={{"code","LIVE_VIEW_CAPTURE_FAILED"},{"message",err}};return out;}
             if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}
             QString serError;if(!appendSer(frame,serError)){closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}
@@ -1190,11 +1209,256 @@ void ApplicationController::clearPolarSamples(){polarSamples_.clear();emit polar
 bool ApplicationController::addPolarSample(QString*e){if(!lastSolve_.success){if(e)*e="Last plate solve is invalid";return false;}MountStatus m;if(!mountStatus(m,e))return false;polarSamples_.push_back({lastSolve_,m.coordinate.raDeg});int n=int(polarSamples_.size());emit polarSampleCountChanged(n);if(oalWsServer_)oalWsServer_->broadcast("polarSampleCount",QJsonObject{{"count",n}});return true;}
 bool ApplicationController::slewPolarRaOffset(double d,QString*e){MountStatus m;if(!mountStatus(m,e))return false;EquatorialCoord t=m.coordinate;t.raDeg=std::fmod(t.raDeg+d+360.0,360.0);return slewMount(t,e);}
 PolarAlignmentResult ApplicationController::estimatePolarAlignment(){return polarEstimator_.estimate(polarSamples_,profile_.observer,QDateTime::currentDateTimeUtc());}
-bool ApplicationController::setSessionPlan(const QString&name,const std::vector<SessionTarget>&targets,QString*e){
-    if(targets.empty()){if(e)*e="No targets supplied";return false;}scheduler_.setPlan(name,targets);return true;
+bool ApplicationController::setObservationPlan(const ObservationPlan&plan,QString*e){
+    if(plan.blocks.empty()){if(e)*e="Observation plan has no blocks";return false;}
+    if(scheduler_.status().active){if(e)*e="Cannot replace an active observation plan";return false;}
+    for(const auto &block:plan.blocks){
+        if(block.name.trimmed().isEmpty()){if(e)*e="Observation block name is required";return false;}
+        if(block.coordinate.decDeg < -90.0 || block.coordinate.decDeg > 90.0){if(e)*e="Observation block DEC is outside [-90,+90]";return false;}
+        if(block.mode==ObservationMode::DsoFits){
+            if(block.dso.frameCount<1){if(e)*e="DSO block frameCount must be >= 1";return false;}
+            if(block.dso.exposure.exposureSec<=0.0){if(e)*e="DSO exposure must be > 0";return false;}
+        }else{
+            if(block.planetary.serRuns<1){if(e)*e="Planetary block serRuns must be >= 1";return false;}
+            if(block.planetary.durationSec<=0.0){if(e)*e="Planetary SER duration must be > 0";return false;}
+            if(block.planetary.stream.exposureSec<=0.0){if(e)*e="Planetary stream exposure must be > 0";return false;}
+            if(block.planetary.roiWidth<0||block.planetary.roiHeight<0){if(e)*e="Planetary ROI dimensions cannot be negative";return false;}
+        }
+    }
+    scheduler_.setPlan(plan);
+    emit logMessage(QString("Observation plan loaded: %1 (%2 block(s))").arg(plan.name).arg(plan.blocks.size()));
+    return true;
 }
-bool ApplicationController::startSession(QString*e){if(!scheduler_.start()){if(e)*e="No targets supplied";return false;}return true;}
-void ApplicationController::stopSession(){scheduler_.stop();}
+bool ApplicationController::setSessionPlan(const QString&name,const std::vector<SessionTarget>&targets,QString*e){
+    if(targets.empty()){if(e)*e="No targets supplied";return false;}
+    ObservationPlan plan;plan.name=name;plan.blocks.reserve(targets.size());
+    for(int i=0;i<int(targets.size());++i)plan.blocks.push_back(observationBlockFromLegacy(targets[size_t(i)],i));
+    return setObservationPlan(plan,e);
+}
+bool ApplicationController::startSession(QString*e){
+    if(!scheduler_.start()){if(e)*e="No observation blocks supplied or session already active";return false;}
+    sessionRecenterAttempt_=0;planetaryRoi_={};planetaryLastCentroid_={};planetaryMountCalibration_={};
+    emit logMessage(QString("Observation session started: %1").arg(scheduler_.status().id));
+    QTimer::singleShot(0,this,[this](){scheduleSessionStep();});
+    return true;
+}
+void ApplicationController::stopSession(){
+    const auto st=scheduler_.status();
+    scheduler_.stop("Stopped by operator");
+    if(!st.currentOperationId.isEmpty())cancelOperation(st.currentOperationId,nullptr);
+    emit logMessage("Observation session stopped by operator");
+}
+
+bool ApplicationController::sessionRecenterDue(const ObservationBlock&block)const{
+    if(block.mode!=ObservationMode::DsoFits)return false;
+    const int n=scheduler_.status().currentBlockCompletedFrames;
+    if(n==0)return block.dso.recenter.beforeFirstFrame;
+    return block.dso.recenter.everyNFrames>0 && (n%block.dso.recenter.everyNFrames)==0;
+}
+bool ApplicationController::sessionAutofocusDue(const ObservationBlock&block)const{
+    if(block.mode!=ObservationMode::DsoFits)return false;
+    const int n=scheduler_.status().currentBlockCompletedFrames;
+    if(n==0)return block.dso.autofocus.beforeFirstFrame;
+    return block.dso.autofocus.everyNFrames>0 && (n%block.dso.autofocus.everyNFrames)==0;
+}
+bool ApplicationController::planetaryAutofocusDue(const ObservationBlock&block)const{
+    if(block.mode!=ObservationMode::PlanetarySer)return false;
+    const int n=scheduler_.status().currentBlockCompletedFrames;
+    if(n==0)return block.planetary.autofocus.beforeFirstRun;
+    return block.planetary.autofocus.everyNRuns>0 && (n%block.planetary.autofocus.everyNRuns)==0;
+}
+
+void ApplicationController::startCurrentDsoSlew(){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
+    QString e;const QString id=startMountSlew(block->coordinate,&e);
+    if(id.isEmpty()){scheduler_.fail("Scheduler slew could not start: "+e);return;}
+    scheduler_.setStep("slew",id);
+    emit logMessage(QString("Scheduler [%1] slew -> %2 RA=%3 DEC=%4").arg(block->id).arg(block->name).arg(block->coordinate.raDeg,0,'f',6).arg(block->coordinate.decDeg,0,'f',6));
+}
+void ApplicationController::startCurrentDsoSolve(){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
+    AdaptiveSolveRequest r;r.exposure.exposureSec=block->dso.recenter.solveExposureSec;r.exposure.saveRaw=false;r.useMountHint=true;
+    r.hint.raDeg=block->coordinate.raDeg;r.hint.decDeg=block->coordinate.decDeg;r.hint.searchRadiusDeg=20.0;
+    QString e;const QString id=startAdaptiveSolve(r,&e);
+    if(id.isEmpty()){scheduler_.fail("Scheduler plate solve could not start: "+e);return;}
+    scheduler_.setStep("solve",id);
+}
+void ApplicationController::startCurrentDsoAutofocus(){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
+    QString e;const QString id=startAutofocus(block->dso.autofocus.request,&e);
+    if(id.isEmpty()){scheduler_.fail("Scheduler autofocus could not start: "+e);return;}
+    scheduler_.setStep("autofocus",id);
+}
+void ApplicationController::startCurrentDsoCapture(){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
+    ExposureRequest r=block->dso.exposure;r.saveRaw=true;
+    QString e;const QString id=startCapture(r,&e);
+    if(id.isEmpty()){scheduler_.fail("Scheduler science exposure could not start: "+e);return;}
+    scheduler_.setStep("capture",id);
+    emit logMessage(QString("Scheduler [%1] science frame %2/%3: %4 s%5")
+        .arg(block->id).arg(scheduler_.status().currentBlockCompletedFrames+1).arg(block->dso.frameCount)
+        .arg(r.exposureSec,0,'g',8).arg(block->dso.filter.isEmpty()?QString():QString(" filter=%1 (metadata until filter-wheel executor lands)").arg(block->dso.filter)));
+}
+
+void ApplicationController::startCurrentPlanetarySlew(){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current planetary block");return;}
+    QString e;const QString id=startMountSlew(block->coordinate,&e);if(id.isEmpty()){scheduler_.fail("Planetary scheduler slew could not start: "+e);return;}
+    scheduler_.setStep("planetary-slew",id);
+    emit logMessage(QString("Planetary scheduler [%1] GOTO %2 before full-frame acquisition").arg(block->id,block->name));
+}
+void ApplicationController::startCurrentPlanetaryAcquire(const QString &step){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current planetary block");return;}
+    ExposureRequest r;r.exposureSec=block->planetary.stream.exposureSec;r.gain=block->planetary.stream.gain;r.offset=block->planetary.stream.offset;r.binX=block->planetary.stream.binX;r.binY=block->planetary.stream.binY;r.saveRaw=false;
+    QString e;const QString id=startCapture(r,&e);if(id.isEmpty()){scheduler_.fail("Planetary full-frame acquisition could not start: "+e);return;}scheduler_.setStep(step,id);
+}
+void ApplicationController::startCurrentPlanetaryAutofocus(){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current planetary block");return;}
+    AutofocusRequest r=block->planetary.autofocus.request;r.mode=AutofocusMode::Planet;r.autoPlanetRoi=true;
+    QString e;const QString id=startAutofocus(r,&e);if(id.isEmpty()){scheduler_.fail("Planetary autofocus could not start: "+e);return;}scheduler_.setStep("planetary-autofocus",id);
+}
+void ApplicationController::startCurrentPlanetaryCalibration(){
+    const auto block=scheduler_.currentBlock();if(!block||!camera_||!mount_){scheduler_.fail("Planetary mount calibration requires camera and mount");return;}
+    const auto cam=camera_;
+    const auto mount=mount_;
+    const auto target=convertEquatorialFrame(block->coordinate,EquatorialFrame::J2000);const double step=block->planetary.tracking.calibrationArcsec;
+    ExposureRequest req;req.exposureSec=block->planetary.stream.exposureSec;req.gain=block->planetary.stream.gain;req.offset=block->planetary.stream.offset;req.binX=block->planetary.stream.binX;req.binY=block->planetary.stream.binY;req.saveRaw=false;
+    const TrackingRate trackingRate=block->planetary.trackingRate;
+    const QString id=operations_.submit("planetary.mount-calibration",{"camera","mount"},true,[this,cam,mount,target,step,req,trackingRate](OperationContext&ctx){
+        OperationOutcome out;ThreadMarshalledCamera camera(this,cam);ThreadMarshalledMount mnt(this,mount);PlanetDetector detector;
+        auto waitIdle=[&](QString &err){for(int i=0;i<600;++i){if(ctx.isCancellationRequested()){mnt.abortMotion(nullptr);return false;}MountStatus s;if(!mnt.status(s,&err))return false;if(!s.slewing)return true;QThread::msleep(100);}err="Mount micro-slew did not settle within 60 s";return false;};
+        auto captureCentroid=[&](cv::Point2d &c,QString &err,const QString &purpose){CameraFrame f;if(!camera.capture(req,f,&err))return false;const auto d=detector.detect(f.image);if(!d.found){err="Planet detector lost the target during mount calibration";return false;}c=d.centroidPx;QMetaObject::invokeMethod(this,[this,f,purpose](){publishOperationalPreview(f,purpose);},Qt::BlockingQueuedConnection);return true;};
+        QString err;cv::Point2d base,raPt,decPt;ctx.reportProgress(0.05,"planetary.calibration.base");if(!captureCentroid(base,err,"planet-cal-base")){out.problem={{"code","PLANET_NOT_FOUND"},{"message",err}};return out;}
+        const double cosDec=std::max(0.1,std::abs(std::cos(target.decDeg*3.14159265358979323846/180.0)));
+        EquatorialCoord raTarget=target;raTarget.raDeg=std::fmod(raTarget.raDeg+step/(3600.0*cosDec)+360.0,360.0);ctx.reportProgress(0.20,"planetary.calibration.ra");if(!mnt.slewTo(raTarget,&err)||!waitIdle(err)){out.problem={{"code","MOUNT_CALIBRATION_RA_FAILED"},{"message",err}};return out;}QThread::msleep(350);if(!captureCentroid(raPt,err,"planet-cal-ra")){out.problem={{"code","PLANET_NOT_FOUND"},{"message",err}};return out;}
+        if(!mnt.slewTo(target,&err)||!waitIdle(err)){out.problem={{"code","MOUNT_CALIBRATION_RETURN_FAILED"},{"message",err}};return out;}QThread::msleep(350);
+        EquatorialCoord decTarget=target;decTarget.decDeg=std::clamp(decTarget.decDeg+step/3600.0,-89.9,89.9);ctx.reportProgress(0.55,"planetary.calibration.dec");if(!mnt.slewTo(decTarget,&err)||!waitIdle(err)){out.problem={{"code","MOUNT_CALIBRATION_DEC_FAILED"},{"message",err}};return out;}QThread::msleep(350);if(!captureCentroid(decPt,err,"planet-cal-dec")){out.problem={{"code","PLANET_NOT_FOUND"},{"message",err}};return out;}
+        if(!mnt.slewTo(target,&err)||!waitIdle(err)){out.problem={{"code","MOUNT_CALIBRATION_RETURN_FAILED"},{"message",err}};return out;}mnt.setTracking(true,trackingRate,nullptr);QThread::msleep(350);
+        const double a=(raPt.x-base.x)/step,c=(raPt.y-base.y)/step,b=(decPt.x-base.x)/step,d=(decPt.y-base.y)/step,det=a*d-b*c;
+        if(std::abs(det)<1e-5){out.problem={{"code","MOUNT_CALIBRATION_DEGENERATE"},{"message","Planetary RA/DEC calibration vectors are degenerate; mount correction will not be safe"}};return out;}
+        out.success=true;out.result=QJsonObject{{"m00",a},{"m01",b},{"m10",c},{"m11",d},{"determinant",det},{"calibrationArcsec",step}};ctx.reportProgress(1.0,"completed");return out;
+    });
+    scheduler_.setStep("planetary-calibration",id);
+}
+void ApplicationController::startCurrentPlanetarySer(){
+    const auto block=scheduler_.currentBlock();if(!block||!camera_){scheduler_.fail("Planetary SER requires the main camera");return;}
+    auto cam=camera_;auto mount=mount_;const int runIndex=scheduler_.status().currentBlockCompletedFrames;LiveViewRequest request=block->planetary.stream;request.recordSer=true;request.roi=planetaryRoi_;request.serPath=planetarySerPath(*block,runIndex,request.serPath);
+    const QSize nativeSensor=cam->sensorSize();const int sensorW=std::max(1,nativeSensor.width()/std::max(1,request.binX)),sensorH=std::max(1,nativeSensor.height()/std::max(1,request.binY));
+    const auto tracking=block->planetary.tracking;const auto calibration=planetaryMountCalibration_;const TrackingRate trackingRate=block->planetary.trackingRate;const double duration=block->planetary.durationSec;const TelescopeProfile profile=profile_;const QString backend=cam->backendName(),cameraName=cam->displayName();
+    QStringList resources{"camera"};if(tracking.mountCorrections&&mount)resources<<"mount";
+    const QString id=operations_.submit("camera.planetary-ser",resources,true,[this,cam,mount,request,tracking,calibration,trackingRate,duration,profile,backend,cameraName,sensorW,sensorH](OperationContext&ctx)mutable{
+        OperationOutcome out;ThreadMarshalledCamera camera(this,cam);std::unique_ptr<ThreadMarshalledMount> mnt;if(mount)mnt=std::make_unique<ThreadMarshalledMount>(this,mount);PlanetDetector detector;SerWriter ser;QElapsedTimer elapsed;elapsed.start();int lost=0;quint32 frames=0;cv::Rect roi=request.roi;int lastMountFrame=-100000;
+        auto native=std::dynamic_pointer_cast<NativeOalCamera>(cam);const bool nativeStream=native&&native->nativeLiveSupported();bool streamStarted=false;
+        auto startStream=[&](QString &err){if(!nativeStream)return true;request.roi=roi;if(!native->startNativeLive(request,&err))return false;streamStarted=true;return true;};
+        auto stopStream=[&](){if(nativeStream&&streamStarted){QString e;native->stopNativeLive(&e);streamStarted=false;if(!e.isEmpty())QMetaObject::invokeMethod(this,[this,e](){emit logMessage("Planetary stream restart warning: "+e);},Qt::QueuedConnection);}};
+        auto waitMountIdle=[&](QString &err){if(!mnt)return false;for(int i=0;i<600;++i){if(ctx.isCancellationRequested()){mnt->abortMotion(nullptr);return false;}MountStatus s;if(!mnt->status(s,&err))return false;if(!s.slewing)return true;QThread::msleep(100);}err="Planetary correction slew timeout";return false;};
+        QString err;if(!startStream(err)){out.problem={{"code","PLANETARY_STREAM_START_FAILED"},{"message",err}};return out;}
+        const qint64 targetPeriodMs=qint64(std::lround(1000.0/std::clamp(request.targetFps,0.2,200.0)));
+        while(!ctx.isCancellationRequested()&&elapsed.elapsed()<qint64(duration*1000.0)){
+            QElapsedTimer cycle;cycle.start();CameraFrame raw;
+            if(nativeStream){const int timeoutMs=int(std::clamp<qint64>(qint64(std::ceil(request.exposureSec*3000.0))+1000,1000,5000));if(!native->nextNativeLiveFrame(raw,timeoutMs,&err)){stopStream();ser.close(nullptr);out.problem={{"code","PLANETARY_FRAME_FAILED"},{"message",err}};return out;}}
+            else {ExposureRequest er;er.exposureSec=request.exposureSec;er.gain=request.gain;er.offset=request.offset;er.binX=request.binX;er.binY=request.binY;er.roi=roi;er.saveRaw=false;if(!camera.capture(er,raw,&err)){ser.close(nullptr);out.problem={{"code","PLANETARY_FRAME_FAILED"},{"message",err}};return out;}}
+            if(!ser.isOpen()){request.roi=roi;if(!ser.open(request.serPath,raw,profile,request,backend,cameraName,&err)){stopStream();out.problem={{"code","SER_WRITE_FAILED"},{"message",err}};return out;}}
+            if(!ser.append(raw,&err)){stopStream();ser.close(nullptr);out.problem={{"code","SER_WRITE_FAILED"},{"message",err}};return out;}frames=ser.frameCount();
+            const auto det=detector.detect(raw.image);if(!det.found){++lost;if(lost>=tracking.lostTargetFrames){stopStream();ser.close(nullptr);out.problem={{"code","PLANET_LOST"},{"message",QString("Planet was not detected for %1 consecutive SER frames").arg(lost)}};return out;}}
+            else{
+                lost=0;const cv::Point2d global{roi.x+det.centroidPx.x,roi.y+det.centroidPx.y};const cv::Point2d localError{det.centroidPx.x-0.5*roi.width,det.centroidPx.y-0.5*roi.height};
+                cv::Rect proposed=roi;if(tracking.allowRoiShift&&std::hypot(localError.x,localError.y)>=tracking.roiShiftThresholdPx)proposed=centeredPlanetaryRoi(global,roi.width,roi.height,sensorW,sensorH);
+                const cv::Point2d sensorError{global.x-0.5*sensorW,global.y-0.5*sensorH};
+                const bool mountDue=tracking.mountCorrections&&mnt&&calibration.valid&&std::hypot(sensorError.x,sensorError.y)>=tracking.mountCorrectionThresholdPx&&int(frames)-lastMountFrame>=std::max(10,int(request.targetFps*2.0));
+                if(mountDue){
+                    const double a=calibration.pixelsPerArcsec(0,0),b=calibration.pixelsPerArcsec(0,1),c=calibration.pixelsPerArcsec(1,0),d=calibration.pixelsPerArcsec(1,1),detm=a*d-b*c;
+                    if(std::abs(detm)>1e-8){const double wantX=-sensorError.x,wantY=-sensorError.y;double raArc=(d*wantX-b*wantY)/detm,decArc=(-c*wantX+a*wantY)/detm;const double mag=std::hypot(raArc,decArc);if(mag>tracking.maxMountCorrectionArcsec){const double k=tracking.maxMountCorrectionArcsec/mag;raArc*=k;decArc*=k;}
+                        stopStream();MountStatus ms;if(mnt->status(ms,&err)&&ms.coordinateValid){auto t=convertEquatorialFrame(ms.coordinate,EquatorialFrame::J2000);const double cosDec=std::max(0.1,std::abs(std::cos(t.decDeg*3.14159265358979323846/180.0)));t.raDeg=std::fmod(t.raDeg+raArc/(3600.0*cosDec)+360.0,360.0);t.decDeg=std::clamp(t.decDeg+decArc/3600.0,-89.9,89.9);if(mnt->slewTo(t,&err)&&waitMountIdle(err)){mnt->setTracking(true,trackingRate,nullptr);if(tracking.mountSettleMs>0)QThread::msleep(unsigned(tracking.mountSettleMs));roi=centeredPlanetaryRoi({0.5*sensorW,0.5*sensorH},roi.width,roi.height,sensorW,sensorH);QJsonObject extra{{"type","mount-correction"},{"raArcsec",raArc},{"decArcsec",decArc},{"sensorErrorX",sensorError.x},{"sensorErrorY",sensorError.y}};ser.appendRoiEvent(frames,roi,"mount-correction",extra,nullptr);lastMountFrame=int(frames);request.roi=roi;if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}
+                            else {QMetaObject::invokeMethod(this,[this,err](){emit logMessage("Planetary mount correction skipped after failure: "+err);},Qt::QueuedConnection);request.roi=roi;if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}}
+                        else {request.roi=roi;if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}
+                    }
+                } else if(proposed!=roi){stopStream();roi=proposed;request.roi=roi;QJsonObject extra{{"type","roi-shift"},{"centroidGlobalX",global.x},{"centroidGlobalY",global.y}};ser.appendRoiEvent(frames,roi,"tracker-shift",extra,nullptr);if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}
+                ctx.reportProgress(std::clamp(double(elapsed.elapsed())/(duration*1000.0),0.0,0.99),"planetary.recording",{{"frames",int(frames)},{"centroidX",det.centroidPx.x},{"centroidY",det.centroidPx.y},{"roiX",roi.x},{"roiY",roi.y},{"roiWidth",roi.width},{"roiHeight",roi.height},{"serPath",request.serPath}});
+            }
+            CameraFrame preview=raw;QString note;processLivePreview(preview,request,&note);preview.id="live-"+preview.id;preview.scienceFilePath.clear();QMetaObject::invokeMethod(this,[this,preview](){commitCapturedFrame(preview,false,false);},Qt::BlockingQueuedConnection);
+            if(!nativeStream){qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}}
+        }
+        stopStream();if(ctx.isCancellationRequested()){ser.close(nullptr);out.cancelled=true;return out;}if(!ser.close(&err)){out.problem={{"code","SER_FINALIZE_FAILED"},{"message",err}};return out;}
+        out.success=true;out.result=QJsonObject{{"serPath",request.serPath},{"metadataPath",QFileInfo(request.serPath).absolutePath()+"/"+QFileInfo(request.serPath).completeBaseName()+".txt"},{"roiProvenancePath",QFileInfo(request.serPath).absolutePath()+"/"+QFileInfo(request.serPath).completeBaseName()+".roi.jsonl"},{"frames",int(frames)},{"finalRoi",QJsonObject{{"x",roi.x},{"y",roi.y},{"width",roi.width},{"height",roi.height}}}};ctx.reportProgress(1.0,"completed");return out;
+    });
+    scheduler_.setStep("planetary-ser",id);emit logMessage(QString("Planetary SER run %1/%2 started: %3 ROI=(%4,%5 %6x%7)").arg(runIndex+1).arg(block->planetary.serRuns).arg(request.serPath).arg(request.roi.x).arg(request.roi.y).arg(request.roi.width).arg(request.roi.height));
+}
+
+void ApplicationController::scheduleSessionStep(){
+    const auto st=scheduler_.status();if(!st.active)return;
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("Observation plan cursor is outside the block list");return;}
+    if(st.currentStep=="prepare-block"){
+        sessionRecenterAttempt_=0;
+        if(block->mode==ObservationMode::PlanetarySer){planetaryRoi_={};planetaryLastCentroid_={};planetaryMountCalibration_={};startCurrentPlanetarySlew();}
+        else startCurrentDsoSlew();
+        return;
+    }
+    if(block->mode==ObservationMode::PlanetarySer){
+        if(st.currentStep=="planetary-acquire-pending"){startCurrentPlanetaryAcquire("planetary-acquire");return;}
+        if(st.currentStep=="planetary-reacquire-pending"){startCurrentPlanetaryAcquire("planetary-reacquire");return;}
+        if(st.currentStep=="planetary-postcal-acquire-pending"){startCurrentPlanetaryAcquire("planetary-postcal-acquire");return;}
+        if(st.currentStep=="planetary-autofocus-pending"){startCurrentPlanetaryAutofocus();return;}
+        if(st.currentStep=="planetary-calibration-pending"){startCurrentPlanetaryCalibration();return;}
+        if(st.currentStep=="planetary-ser-pending"){startCurrentPlanetarySer();return;}
+        return;
+    }
+    if(st.currentStep=="solve-pending"){startCurrentDsoSolve();return;}
+    if(st.currentStep=="autofocus-pending"){startCurrentDsoAutofocus();return;}
+    if(st.currentStep=="capture-pending"){startCurrentDsoCapture();return;}
+}
+
+void ApplicationController::handleSessionOperationUpdate(const QJsonObject&o){
+    const auto st=scheduler_.status();if(!st.active||st.currentOperationId.isEmpty())return;if(o.value("id").toString()!=st.currentOperationId)return;
+    const QString state=o.value("state").toString();if(state!="succeeded"&&state!="failed"&&state!="cancelled")return;
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("Observation block disappeared while an operation was running");return;}const QString step=st.currentStep;
+    if(state!="succeeded"){const QString message=state=="cancelled"?QString("Scheduler step %1 was cancelled").arg(step):o.value("problem").toObject().value("message").toString(QString("Scheduler step %1 failed").arg(step));scheduler_.fail(message);emit logMessage("Observation session FAILED: "+message);return;}
+    scheduler_.clearOperation();
+
+    if(block->mode==ObservationMode::PlanetarySer){
+        if(step=="planetary-slew"){
+            QString te;if(!setMountTracking(true,block->planetary.trackingRate,&te))emit logMessage("Planetary tracking could not be enabled after GOTO: "+te);
+            scheduler_.setStep("planetary-acquire-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+        }
+        if(step=="planetary-acquire"||step=="planetary-reacquire"||step=="planetary-postcal-acquire"){
+            const auto d=planetDetector_.detect(lastFrame_.image);if(!d.found){scheduler_.fail("Planet was not detected in the full-frame acquisition after GOTO");return;}planetaryLastCentroid_=d.centroidPx;
+            const int w=block->planetary.roiWidth>0?block->planetary.roiWidth:640,h=block->planetary.roiHeight>0?block->planetary.roiHeight:480;planetaryRoi_=centeredPlanetaryRoi(d.centroidPx,w,h,lastFrame_.image.cols,lastFrame_.image.rows);
+            emit logMessage(QString("Planet acquired at (%1,%2), confidence=%3; hardware ROI=(%4,%5 %6x%7)").arg(d.centroidPx.x,0,'f',1).arg(d.centroidPx.y,0,'f',1).arg(d.confidence,0,'f',3).arg(planetaryRoi_.x).arg(planetaryRoi_.y).arg(planetaryRoi_.width).arg(planetaryRoi_.height));
+            if(step=="planetary-acquire"&&planetaryAutofocusDue(*block)){scheduler_.setStep("planetary-autofocus-pending");}
+            else if(block->planetary.tracking.mountCorrections&&block->planetary.tracking.autoCalibrateMount&&!planetaryMountCalibration_.valid&&step!="planetary-postcal-acquire")scheduler_.setStep("planetary-calibration-pending");
+            else scheduler_.setStep("planetary-ser-pending");
+            QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+        }
+        if(step=="planetary-autofocus"){
+            scheduler_.setStep("planetary-reacquire-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+        }
+        if(step=="planetary-calibration"){
+            const auto r=o.value("result").toObject();planetaryMountCalibration_.pixelsPerArcsec=cv::Matx22d(r.value("m00").toDouble(),r.value("m01").toDouble(),r.value("m10").toDouble(),r.value("m11").toDouble());planetaryMountCalibration_.valid=true;
+            emit logMessage(QString("Planetary mount image-response calibration ready: [[%1,%2],[%3,%4]] px/arcsec").arg(planetaryMountCalibration_.pixelsPerArcsec(0,0),0,'g',6).arg(planetaryMountCalibration_.pixelsPerArcsec(0,1),0,'g',6).arg(planetaryMountCalibration_.pixelsPerArcsec(1,0),0,'g',6).arg(planetaryMountCalibration_.pixelsPerArcsec(1,1),0,'g',6));
+            scheduler_.setStep("planetary-postcal-acquire-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+        }
+        if(step=="planetary-ser"){
+            const auto r=o.value("result").toObject(),fr=r.value("finalRoi").toObject();if(!fr.isEmpty())planetaryRoi_=cv::Rect(fr.value("x").toInt(),fr.value("y").toInt(),fr.value("width").toInt(),fr.value("height").toInt());scheduler_.markFrameCompleted();const auto after=scheduler_.status();
+            emit logMessage(QString("Planetary SER completed: %1 (%2 frames), ROI provenance=%3").arg(r.value("serPath").toString()).arg(r.value("frames").toInt()).arg(r.value("roiProvenancePath").toString()));
+            if(after.currentBlockCompletedFrames>=block->planetary.serRuns){scheduler_.advanceBlock();QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}
+            scheduler_.setStep("planetary-acquire-pending");const int delay=int(std::lround(block->planetary.pauseSec*1000.0));QTimer::singleShot(std::max(0,delay),this,[this](){scheduleSessionStep();});return;
+        }
+        return;
+    }
+
+    if(step=="slew"){
+        sessionRecenterAttempt_=0;if(sessionRecenterDue(*block))scheduler_.setStep("solve-pending");else if(sessionAutofocusDue(*block))scheduler_.setStep("autofocus-pending");else scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+    }
+    if(step=="recenter-slew"){scheduler_.setStep("solve-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}
+    if(step=="solve"){
+        const auto result=o.value("result").toObject();EquatorialCoord solved;solved.raDeg=result.value("raDeg").toDouble();solved.decDeg=result.value("decDeg").toDouble();solved.frame=equatorialFrameFromString(result.value("coordinateFrame").toString("J2000"));const auto solvedJ2000=convertEquatorialFrame(solved,EquatorialFrame::J2000);const auto targetJ2000=convertEquatorialFrame(block->coordinate,EquatorialFrame::J2000);const double errorArcmin=60.0*skyAngularSeparationDeg(solvedJ2000,targetJ2000);emit logMessage(QString("Scheduler solve/recenter: block=%1 pointing error=%2 arcmin attempt=%3/%4").arg(block->id).arg(errorArcmin,0,'f',3).arg(sessionRecenterAttempt_).arg(block->dso.recenter.maxAttempts));
+        if(errorArcmin>block->dso.recenter.toleranceArcmin){if(sessionRecenterAttempt_>=block->dso.recenter.maxAttempts){scheduler_.fail(QString("Recenter did not converge: %1 arcmin > %2 arcmin tolerance").arg(errorArcmin,0,'f',3).arg(block->dso.recenter.toleranceArcmin,0,'f',3));return;}QString e;if(!syncMount(solvedJ2000,&e)){scheduler_.fail("Plate-solve Sync failed before recenter: "+e);return;}++sessionRecenterAttempt_;QString e2;const QString id=startMountSlew(targetJ2000,&e2);if(id.isEmpty()){scheduler_.fail("Recenter slew could not start: "+e2);return;}scheduler_.setStep("recenter-slew",id);return;}
+        sessionRecenterAttempt_=0;if(sessionAutofocusDue(*block))scheduler_.setStep("autofocus-pending");else scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+    }
+    if(step=="autofocus"){scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}
+    if(step=="capture"){
+        scheduler_.markFrameCompleted();const auto after=scheduler_.status();if(after.currentBlockCompletedFrames>=block->dso.frameCount){emit logMessage(QString("Scheduler block completed: %1 (%2 science frame(s))").arg(block->name).arg(after.currentBlockCompletedFrames));scheduler_.advanceBlock();QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}sessionRecenterAttempt_=0;if(sessionRecenterDue(*block))scheduler_.setStep("solve-pending");else if(sessionAutofocusDue(*block))scheduler_.setStep("autofocus-pending");else scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+    }
+}
 bool ApplicationController::startOalServer(quint16 hp,bool we,quint16 wp,QString*e){if(!oalServer_)oalServer_=std::make_unique<OalServer>(this);if(!oalServer_->start(hp,e))return false;if(we){if(!oalWsServer_)oalWsServer_=std::make_unique<OalWsServer>(this);if(!oalWsServer_->start(wp,e)){oalServer_->stop();return false;}}settings_.saveServer(true,hp,we,wp);emit logMessage(QString("OAL server listening on %1; WebSocket %2").arg(hp).arg(we?QString::number(wp):"disabled"));return true;}
 void ApplicationController::stopOalServer(){if(oalWsServer_)oalWsServer_->stop();if(oalServer_)oalServer_->stop();settings_.saveServer(false,settings_.oalPort(),false,settings_.wsPort());}
 bool ApplicationController::oalRunning()const{return oalServer_&&oalServer_->isRunning();}

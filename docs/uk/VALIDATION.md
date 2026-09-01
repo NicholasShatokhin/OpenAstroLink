@@ -1,4 +1,4 @@
-# План валідації — v0.2.10.5
+# План валідації — v0.2.10.47
 
 Цей реліз — build/HIL qualification checkpoint.
 
@@ -34,6 +34,8 @@ Focuser: position → small moves → absolute move → halt if advertised → t
 QHY/ZWO: exact ID → short/long exposure → gain/offset → ROI/binning → bit depth → cancel → 20–100 frames → unplug/replug → main+guide simultaneous test.  
 Canon: discovery/session → short capture → original file → Bulb → cancel → preview → repeated capture → reconnect.  
 ASTAP: archived frame → real frame → scale check → repeated solve → closed-loop correction.
+
+Scheduler/DSO v0.2.10.46: один block на 2–3 короткі science frames → recenter before first (1–2 arcmin) → autofocus before first → перевірити `slew → solve → correction slew/re-solve за потреби → autofocus → capture`; далі окремо `recenter every 1 frame` і `autofocus every 1 frame`; Stop перевірити під час кожного child operation; solve/recenter failure має завершити session у `failed` з `lastError`. Legacy `targets` має лишитися сумісним без неявної вимоги solver/focuser. Planetary HIL: почати з mount corrections OFF: GOTO → full-frame detection → autofocus → 10–20 s ROI SER; перевірити SER, `.txt`, `.roi.jsonl` і примусовий ROI shift без зміни геометрії SER. Calibrated mount corrections тестувати окремо лише після безпечного HIL backend; calibration micro-slews мають повернути ціль, а всі corrections — бути записані.
 
 ## Supervised first-light PASS
 

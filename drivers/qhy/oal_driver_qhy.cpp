@@ -133,7 +133,7 @@ void stop(void*){
     if(state.sdkReady){ReleaseQHYCCDResource();state.sdkReady=false;}
     state.cameras.clear();state.lastScanCount=-1;
 }
-const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.45","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
+const char *manifest(void*){return copyString(R"({"driverId":"oal.qhy","name":"OpenAstroLink native QHYCCD driver","version":"0.2.10.47","abiVersion":2,"threadModel":"per-device-serial","transport":"QHYCCD SDK"})");}
 bool anyCameraConnected(){
     std::lock_guard<std::mutex> lock(state.mutex);
     for(const auto &entry:state.cameras) if(entry.second && entry.second->connected.load()) return true;
@@ -245,7 +245,12 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
         if(c->streamMode!=1&&!reopenCameraMode(*c,1,err)){event(dev,"device.disconnected","{\"reason\":\"QHY live-mode reopen failed\"}");return fail("QHY_LIVE_OPEN_FAILED",err);}
         const int binX=std::max(1,int(number(r,"binX",1))),binY=std::max(1,int(number(r,"binY",1)));
         auto rc=SetQHYCCDBinMode(c->handle,binX,binY);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDBinMode(live)",rc));
-        const int w=std::max(1,int(c->sensorW)/binX),h=std::max(1,int(c->sensorH)/binY);rc=SetQHYCCDResolution(c->handle,0,0,w,h);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDResolution(live)",rc));
+        const int bw=std::max(1,int(c->sensorW)/binX),bh=std::max(1,int(c->sensorH)/binY);int x=0,y=0,w=bw,h=bh;double rv=0;
+        if(objectNumber(r,"roi","x",rv)) x=std::clamp(int(rv),0,bw-1);
+        if(objectNumber(r,"roi","y",rv)) y=std::clamp(int(rv),0,bh-1);
+        if(objectNumber(r,"roi","width",rv)) w=std::clamp(int(rv),1,bw-x);
+        if(objectNumber(r,"roi","height",rv)) h=std::clamp(int(rv),1,bh-y);
+        rc=SetQHYCCDResolution(c->handle,x,y,w,h);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDResolution(live)",rc));
         std::string ctl;double actualExposureUs=number(r,"exposureSec",0.001)*1e6,actualGain=number(r,"gain",0),actualOffset=number(r,"offset",0);
         if(!setOptional(*c,CONTROL_EXPOSURE,actualExposureUs,ctl,&actualExposureUs)||!setOptional(*c,CONTROL_GAIN,actualGain,ctl,&actualGain)||!setOptional(*c,CONTROL_OFFSET,actualOffset,ctl,&actualOffset))return fail("QHY_CONTROL_ERROR",ctl);
         rc=BeginQHYCCDLive(c->handle);if(!qok(rc))return fail("QHY_LIVE_START_FAILED",rcError("BeginQHYCCDLive",rc));
@@ -274,7 +279,12 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
     if(m=="camera.capture"){
         std::lock_guard<std::mutex> op(c->operationMutex);if(!c->connected||!c->handle)return fail("DEVICE_DISCONNECTED","QHY camera disconnected");std::string modeError;if(c->streamMode!=0&&!reopenCameraMode(*c,0,modeError))return fail("QHY_SINGLE_MODE_RESTORE_FAILED",modeError);c->abortRequested=false;
         const int binX=std::max(1,int(number(r,"binX",1))),binY=std::max(1,int(number(r,"binY",1)));auto rc=SetQHYCCDBinMode(c->handle,binX,binY);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDBinMode",rc));
-        int bw=std::max(1,int(c->sensorW)/binX),bh=std::max(1,int(c->sensorH)/binY);int x=0,y=0,w=bw,h=bh;double v=0;if(objectNumber(r,"roi","x",v))x=std::clamp(int(v),0,bw-1);if(objectNumber(r,"roi","y",v))y=std::clamp(int(v),0,bh-1);if(objectNumber(r,"roi","width",v))w=std::clamp(int(v),1,bw-x);if(objectNumber(r,"roi","height",v))h=std::clamp(int(v),1,bh-y);rc=SetQHYCCDResolution(c->handle,x,y,w,h);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDResolution",rc));
+        int bw=std::max(1,int(c->sensorW)/binX),bh=std::max(1,int(c->sensorH)/binY);int x=0,y=0,w=bw,h=bh;double v=0;
+        if(objectNumber(r,"roi","x",v)) x=std::clamp(int(v),0,bw-1);
+        if(objectNumber(r,"roi","y",v)) y=std::clamp(int(v),0,bh-1);
+        if(objectNumber(r,"roi","width",v)) w=std::clamp(int(v),1,bw-x);
+        if(objectNumber(r,"roi","height",v)) h=std::clamp(int(v),1,bh-y);
+        rc=SetQHYCCDResolution(c->handle,x,y,w,h);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDResolution",rc));
         std::string err;const double exposureSec=std::max(0.000001,number(r,"exposureSec",1.0)),gain=number(r,"gain",0),offset=number(r,"offset",0);double actualExposureUs=exposureSec*1e6,actualGain=gain,actualOffset=offset;
         if(!setOptional(*c,CONTROL_EXPOSURE,exposureSec*1e6,err,&actualExposureUs)||!setOptional(*c,CONTROL_GAIN,gain,err,&actualGain)||!setOptional(*c,CONTROL_OFFSET,offset,err,&actualOffset))return fail("QHY_CONTROL_ERROR",err);
         if(std::abs(c->lastExposureUs-actualExposureUs)>0.5||std::abs(c->lastGain-actualGain)>1e-6||std::abs(c->lastOffset-actualOffset)>1e-6){
@@ -301,7 +311,7 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
 bool cancel(void*,const char *device,const char*){auto*c=camera(device?device:"");if(!c||!c->handle)return false;c->abortRequested=true;if(c->liveActive)return true;return CancelQHYCCDExposingAndReadout(c->handle)==QHYCCD_SUCCESS;}
 void releaseString(void*,const char*p){if(p)host.deallocate(host.hostContext,const_cast<char*>(p));}
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.45",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+                "oal.qhy","OpenAstroLink native QHYCCD driver","0.2.10.47",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 } // namespace
 
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h){if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||h->structSize<sizeof(OalDriverHostV2))return nullptr;host=*h;return &api;}

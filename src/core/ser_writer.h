@@ -22,6 +22,8 @@ public:
     bool close(QString *error=nullptr);
     QString path() const { return path_; }
     QString sidecarPath() const;
+    QString roiProvenancePath() const;
+    bool appendRoiEvent(quint32 frameStart,const cv::Rect &roi,const QString &reason,const QJsonObject &extra={},QString *error=nullptr);
     quint32 frameCount() const { return frameCount_; }
     bool isOpen() const { return file_.isOpen(); }
 private:
@@ -33,6 +35,7 @@ private:
     static quint64 serTicks(const QDateTime &utc);
     static QByteArray fixedAscii(const QString &text,int bytes);
     QFile file_;
+    QFile roiFile_;
     QString path_;
     int width_{0},height_{0},channels_{0},depthBits_{0};
     quint32 colorId_{0},frameCount_{0};

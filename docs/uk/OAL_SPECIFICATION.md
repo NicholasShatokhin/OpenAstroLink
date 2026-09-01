@@ -1,7 +1,11 @@
+## Примітка реалізації v0.2.10.47
+
+Scheduler тепер виконує і DSO FITS/RAW, і planetary SER blocks. Planetary block знаходить ціль на full frame, опційно виконує autofocus у planet mode, формує hardware ROI, пише finite SER, може рухати ROI без зміни розміру та веде frame-indexed provenance origin ROI. Slow mount recentering є опційним каліброваним loop і за замовчуванням вимкнений до HIL-кваліфікації. Це не змінює planned boundary OAL 1.0 для durable restart/recovery, weather/roof interlocks, meridian handling, authentication та process isolation.
+
 # Специфікація OpenAstroLink і стан реалізації
 
 **Канонічна мова:** англійська  
-**Реліз:** OpenAstroSuite / OpenAstroLink v0.2.10.5  
+**Реліз:** OpenAstroSuite / OpenAstroLink v0.2.10.47
 **Позначки:** ✅ реалізовано в поточному коді; 🟡 частково реалізовано / потрібен HIL; 🧪 експериментально; ⏳ визначено, але ще не реалізовано.
 
 Цей документ є зрізом специфікації, прив'язаним до реалізації. Він чітко відділяє цільову архітектуру OAL від планів.
@@ -119,10 +123,10 @@ queued → running → succeeded
 
 | Driver | Стан | Межа |
 |---|---|---|
-| `oal.qhy` | 🟡 реалізовано, HIL pending | QHYCCD SDK; включена MSVC header isolation |
+| `oal.qhy` | ✅ базовий HIL / 🟡 qualification | QHY5III462C discovery, native live stream, FITS capture і SER writing підтверджені на реальному залізі; ще потрібні regression/reconnect checks |
 | `oal.canon` | 🟡 реалізовано, HIL pending | EDSDK Windows; libgphoto2/PTP Linux |
-| `oal.zwo.asi` | 🟡 реалізовано, HIL pending | ASI SDK, multi-camera enumeration |
-| `oal.zwo.eaf` | 🟡 реалізовано, HIL pending | EAF SDK |
+| `oal.zwo.asi` | ✅ реалізовано / 🟡 HIL pending | ASI SDK path і multi-camera enumeration реалізовані; реальної ZWO camera ще не кваліфіковано |
+| `oal.zwo.eaf` | ✅ реалізовано / 🟡 HIL pending | EAF SDK path реалізований; реальний ZWO EAF ще не кваліфіковано |
 | `oal.gemini` | 🟡 protocol path implemented, HIL pending | Direct serial/MyFocuserPro2-compatible |
 | `oal.skywatcher` | 🟡 SynScan implemented, HIL pending | GOTO/status/tracking/sync/abort/pulse guide |
 | Direct motor-controller Sky-Watcher | 🧪 codec foundation | Потрібна calibrated coordinate/alignment model |
@@ -168,18 +172,29 @@ queued → running → succeeded
 ✅ Basic guiding API/state.  
 ⏳ Production star tracking/calibration/RMS/dither/settle/backlash/reacquire/flip recovery.
 
-## 17. Durable scheduler — P1
+## 17. Scheduler / durable execution — P1 → OAL 1.0
 
-🟡 Session scaffolding.  
-⏳ Checkpoints/restart resume.  
-⏳ Meridian flip.  
-⏳ Dither/refocus triggers.  
-⏳ Weather interruption/recovery.  
-⏳ Solve/recenter/reguide recovery.
+✅ У v0.2.10.47 введено `ObservationPlan` / `ObservationBlock` / acquisition-step semantics; `SessionTarget` лишився compatibility wrapper.
+🟡 Перший supervised **DSO FITS/RAW** executor уже виконує `slew -> adaptive solve/recenter -> autofocus -> capture` і підтримує recenter/autofocus кожні N кадрів. Він ще не durable при restart node.
+⏳ Розширити DSO blocks реальним filter-wheel execution, guiding/dither, time/altitude constraints і durable checkpoints.
+⏳ Першокласні **planetary/lunar SER** blocks: high-speed settings, ROI, повторні SER та автономне наведення/центрування планети.  
+⏳ Full autofocus після кожного кадру/SER або за часом/температурою/якістю.  
+⏳ Опційна calibrated **in-exposure thermal focus compensation** з повним журналом рухів фокусера.  
+⏳ Автоматичне утримання планети в ROI через переміщення ROI та/або pulse-guide/micro-slew mount; ROI origin/history зберігається для відтворення dark/flat region.  
+⏳ Durable checkpoints/restart resume, meridian flip, weather hold/recovery, solve/recenter/reguide recovery.
 
-## 18. Додаткові профілі — P1
+Повна модель описана у [`SCHEDULER.md`](SCHEDULER.md).
 
-⏳ Filter wheel, rotator, dome/roof, weather/safety, power/switch, cover/calibrator, GPS/time.
+## 18. Додаткові device profiles — P1 → OAL 1.0
+
+✅ У API/UI вже є inert placeholders для майбутніх observatory device categories.  
+⏳ Filter wheel.  
+⏳ Rotator.  
+⏳ Dome / roll-off roof та interlocks.  
+⏳ Weather / safety monitor.  
+⏳ Power / switch.  
+⏳ Cover / calibrator.  
+⏳ GPS/GNSS/time.
 
 ## 19. Stellarium
 
@@ -197,6 +212,23 @@ queued → running → succeeded
 ✅ Windows/Linux packaging helpers.  
 ✅ Build preflight scripts.  
 🟡 Повна vendor-SDK build matrix ще кваліфікується на фізичних hosts.
+
+## Запланований production/unattended profile OAL 1.0
+
+Це **заплановані, але ще не завершені** вимоги переходу від supervised beta до unattended OAL 1.0:
+
+- TLS, authentication, roles/scopes та audit;
+- idempotency і durable operation recovery;
+- replayable/recoverable WebSocket events;
+- observatory-wide emergency stop;
+- weather, roof/dome, power safety interlocks;
+- production guiding, dither/settle, star-loss/post-flip recovery;
+- durable mixed DSO/planetary scheduler з restart resume;
+- automatic meridian flip + solve/recenter/reguide/refocus recovery;
+- durable science store, checksums/provenance/resumable downloads;
+- driver isolation і public conformance/certification suite.
+
+До проходження відповідних HIL safety/recovery gates unattended operation має лишатися явно unqualified.
 
 ## 21. Acceptance boundary v0.2.10.5
 

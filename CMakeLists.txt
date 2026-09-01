@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.45 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.47 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -88,6 +88,8 @@ set(OAS_CORE_SOURCES
     src/algorithms/adaptive_plate_solve.cpp
     src/algorithms/adaptive_plate_solve.h
     src/algorithms/motion_estimator.cpp
+    src/algorithms/planet_detector.cpp
+    src/algorithms/planet_detector.h
     src/algorithms/autofocus_engine.cpp
     src/algorithms/guiding_engine.cpp
     src/algorithms/polar_alignment.cpp

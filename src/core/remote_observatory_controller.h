@@ -78,6 +78,7 @@ public:
     bool slewPolarRaOffset(double deltaDeg,QString *error=nullptr) override;
     PolarAlignmentResult estimatePolarAlignment() override;
 
+    bool setObservationPlan(const ObservationPlan &plan,QString *error=nullptr) override;
     bool setSessionPlan(const QString &name,const std::vector<SessionTarget> &targets,
                         QString *error=nullptr) override;
     bool startSession(QString *error=nullptr) override;
@@ -135,8 +136,7 @@ private:
     SolveResult lastSolve_;
     GuidingStatus guiding_;
     SessionStatus session_;
-    QString pendingSessionName_;
-    std::vector<SessionTarget> pendingTargets_;
+    ObservationPlan pendingPlan_;
     bool stellariumRunning_{false};
     quint16 stellariumPort_{10000};
 };

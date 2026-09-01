@@ -181,11 +181,12 @@ bool NativeOalCamera::nativeLiveSupported() const {
 }
 bool NativeOalCamera::startNativeLive(const LiveViewRequest &r,QString *error){
     QJsonObject req{{"exposureSec",r.exposureSec},{"gain",r.gain},{"offset",r.offset},{"binX",r.binX},{"binY",r.binY},{"targetFps",r.targetFps}};
+    if(r.roi.width>0&&r.roi.height>0)req["roi"]=QJsonObject{{"x",r.roi.x},{"y",r.roi.y},{"width",r.roi.width},{"height",r.roi.height}};
     if(!invokeOk("camera.liveStart",req,nullptr,error))return false;liveRequest_=r;return true;
 }
 bool NativeOalCamera::nextNativeLiveFrame(CameraFrame &frame,int timeoutMs,QString *error){
     QJsonObject data;if(!invokeOk("camera.liveFrame",{{"timeoutMs",timeoutMs}},&data,error))return false;
-    ExposureRequest r;r.exposureSec=liveRequest_.exposureSec;r.gain=liveRequest_.gain;r.offset=liveRequest_.offset;r.binX=liveRequest_.binX;r.binY=liveRequest_.binY;r.saveRaw=false;
+    ExposureRequest r;r.exposureSec=liveRequest_.exposureSec;r.gain=liveRequest_.gain;r.offset=liveRequest_.offset;r.binX=liveRequest_.binX;r.binY=liveRequest_.binY;r.roi=liveRequest_.roi;r.saveRaw=false;
     return decodeNativeCameraFrame(loader_,driverId_,deviceId_,data,r,sensorSizeCache_,frame,false,error);
 }
 bool NativeOalCamera::stopNativeLive(QString *error){return invokeOk("camera.liveStop",{},nullptr,error);}

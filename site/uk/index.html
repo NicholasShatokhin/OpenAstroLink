@@ -3,22 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="OpenAstroLink — відкрита система керування астрономічним обладнанням.">
+  <meta name="description" content="OpenAstroLink — відкрите керування астрономічним обладнанням, астрометрією та автоматизованими спостереженнями.">
   <link rel="canonical" href="https://openastro.link/uk/">
   <link rel="alternate" hreflang="en" href="https://openastro.link/">
   <link rel="stylesheet" href="/styles.css">
-  <title>OpenAstroLink — керування обсерваторією</title>
+  <title>OpenAstroLink — відкрите керування обсерваторією</title>
 </head>
 <body>
-<header><a class="brand" href="/uk/">OpenAstroLink</a><nav><a href="#features">Можливості</a><a href="#architecture">Архітектура</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/">English</a></nav></header>
+<header><a class="brand" href="/uk/">OpenAstroLink</a><nav><a href="#features">Можливості</a><a href="#hardware">Обладнання</a><a href="#scheduler">Scheduler</a><a href="#architecture">Архітектура</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/">English</a></nav></header>
 <main>
-<section class="hero"><p class="eyebrow">OPEN OBSERVATORY CONTROL</p><h1>Одна ланка між астрономічним обладнанням і програмами.</h1><p class="lead">OpenAstroLink — відкрита node-first система керування камерами, монтуваннями, фокусерами, астрометрією, автофокусом, гідуванням та автоматизованими сесіями.</p><div class="actions"><a class="primary" href="https://github.com/NicholasShatokhin/OpenAstroLink">Відкрити GitHub</a><a href="#architecture">Як це працює</a></div></section>
-<section id="features" class="grid"><article><h2>Нативне обладнання</h2><p>QHY, Canon EOS, EQDrive/Sky-Watcher, Gemini, ZWO ASI/EAF та compatibility backends у єдиній моделі керування.</p></article><article><h2>Live acquisition</h2><p>Live View, гістограма та auto-exposure assistant, scene/star autofocus і інструменти юстування шукача.</p></article><article><h2>Астрометрія й автоматизація</h2><p>Plate solving, adaptive urban capture, polar alignment, guiding і resource-locked асинхронні operations виконуються на node.</p></article></section>
-<section id="architecture" class="panel"><p class="eyebrow">NODE FIRST</p><h2>Керування залишається поруч з обладнанням.</h2><p>OpenAstroLink node володіє hardware sessions і довгими operations. GUI та інтеграції працюють через HTTP/WebSocket, а Stellarium отримує живу позицію монтування і передає GOTO через Telescope Control bridge.</p><pre>Камера / Монтування / Фокусер
-              ↓
-       OpenAstroLink node
-          ↙          ↘
-      GUI / API     Stellarium</pre></section>
-<section class="panel"><h2>Стан проєкту</h2><p>Проєкт активно перевіряється на реальному обладнанні. Safety-gates для монтування зберігаються, доки конкретна механічна геометрія не відкалібрована й не пройшла HIL.</p></section>
-</main><footer>OpenAstroLink · openastro.link · open-source інструменти для астрономії</footer>
+<section class="hero"><p class="eyebrow">OPEN OBSERVATORY CONTROL</p><h1>Один зв’язок між астрономічним обладнанням і програмами.</h1><p class="lead">OpenAstroLink — відкрита node-first система керування камерами, монтуваннями, фокусерами, plate solving, autofocus, guiding та автоматизованими планами спостережень.</p><div class="actions"><a class="primary" href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="#architecture">Як це працює</a></div></section>
+<section id="features" class="grid"><article><h2>Нативне обладнання</h2><p>QHY, Canon EOS, EQDrive/Sky-Watcher, Gemini та ZWO ASI/EAF разом із compatibility backends в одному control model.</p></article><article><h2>Зйомка</h2><p>Live View, FITS/RAW science capture, SER із metadata sidecar, histogram-assisted exposure та scene/star autofocus.</p></article><article><h2>Астрометрія й автоматизація</h2><p>Plate solving, adaptive urban capture, polar alignment і resource-locked async operations виконуються на node.</p></article></section>
+<section id="hardware" class="panel"><p class="eyebrow">СТАН РЕАЛІЗАЦІЇ</p><h2>Підтримку обладнання показуємо разом зі станом кваліфікації.</h2><div class="status-grid"><div><strong>Перевірено на залізі</strong><p>QHY, Canon EOS, Gemini focuser. Монтування через Classic ASCOM/EQMOD перевірене на реальному обладнанні.</p></div><div><strong>Реалізовано · HIL pending</strong><p>Native ZWO ASI та ZWO EAF; direct EQDrive/SynScan Wi-Fi geometry ще проходить real-sky qualification.</p></div><div><strong>Заплановано</strong><p>Filter wheel, rotator, dome/roof, weather, GPS/GNSS, power, cover/calibrator та safety monitor. API/UI placeholders уже є.</p></div></div></section>
+<section id="scheduler" class="panel"><p class="eyebrow">v0.2.10.47</p><h2>Один ObservationPlan уже може виконувати DSO та planetary capture.</h2><p>Node приймає <code>ObservationPlan</code> / <code>ObservationBlock</code>. DSO blocks виконують slew → adaptive plate solve/recenter → autofocus → FITS/RAW capture. Planetary blocks виконують GOTO → full-frame пошук планети → опційний planet autofocus → hardware ROI → finite raw SER, із ROI tracking та frame-indexed provenance регіону сенсора. Опційний calibrated mount recentering уже реалізований, але HIL-sensitive і default OFF.</p><pre>ObservationPlan
+  └─ DSO block
+      ├─ Slew
+      ├─ Solve / recenter до tolerance
+      ├─ Autofocus за policy
+      └─ FITS / RAW × N</pre></section>
+<section id="architecture" class="panel"><p class="eyebrow">NODE FIRST</p><h2>Керування лишається біля обладнання.</h2><p>OpenAstroLink node володіє device sessions і long-running operations. GUI та інтеграції працюють через HTTP/WebSocket, а Stellarium використовує telescope-control bridge для live mount position та GOTO.</p><pre>Camera / Mount / Focuser
+          ↓
+   OpenAstroLink node
+     ↙          ↘
+ GUI / API     Stellarium</pre></section>
+<section class="panel"><h2>Шлях до 1.0</h2><p>Supervised beta відділена від unattended qualification. Для OAL 1.0 заплановано durable scheduler checkpoints/restart recovery, thermal focus compensation, meridian-flip recovery, production guiding, TLS/auth/roles/audit, weather/roof/power safety, emergency stop, durable science provenance та driver isolation.</p></section>
+</main><footer>OpenAstroLink · openastro.link · Відкриті інструменти для астрономії</footer>
 </body></html>

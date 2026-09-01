@@ -21,4 +21,10 @@ if 'out.result["' in app:
 checks += 1
 if app.count('QJsonObject resultJson=solveToJson(lastResult)') < 2:
     raise SystemExit('FAIL application_controller.cpp: both adaptive-solve success and failure paths must use mutable resultJson')
+checks += 1
+if 'const auto cam=camera_,mount=mount_' in app or 'const auto cam = camera_, mount = mount_' in app:
+    raise SystemExit('FAIL application_controller.cpp: MSVC requires heterogeneous auto declarations to be split')
+checks += 1
+if 'const auto cam=camera_;' not in app or 'const auto mount=mount_;' not in app:
+    raise SystemExit('FAIL application_controller.cpp: planetary calibration camera/mount captures must use separate auto declarations')
 print(f"PASS adaptive MSVC build regression guard: {checks} assertions")

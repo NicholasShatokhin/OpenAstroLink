@@ -1,4 +1,19 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.45
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.47
+
+## v0.2.10.47 mixed scheduler execution
+
+- ✅ DSO FITS/RAW block executor retained.
+- ✅ Planetary SER block executor: GOTO, full-frame detection, planet autofocus, hardware ROI, finite raw SER and ROI provenance.
+- ✅ QHY + ZWO ASI native live ROI implementation; ZWO real-hardware HIL remains pending.
+- 🟡 Fast ROI tracker implemented; real planetary HIL pending.
+- 🟡 Calibrated slow mount correction implemented but disabled by default pending per-backend HIL.
+- ⏳ Durable restart/recovery, weather/roof safety, meridian flip and thermal in-exposure focus remain OAL 1.0 work.
+
+## v0.2.10.46 scheduler execution
+
+- `ObservationPlan` / `ObservationBlock` is now the primary scheduler model; legacy `SessionTarget` remains accepted.
+- Supervised DSO blocks execute asynchronously: slew, adaptive solve/recenter with configurable tolerance/retries, autofocus, then FITS/RAW science frames. Recenter/autofocus can repeat every N science frames.
+- Planetary SER block data model exists, but autonomous SER/ROI/centroid execution is not enabled yet. Scheduler checkpoints/restart/recovery remain non-durable.
 
 ## v0.2.10.45 HIL follow-up
 
@@ -82,8 +97,8 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 |---|---|---|
 | QHY | 🟡 HIL active | QHY5III462C discovery/connect/single capture confirmed; user captures spool to FITS. v0.2.10.34 moves Finder Live View to native QHYCCD continuous streaming and makes health probing idle-only with a three-strike disconnect rule; Live→Stop→Capture and repeated reconnect remain the next Windows HIL checks |
 | Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
-| ZWO ASI | 🟡 | Native ASI SDK, multi-camera discovery; HIL pending |
-| ZWO EAF | 🟡 | Native EAF SDK; HIL pending |
+| ZWO ASI | ✅ implemented / 🟡 HIL pending | Native ASI SDK and multi-camera discovery implemented; real ZWO camera not yet qualified |
+| ZWO EAF | ✅ implemented / 🟡 HIL pending | Native EAF SDK implementation exists; real ZWO EAF not yet qualified |
 | Gemini EAF | ✅ basic HIL | Windows native discovery/connection, direct motion and autofocus-driven motion confirmed; active serial health polling now detects physical disconnect and refreshes the device catalogue; optical autofocus convergence/repeatability remains to qualify |
 | Sky-Watcher/SynScan | ✅ direct Wi-Fi basic HIL | Serial SynScan path retained; `synscan-wifi` direct Motor Controller UDP/11880 has connected and physically moved the mount; `synscan-app` remains the SynScan Pro/App UDP/11881 compatibility path |
 | Sky-Watcher direct motor-controller | 🧪 | Shared Motor Controller codec now follows EQMOD/INDI status/direction semantics and is used by direct Wi-Fi plus the EQDrive native fallback |
@@ -118,7 +133,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Polar-axis math | ✅ | Sample/estimation API exists |
 | Automatic polar wizard | 🟡 | Full live adjustment orchestration not production-qualified |
 | Guiding | 🟡 | Basic state/API and pulse-guide primitives; production loop pending |
-| Session/scheduler | 🟡 | Scaffolding exists; durable recovery/flip/dither/refocus pending |
+| Session/scheduler | 🟡 mixed executor | v0.2.10.47 executes DSO FITS/RAW and planetary SER blocks; planetary ROI tracking and optional slow mount correction require real-sky HIL, while durable restart/recovery remains pending |
 | Target resolver/ephemerides | 🟡 | Not yet a complete normative production service |
 
 ## Mount geometry foundation — v0.2.10.25

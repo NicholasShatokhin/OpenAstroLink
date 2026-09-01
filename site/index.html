@@ -3,22 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="OpenAstroLink — open observatory control for cameras, mounts, focusers, solving, guiding and automation.">
+  <meta name="description" content="OpenAstroLink — open observatory control for cameras, mounts, focusers, solving, guiding and automated observing workflows.">
   <link rel="canonical" href="https://openastro.link/">
   <link rel="alternate" hreflang="uk" href="https://openastro.link/uk/">
   <link rel="stylesheet" href="/styles.css">
   <title>OpenAstroLink — Open observatory control</title>
 </head>
 <body>
-<header><a class="brand" href="/">OpenAstroLink</a><nav><a href="#features">Features</a><a href="#architecture">Architecture</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/uk/">Українська</a></nav></header>
+<header><a class="brand" href="/">OpenAstroLink</a><nav><a href="#features">Features</a><a href="#hardware">Hardware</a><a href="#scheduler">Scheduler</a><a href="#architecture">Architecture</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/uk/">Українська</a></nav></header>
 <main>
 <section class="hero"><p class="eyebrow">OPEN OBSERVATORY CONTROL</p><h1>One link between your astronomy hardware and your software.</h1><p class="lead">OpenAstroLink is an open, node-first control layer for cameras, mounts, focusers, plate solving, autofocus, guiding and automated observing workflows.</p><div class="actions"><a class="primary" href="https://github.com/NicholasShatokhin/OpenAstroLink">View on GitHub</a><a href="#architecture">How it works</a></div></section>
-<section id="features" class="grid"><article><h2>Native hardware</h2><p>QHY, Canon EOS, EQDrive/Sky-Watcher, Gemini, ZWO ASI/EAF and compatibility backends behind one control model.</p></article><article><h2>Live acquisition</h2><p>Live View, histogram-assisted exposure, scene/star autofocus and finder-alignment tools for practical setup at the telescope.</p></article><article><h2>Astrometry & automation</h2><p>Plate solving, adaptive urban capture, polar alignment, guiding, sessions and resource-locked asynchronous operations execute on the node.</p></article></section>
+<section id="features" class="grid"><article><h2>Native hardware</h2><p>QHY, Canon EOS, EQDrive/Sky-Watcher, Gemini and ZWO ASI/EAF plus compatibility backends behind one control model.</p></article><article><h2>Live acquisition</h2><p>Live View, FITS/RAW science capture, SER recording with metadata, histogram-assisted exposure and scene/star autofocus.</p></article><article><h2>Astrometry & automation</h2><p>Plate solving, adaptive urban capture, polar alignment and resource-locked asynchronous operations execute on the node.</p></article></section>
+<section id="hardware" class="panel"><p class="eyebrow">IMPLEMENTATION STATUS</p><h2>Hardware support is reported by qualification state.</h2><div class="status-grid"><div><strong>Hardware tested</strong><p>QHY cameras, Canon EOS, Gemini focuser, Classic ASCOM/EQMOD mount path.</p></div><div><strong>Implemented · HIL pending</strong><p>ZWO ASI and ZWO EAF native drivers; direct EQDrive/SynScan Wi-Fi geometry remains under real-sky qualification.</p></div><div><strong>Planned</strong><p>Filter wheel, rotator, dome/roof, weather, GPS/GNSS, power, cover/calibrator and safety-monitor backends. API/UI placeholders already exist.</p></div></div></section>
+<section id="scheduler" class="panel"><p class="eyebrow">v0.2.10.47</p><h2>One plan can now execute DSO and planetary capture.</h2><p>The node accepts <code>ObservationPlan</code> / <code>ObservationBlock</code> schedules. DSO blocks perform slew → adaptive plate solve/recenter → autofocus → FITS/RAW capture. Planetary blocks perform GOTO → full-frame planet acquisition → optional planet autofocus → hardware ROI → finite raw SER, with ROI tracking and frame-indexed sensor-region provenance. Optional calibrated mount recentering is implemented but remains HIL-sensitive and off by default.</p><pre>ObservationPlan
+  └─ DSO block
+      ├─ Slew
+      ├─ Solve / recenter until tolerance
+      ├─ Autofocus when due
+      └─ FITS / RAW × N</pre></section>
 <section id="architecture" class="panel"><p class="eyebrow">NODE FIRST</p><h2>Keep control close to the hardware.</h2><p>The OpenAstroLink node owns device sessions and long-running operations. GUIs and integrations communicate over HTTP/WebSocket, while Stellarium uses its telescope-control bridge for live mount position and GOTO.</p><pre>Camera / Mount / Focuser
           ↓
    OpenAstroLink node
      ↙          ↘
  GUI / API     Stellarium</pre></section>
-<section class="panel"><h2>Status</h2><p>The project is under active hardware-in-the-loop development. Safety gates remain enabled for mount functions until each physical geometry is calibrated and qualified.</p></section>
+<section class="panel"><h2>Road to 1.0</h2><p>The supervised beta path is separate from unattended qualification. OAL 1.0 explicitly plans durable scheduler checkpoints/restart recovery, thermal focus compensation, meridian-flip recovery, production guiding, TLS/auth/roles/audit, weather/roof/power safety, emergency-stop semantics, durable science provenance and driver isolation.</p></section>
 </main><footer>OpenAstroLink · openastro.link · Open source astronomy tooling</footer>
 </body></html>

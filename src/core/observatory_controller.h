@@ -88,6 +88,9 @@ public:
     virtual bool slewPolarRaOffset(double deltaDeg, QString *error = nullptr) = 0;
     virtual PolarAlignmentResult estimatePolarAlignment() = 0;
 
+    virtual bool setObservationPlan(const ObservationPlan &plan, QString *error = nullptr) = 0;
+    // Compatibility wrapper for v0.2.10.45 and earlier clients. Implementations
+    // convert legacy SessionTarget entries into DSO FITS observation blocks.
     virtual bool setSessionPlan(const QString &name, const std::vector<SessionTarget> &targets,
                                 QString *error = nullptr) = 0;
     virtual bool startSession(QString *error = nullptr) = 0;

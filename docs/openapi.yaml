@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.45
+  version: 0.2.10.47
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -221,7 +221,7 @@ paths:
                 offset: { type: integer, minimum: 0, default: 0 }
                 binX: { type: integer, minimum: 1, maximum: 4, default: 2 }
                 binY: { type: integer, minimum: 1, maximum: 4, default: 2 }
-                targetFps: { type: number, minimum: 0.2, maximum: 10, default: 5 }
+                targetFps: { type: number, minimum: 0.2, maximum: 30, default: 5 }
                 debayer:
                   type: boolean
                   default: false
@@ -238,6 +238,14 @@ paths:
                 serPath:
                   type: string
                   description: Optional node-local SER output path; defaults under Pictures/OpenAstroLink/SER.
+                roi:
+                  type: object
+                  description: Optional hardware ROI in binned sensor coordinates.
+                  properties:
+                    x: { type: integer, minimum: 0 }
+                    y: { type: integer, minimum: 0 }
+                    width: { type: integer, minimum: 1 }
+                    height: { type: integer, minimum: 1 }
       responses: { '202': { $ref: '#/components/responses/Success' } }
   /frames/{id}/preview:
     get:
@@ -332,6 +340,10 @@ paths:
       responses: { '200': { $ref: '#/components/responses/Success' } }
   /sessions/current:
     get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /sessions/current/plan:
+    get:
+      summary: Return the currently loaded ObservationPlan
+      responses: { '200': { $ref: '#/components/responses/Success' } }
   /sessions/current/stop:
     post: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /mounts/{id}/manual-slew:
@@ -467,11 +479,21 @@ components:
         minStars: { type: integer, minimum: 1, default: 3 }
     SessionRequest:
       type: object
-      required: [name, targets]
+      required: [name]
+      description: >-
+        v0.2.10.47 accepts mixed DSO FITS/RAW and autonomous planetary SER
+        ObservationPlan `blocks`. Legacy `targets` remains accepted and is converted
+        to DSO FITS blocks. At least
+        one of `blocks` or `targets` must contain an item.
       properties:
+        id: { type: string }
         name: { type: string }
+        blocks:
+          type: array
+          items: { $ref: '#/components/schemas/ObservationBlock' }
         targets:
           type: array
+          deprecated: true
           items:
             type: object
             required: [name, raDeg, decDeg]
@@ -483,6 +505,101 @@ components:
               exposureSec: { type: number, default: 30 }
               repeats: { type: integer, default: 1 }
               filter: { type: string }
+    ObservationBlock:
+      type: object
+      required: [name, raDeg, decDeg, mode]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        raDeg: { type: number }
+        decDeg: { type: number, minimum: -90, maximum: 90 }
+        coordinateFrame: { type: string, enum: [J2000, JNOW], default: J2000 }
+        mode: { type: string, enum: [dso-fits, planetary-ser] }
+        dso: { $ref: '#/components/schemas/DsoFitsBlock' }
+        planetary:
+          $ref: '#/components/schemas/PlanetarySerBlock'
+    PlanetarySerBlock:
+      type: object
+      description: >-
+        Autonomous high-speed planetary block. The node performs full-frame acquisition,
+        planet detection, optional planetary autofocus, fixed-size hardware ROI SER capture,
+        ROI tracking/provenance and optional calibrated slow mount corrections.
+      properties:
+        serRuns: { type: integer, minimum: 1, default: 1 }
+        durationSec: { type: number, minimum: 0.5, default: 120 }
+        pauseSec: { type: number, minimum: 0, default: 2 }
+        trackingRate: { type: string, enum: [sidereal, lunar, solar], default: sidereal }
+        stream:
+          type: object
+          properties:
+            exposureSec: { type: number, minimum: 0.00005, default: 0.005 }
+            gain: { type: integer, minimum: 0, default: 100 }
+            offset: { type: integer, minimum: 0, default: 0 }
+            binX: { type: integer, minimum: 1, default: 1 }
+            binY: { type: integer, minimum: 1, default: 1 }
+            targetFps: { type: number, minimum: 0.2, default: 100 }
+            debayer: { type: boolean, default: false }
+            bayerPattern: { type: string, enum: [AUTO, RGGB, BGGR, GRBG, GBRG], default: AUTO }
+        roi:
+          type: object
+          properties:
+            x: { type: integer, minimum: 0, default: 0 }
+            y: { type: integer, minimum: 0, default: 0 }
+            width: { type: integer, minimum: 0, default: 640, description: 0 selects automatic width }
+            height: { type: integer, minimum: 0, default: 480, description: 0 selects automatic height }
+        autofocus:
+          type: object
+          properties:
+            beforeFirstRun: { type: boolean, default: true }
+            everyNRuns: { type: integer, minimum: 0, default: 0 }
+            rangeSteps: { type: integer, default: 1200 }
+            coarseStep: { type: integer, default: 160 }
+            fineStep: { type: integer, default: 32 }
+            framesPerPosition: { type: integer, default: 3 }
+            settleMs: { type: integer, default: 300 }
+            exposureSec: { type: number, default: 0.01 }
+            gain: { type: integer, default: 100 }
+        tracking:
+          type: object
+          properties:
+            allowRoiShift: { type: boolean, default: true }
+            roiShiftThresholdPx: { type: integer, minimum: 4, default: 48 }
+            mountCorrections: { type: boolean, default: false }
+            mountCorrectionThresholdPx: { type: integer, minimum: 8, default: 140 }
+            autoCalibrateMount: { type: boolean, default: true }
+            calibrationArcsec: { type: number, minimum: 1, default: 20 }
+            maxMountCorrectionArcsec: { type: number, minimum: 1, default: 30 }
+            mountSettleMs: { type: integer, minimum: 0, default: 700 }
+            lostTargetFrames: { type: integer, minimum: 1, default: 8 }
+    DsoFitsBlock:
+      type: object
+      required: [exposure, frameCount]
+      properties:
+        exposure: { $ref: '#/components/schemas/ExposureRequest' }
+        frameCount: { type: integer, minimum: 1, default: 1 }
+        filter: { type: string }
+        recenter:
+          type: object
+          properties:
+            beforeFirstFrame: { type: boolean, default: true }
+            everyNFrames: { type: integer, minimum: 0, default: 0 }
+            toleranceArcmin: { type: number, minimum: 0.1, default: 2.0 }
+            maxAttempts: { type: integer, minimum: 0, maximum: 10, default: 2 }
+            solveExposureSec: { type: number, exclusiveMinimum: 0, default: 1.0 }
+        autofocus:
+          type: object
+          properties:
+            beforeFirstFrame: { type: boolean, default: true }
+            everyNFrames: { type: integer, minimum: 0, default: 0 }
+            mode: { type: string, enum: [stars, scene, planet, bahtinov], default: stars }
+            rangeSteps: { type: integer, default: 1600 }
+            coarseStep: { type: integer, default: 200 }
+            fineStep: { type: integer, default: 40 }
+            framesPerPosition: { type: integer, default: 3 }
+            settleMs: { type: integer, default: 400 }
+            exposureSec: { type: number, default: 0.05 }
+            gain: { type: integer, default: 0 }
+            minStars: { type: integer, default: 3 }
     Operation:
       type: object
       required: [id, kind, state, progress, cancelSupported, resourceLocks]

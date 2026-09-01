@@ -1,4 +1,4 @@
-# OpenAstroLink HTTP API — v0.2.10.25 reference implementation
+# OpenAstroLink HTTP API — v0.2.10.47 reference implementation
 
 The transitional envelope remains:
 
@@ -93,11 +93,19 @@ For ABI-v2 native cameras, raw pixel bytes cross the driver boundary via `publis
 
 ## Guiding / polar / sessions
 
-Existing guiding, polar-alignment and session endpoints remain node-local. Polar math is already implemented; automated orchestration is still pending. Scheduler remains a non-durable state model.
+Guiding and polar-alignment endpoints remain node-local. From v0.2.10.47, `POST /api/v1/sessions` accepts the primary `ObservationPlan`/`ObservationBlock` model and executes mixed DSO FITS/RAW and planetary SER blocks. Legacy `targets` payloads remain accepted and are converted into `dso-fits` blocks.
+
+Implemented DSO block execution is asynchronous and uses the ordinary OAL operation/resource-lock model:
+
+```text
+mount.slew -> solver.adaptive -> optional Sync/recenter loop -> autofocus.run -> camera.exposure
+```
+
+Recenter/autofocus may be configured before the first science frame and every N completed frames. `GET /api/v1/sessions/current` exposes the execution cursor (`blockIndex`, `currentStep`, `currentOperationId`, per-block/global frame counters and failure reason), while `GET /api/v1/sessions/current/plan` returns the loaded plan. `planetary-ser` blocks execute GOTO, full-frame target acquisition, optional planet autofocus, hardware ROI and finite SER. ROI shifts are logged to `<basename>.roi.jsonl`; optional calibrated mount corrections are disabled by default pending HIL. Scheduler state is not durable across node restart yet.
 
 ## Pending P0 API work
 
-- async park/session and closed-loop recenter orchestration;
+- durable session checkpoints/restart resume;
 - idempotency keys;
 - durable operation persistence;
 - RFC 9457 Problem Details;

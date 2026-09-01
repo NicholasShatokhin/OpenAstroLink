@@ -8,7 +8,7 @@ def need(path,*tokens):
         assert token in text,f'{path}: missing {token!r}'
         checks.append((path,token))
     return text
-need('CMakeLists.txt','VERSION 0.2.10.45')
+need('CMakeLists.txt','VERSION 0.2.10.47')
 need('src/core/application_controller.cpp','nativeCoordinateModelVersion>=7','startup controller counts define Axis1=0°, Axis2=0°','resolvedEndpoint="EQMOD.Telescope"')
 need('src/core/mount_geometry.cpp','Direct Sky-Watcher/EQDrive GEM model v7','eqmodGemAxesForSky','skyFromEqmodGemAxes','physical pointing state / side-of-pier')
 need('src/core/astro_types.h','v7 (OpenAstroLink 0.2.10.45)','HA=-6h, Dec=+90°')

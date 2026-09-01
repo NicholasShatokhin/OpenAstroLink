@@ -133,7 +133,7 @@ void stop(void *) {
     for (auto &kv : state.cameras) if (kv.second->connected) { ASIStopExposure(kv.first); ASIStopVideoCapture(kv.first); ASICloseCamera(kv.first); kv.second->connected=false; }
 }
 const char *manifest(void *) {
-    return copyString(R"({"driverId":"oal.zwo.asi","name":"OpenAstroLink native ZWO ASI camera driver","version":"0.2.10.45","abiVersion":2,"threadModel":"per-device-serial","transport":"ZWO ASI SDK"})");
+    return copyString(R"({"driverId":"oal.zwo.asi","name":"OpenAstroLink native ZWO ASI camera driver","version":"0.2.10.47","abiVersion":2,"threadModel":"per-device-serial","transport":"ZWO ASI SDK"})");
 }
 const char *devices(void *) {
     const int n = ASIGetNumOfConnectedCameras(); std::ostringstream o; o << '['; bool first=true;
@@ -181,11 +181,16 @@ const char *invoke(void *, const char *device, const char *method, const char *r
         std::lock_guard<std::mutex> guard(c->operationMutex); c->cancelRequested=false;
         if(c->liveActive)return ok("{\"state\":\"live\"}");
         const int bin=std::max(1,int(number(r,"binX",1))); if(int(number(r,"binY",bin))!=bin)return fail("UNSUPPORTED_BINNING","ASI SDK uses symmetric binning in this driver profile");
-        const int w=int(c->info.MaxWidth)/bin,h=int(c->info.MaxHeight)/bin;
+        int x=0,y=0,w=int(c->info.MaxWidth)/bin,h=int(c->info.MaxHeight)/bin; double rv=0;
+        if(objectNumber(r,"roi","x",rv)) x=std::max(0,int(rv));
+        if(objectNumber(r,"roi","y",rv)) y=std::max(0,int(rv));
+        if(objectNumber(r,"roi","width",rv)) w=std::max(1,int(rv));
+        if(objectNumber(r,"roi","height",rv)) h=std::max(1,int(rv));
+        w=std::min(w,int(c->info.MaxWidth)/bin-x);h=std::min(h,int(c->info.MaxHeight)/bin-y);
         ASI_IMG_TYPE fmt=ASI_IMG_RAW8; bool raw8=false; for(auto f:c->info.SupportedVideoFormat){if(f==ASI_IMG_END)break;if(f==ASI_IMG_RAW8){raw8=true;break;}} if(!raw8)fmt=preferredImageType(c->info,8);
         if(fmt==ASI_IMG_END)return fail("UNSUPPORTED_PIXEL_FORMAT","No ASI format available for Live View");
         auto rc=ASISetROIFormat(c->cameraId,w,h,bin,fmt); if(rc!=ASI_SUCCESS)return fail("ASI_ROI_FAILED",errText(rc));
-        rc=ASISetStartPos(c->cameraId,0,0); if(rc!=ASI_SUCCESS)return fail("ASI_ROI_FAILED",errText(rc));
+        rc=ASISetStartPos(c->cameraId,x,y); if(rc!=ASI_SUCCESS && (x||y))return fail("ASI_ROI_FAILED",errText(rc));
         std::string e; const double expSec=std::max(0.000001,number(r,"exposureSec",0.001)); const long expUs=long(std::llround(expSec*1e6));
         const long gain=long(number(r,"gain",0)); if(!setControl(c->cameraId,ASI_EXPOSURE,expUs,e)||!setControl(c->cameraId,ASI_GAIN,gain,e))return fail("ASI_CONTROL_FAILED",e);
         rc=ASIStartVideoCapture(c->cameraId); if(rc!=ASI_SUCCESS)return fail("ASI_LIVE_START_FAILED",errText(rc));
@@ -238,6 +243,6 @@ const char *invoke(void *, const char *device, const char *method, const char *r
 bool cancel(void *, const char *device, const char *) { auto*c=camera(device?device:""); if(!c||!c->connected)return false; c->cancelRequested=true; const auto rc=ASIStopExposure(c->cameraId); return rc==ASI_SUCCESS||rc==ASI_ERROR_INVALID_SEQUENCE; }
 void releaseString(void *, const char *p) { if(p)host.deallocate(host.hostContext,const_cast<char*>(p)); }
 OalDriverV2 api{OAL_DRIVER_ABI_V2,sizeof(OalDriverV2),OAL_DRIVER_FEATURE_EVENTS|OAL_DRIVER_FEATURE_FRAME_PUBLISH|OAL_DRIVER_FEATURE_CANCELLATION|OAL_DRIVER_FEATURE_HEALTH,
-                "oal.zwo.asi","OpenAstroLink native ZWO ASI camera driver","0.2.10.45",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
+                "oal.zwo.asi","OpenAstroLink native ZWO ASI camera driver","0.2.10.47",nullptr,&manifest,&start,&stop,&devices,&caps,&health,&invoke,&cancel,&releaseString};
 }
 extern "C" OAL_DRIVER_EXPORT const OalDriverV2 *oalCreateDriverV2(const OalDriverHostV2 *h) { if(!h||h->abiVersion!=OAL_DRIVER_ABI_V2||h->structSize<sizeof(OalDriverHostV2))return nullptr; host=*h; return &api; }

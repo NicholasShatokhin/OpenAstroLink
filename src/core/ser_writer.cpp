@@ -2,6 +2,8 @@
 #include <QDataStream>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTextStream>
 #include <opencv2/core.hpp>
 #include <algorithm>
@@ -41,6 +43,17 @@ bool SerWriter::writeHeader(const CameraFrame &first,const TelescopeProfile &pro
     return true;
 }
 
+
+QString SerWriter::roiProvenancePath() const{
+    if(path_.isEmpty())return{};QFileInfo fi(path_);return QDir(fi.absolutePath()).filePath(fi.completeBaseName()+".roi.jsonl");
+}
+
+bool SerWriter::appendRoiEvent(quint32 frameStart,const cv::Rect &roi,const QString &reason,const QJsonObject &extra,QString *error){
+    if(roi.width<=0||roi.height<=0)return true;
+    if(!roiFile_.isOpen()){const QString p=roiProvenancePath();roiFile_.setFileName(p);if(!roiFile_.open(QIODevice::WriteOnly|QIODevice::Truncate|QIODevice::Text)){if(error)*error="Could not open ROI provenance file: "+roiFile_.errorString();return false;}}
+    QJsonObject o=extra;o["frameStart"]=int(frameStart);o["utc"]=QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);o["reason"]=reason;o["x"]=roi.x;o["y"]=roi.y;o["width"]=roi.width;o["height"]=roi.height;
+    if(roiFile_.write(QJsonDocument(o).toJson(QJsonDocument::Compact)+"\n")<0){if(error)*error="Could not append ROI provenance: "+roiFile_.errorString();return false;}roiFile_.flush();return true;
+}
 QString SerWriter::sidecarPath() const{
     if(path_.isEmpty())return{};QFileInfo fi(path_);return QDir(fi.absolutePath()).filePath(fi.completeBaseName()+".txt");
 }
@@ -87,6 +100,8 @@ bool SerWriter::writeSidecar(QString *error) const{
     t<<"SiteLatitudeDeg="<<QString::number(profile_.observer.latitudeDeg,'f',8)<<"\n";
     t<<"SiteLongitudeDeg="<<QString::number(profile_.observer.longitudeDeg,'f',8)<<"\n";
     t<<"SiteElevationM="<<QString::number(profile_.observer.elevationM,'f',3)<<"\n";
+    t<<"InitialROIX="<<request_.roi.x<<"\nInitialROIY="<<request_.roi.y<<"\nInitialROIWidth="<<request_.roi.width<<"\nInitialROIHeight="<<request_.roi.height<<"\n";
+    t<<"ROIProvenanceFile="<<(request_.roi.width>0&&request_.roi.height>0?QFileInfo(roiProvenancePath()).fileName():QString("NONE"))<<"\n";
     t<<"TimestampTrailerUTC=true\n";
     f.flush();if(f.error()!=QFileDevice::NoError){if(error)*error="SER metadata sidecar write failed: "+f.errorString();return false;}return true;
 }
@@ -101,7 +116,8 @@ bool SerWriter::open(const QString &path,const CameraFrame &first,const Telescop
     actualExposureSec_=first.exposureSec;actualGain_=first.gain;actualOffset_=first.offset;actualBinX_=first.binX;actualBinY_=first.binY;startUtc_=first.capturedUtc.isValid()?first.capturedUtc:QDateTime::currentDateTimeUtc();endUtc_=startUtc_;
     if((channels_!=1&&channels_!=3)||(first.image.depth()!=CV_8U&&first.image.depth()!=CV_16U)){if(error)*error="SER supports only 8/16-bit mono/Bayer or BGR frames in this release";return false;}
     file_.setFileName(path_);if(!file_.open(QIODevice::WriteOnly|QIODevice::Truncate)){if(error)*error="Could not open SER file: "+file_.errorString();return false;}
-    if(!writeHeader(first,profile,error)){file_.close();return false;}return true;
+    if(!writeHeader(first,profile,error)){file_.close();return false;}
+    if(request_.roi.width>0&&request_.roi.height>0&&!appendRoiEvent(0,request_.roi,"initial",{},error)){file_.close();return false;}return true;
 }
 
 bool SerWriter::compatible(const CameraFrame &frame,QString *error) const{
@@ -118,9 +134,10 @@ bool SerWriter::append(const CameraFrame &frame,QString *error){
 }
 
 bool SerWriter::close(QString *error){
-    if(!file_.isOpen())return true;
+    if(!file_.isOpen()){if(roiFile_.isOpen())roiFile_.close();return true;}
     QDataStream d(&file_);d.setByteOrder(QDataStream::LittleEndian);for(quint64 t:timestamps_)d<<t;
     if(!file_.seek(38)){if(error)*error="Could not seek to SER frame-count field";file_.close();return false;}d<<quint32(frameCount_);file_.flush();const bool serOk=file_.error()==QFileDevice::NoError;if(!serOk&&error)*error="SER finalize failed: "+file_.errorString();file_.close();
+    if(roiFile_.isOpen()){roiFile_.flush();roiFile_.close();}
     if(!serOk)return false;QString sidecarError;const bool sidecarOk=writeSidecar(&sidecarError);if(!sidecarOk&&error)*error=sidecarError;return sidecarOk;
 }
 

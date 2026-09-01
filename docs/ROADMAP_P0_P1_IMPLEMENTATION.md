@@ -1,4 +1,4 @@
-# OpenAstroLink roadmap — implementation status after v0.2.10.5
+# OpenAstroLink roadmap — implementation status after v0.2.10.47
 
 Legend: ✅ done; 🟡 partial/HIL pending; ⏳ not done.
 
@@ -50,9 +50,9 @@ Filter wheel, rotator, dome/roof, weather/safety, power/switch, cover/calibrator
 
 ASTAP path exists, HIL pending. Add production astrometry.net adapter; keep the own indexed blind solver as an independent research/implementation path.
 
-### Durable scheduler — 🟡
+### Durable mixed-mode scheduler — 🟡 supervised DSO executor / ⏳ durable + planetary
 
-Session scaffolding exists. Add checkpoints/resume, meridian flip, dithering, refocus triggers, weather interruption/recovery and solve/recenter/reguide recovery.
+v0.2.10.46 implements the first `ObservationPlan`/`ObservationBlock` executor for DSO FITS/RAW: async slew, adaptive solve/recenter with tolerance and retry limit, autofocus, science capture, and per-N-frame recenter/autofocus. v0.2.10.47 adds planetary SER blocks, full-frame acquisition, hardware ROI tracking, ROI provenance and an optional calibrated slow mount recenter loop. Next stages are temperature-triggered/in-exposure focus compensation, plan constraints, durable checkpoints/restart resume, meridian flip, weather interruption/recovery and solve/recenter/reguide recovery.
 
 ### Guiding — 🟡
 
@@ -82,3 +82,7 @@ Implement out-of-process driver host/crash isolation. Stabilize public C++ SDK f
 **Full intended imaging workflow:** add closed-loop GOTO, polar alignment, durable DSO storage and planetary SER.  
 **Autonomous observatory:** add production guiding, durable scheduler, safety policy and recovery.  
 **Public OAL protocol/driver ecosystem:** close all P0 protocol items and conformance suite.
+
+## OAL 1.0 autonomous-observatory target
+
+Specified/planned but not yet complete: TLS/auth/roles/audit, idempotency, durable operations, replayable events, safety/weather/roof/power interlocks, emergency stop, production guiding, durable mixed DSO/planetary scheduler, automatic meridian flip recovery, durable science data/provenance, driver isolation and public conformance. These are explicit 1.0 roadmap items rather than claims about the current beta implementation.

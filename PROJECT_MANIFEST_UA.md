@@ -1,4 +1,27 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.45
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.47
+
+## v0.2.10.47
+
+- Пакет: `0.2.10.47-planetary-ser-executor`
+- Версія Core: `0.2.10.47`
+- `ObservationPlan` отримав реальний mixed-mode planetary executor: GOTO, full-frame пошук планети, planetary autofocus, hardware ROI незмінного розміру та finite SER runs.
+- Додано `PlanetDetector` для acquisition/tracking яскравих компактних об’єктів.
+- Native QHY і ZWO ASI live transport підтримують hardware ROI; SER лишається raw/pre-debayer.
+- Додано `<SER basename>.roi.jsonl` provenance для точного відтворення регіону сенсора під dark/flat.
+- Fast loop рухає ROI; опційний slow loop калібрує 2×2 RA/DEC→pixel response та робить обмежені coordinate micro-slew corrections. Slow loop за замовчуванням вимкнений до HIL.
+- DSO і planetary blocks можна змішувати в одному плані. Durable restart, safety/weather/meridian та thermal focus під час експозиції лишаються роботою до OAL 1.0.
+
+## v0.2.10.46
+
+- Пакет: `0.2.10.46-observation-plan-dso-executor`
+- Core version: `0.2.10.46`
+- Основна scheduler-модель тепер `ObservationPlan` / `ObservationBlock`; старий `SessionTarget` лишився compatibility wrapper.
+- Додано перший реальний supervised DSO executor на node через звичайні async OAL operations/resource locks: `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW capture`.
+- Solve/recenter вимірює plate-solved pointing error, робить `Sync + correction slew`, повторює до заданої tolerance в arcmin і може запускатися перед першим кадром або кожні N science frames.
+- Autofocus може запускатися перед першим кадром або кожні N science frames. DSO science capture запитує durable output (`saveRaw=true`).
+- Session status тепер містить block cursor, current step/operation, per-block/global frame counters та terminal failure reason. `/api/v1/sessions/current/plan` повертає завантажений план.
+- `planetary-ser` вже є first-class mode/wire model, але autonomous executor навмисно ще не ввімкнений; ROI/centroid/SER-run orchestration — наступний етап.
+- Scheduler поки non-durable при restart node; weather/meridian/recovery/unattended safety лишаються roadmap OAL 1.0.
 
 ## v0.2.10.45
 

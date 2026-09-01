@@ -2,7 +2,7 @@
 
 **Canonical language:** English  
 **Target:** staged delivery from the first supervised beta through OAL 1.0  
-**Implementation status:** v0.2.10.46 introduces the first real, non-durable DSO executor on the node. `ObservationPlan`/`ObservationBlock` replace `SessionTarget` as the primary model, while the legacy target API remains a compatibility wrapper. The implemented supervised DSO path is `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW capture`, with optional recenter/autofocus cadence between frames. Planetary SER blocks are represented in the plan ABI but their autonomous executor, durable checkpoints/restart, meridian recovery and unattended safety remain planned.
+**Implementation status:** v0.2.10.47 provides a mixed-mode, non-durable node executor. DSO blocks execute `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks now execute `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, with fixed-size ROI tracking, `.roi.jsonl` sensor-origin provenance and an optional slow mount-recentering loop calibrated from measured RA/DEC image response. `SessionTarget` remains a legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery and unattended OAL 1.0 hardening remain planned.
 
 ## 1. Goals
 
@@ -17,7 +17,7 @@ A plan may mix both families in one night.
 
 ## 2. Current implementation boundary
 
-From v0.2.10.46, the node owns a real `ObservationPlan` / `ObservationBlock` state machine. DSO blocks execute asynchronously through the existing `OperationManager` and therefore reuse the same hardware resource locks as interactive commands. The first implemented path is:
+From v0.2.10.47, the node owns one `ObservationPlan` / `ObservationBlock` state machine for both DSO and planetary acquisition. All long steps execute asynchronously through the existing `OperationManager` and reuse the same hardware resource locks as interactive commands. The DSO path is:
 
 ```text
 PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic corrections] -> next frame/block
@@ -25,7 +25,7 @@ PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic cor
 
 The solve/recenter loop plate-solves the actual field, measures pointing error against the block target, performs `Sync + correction slew`, and repeats until the configured arcminute tolerance or attempt limit is reached. Recenter and autofocus may run before the first frame and/or every N completed science frames. Science captures force durable FITS/RAW output when the camera backend supports it.
 
-`SessionTarget` remains accepted by the GUI/API for compatibility and is converted into DSO blocks. Planetary SER data structures are present now so the plan ABI will not require another redesign, but v0.2.10.46 intentionally rejects autonomous `planetary-ser` execution until ROI/centroid/SER-run orchestration is implemented. The scheduler is still **non-durable**: node restart/resume, weather holds, meridian-flip recovery and unattended safety are OAL 1.0 work.
+`SessionTarget` remains accepted by the GUI/API for compatibility and is converted into DSO blocks. Planetary SER blocks are now executable. The implemented planetary path performs a full-frame acquisition after GOTO, detects the bright planetary/lunar target, optionally runs planet-mode autofocus, recentres a fixed-size hardware ROI on the detected centroid and records one or more finite SER runs. During a SER, ROI origin may move while width/height stay fixed; every origin change is written to a same-basename `.roi.jsonl`. Optional mount corrections use an image-response calibration rather than assuming camera orientation. The scheduler is still **non-durable**: node restart/resume, weather holds, meridian-flip recovery and unattended safety are OAL 1.0 work.
 
 ## 3. Plan model
 
@@ -165,6 +165,8 @@ Required parameters include:
 - optional refocus/recenter after a configurable number of seconds or runs.
 
 ## 8. Planetary ROI and automatic centering
+
+**v0.2.10.47 implementation:** full-frame bright-object detection, hardware ROI start, fixed-size ROI shifts during SER, ROI provenance, and optional two-axis calibrated mount micro-slew correction are implemented. The mount loop is disabled by default because it requires HIL qualification per backend; ROI-only tracking is the default.
 
 The scheduler shall support two complementary centering loops.
 

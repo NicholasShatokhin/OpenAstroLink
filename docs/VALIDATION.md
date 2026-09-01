@@ -1,4 +1,4 @@
-# Validation plan — v0.2.10.5
+# Validation plan — v0.2.10.47
 
 This release is primarily a build/HIL qualification checkpoint.
 
@@ -22,6 +22,7 @@ python3 tools/cross_platform_build_check.py
 python3 tools/qhy_header_isolation_check.py
 python3 tools/rpi_hardware_path_check.py
 python3 tools/cmake_presets_compat_check.py
+python3 tools/scheduler_dso_executor_v046_check.py
 ```
 
 Also verify:
@@ -150,6 +151,24 @@ Linux/libgphoto2 or Windows/EDSDK:
 6. preview;
 7. repeated capture;
 8. unplug/replug.
+
+
+### Scheduler / DSO executor v0.2.10.46
+
+Use a short, safe real-sky plan before attempting long unattended sequences:
+
+1. connect a qualified mount, main camera, focuser and ASTAP solver;
+2. create one DSO block with 2–3 short science frames;
+3. enable recenter before the first frame with a 1–2 arcmin tolerance;
+4. enable autofocus before the first frame;
+5. confirm the state sequence `slew -> solve -> recenter-slew (if needed) -> solve -> autofocus -> capture`;
+6. confirm each successful science exposure has a durable FITS/RAW artifact;
+7. repeat with `recenter every 1 frame` and `autofocus every 1 frame` to exercise the aggressive policy;
+8. press Stop during slew, solve, autofocus and exposure in separate runs and confirm the active child operation is cancelled and the session becomes `stopped`;
+9. inject a solve failure / excessive pointing error and confirm the retry limit ends in `failed` with `lastError`;
+10. submit a legacy `targets` session and confirm it still performs slew + science capture without silently requiring solver/focuser policy that the old schema could not express.
+
+Planetary HIL: use a bright planet or lunar feature. Start with mount corrections OFF: GOTO → full-frame detection → autofocus → 10–20 s ROI SER; verify SER, `.txt`, and `.roi.jsonl`, then induce enough drift to force at least one ROI shift while frame dimensions stay constant. Test calibrated mount corrections separately only after the mount backend is known-safe; verify the calibration micro-slews return to target and every correction is recorded.
 
 ### ASTAP / real sky
 
