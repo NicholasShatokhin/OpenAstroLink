@@ -1,4 +1,15 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.48
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.49
+
+## v0.2.10.49
+
+- Package: `0.2.10.49-calendar-mosaic-polar-safety`
+- Core version: `0.2.10.49`
+- Observation scheduling is now per block: each event may have its own UTC date/time, allowing a persistent node calendar to cover months or a year.
+- The node persists the calendar, armed state and next-block cursor. Completed blocks are not replayed after restart; a block interrupted by process restart starts again from that block boundary. Mid-frame/SER checkpoint resume remains OAL 1.0 work.
+- Blocks support `parkAfter` and `autoUnparkBefore` for optional Park between sparse calendar events.
+- Added executable `mosaic-fits` blocks with optical-profile FOV tile geometry, overlap, rotation, serpentine traversal and normal DSO solve/recenter/autofocus/capture policies per tile.
+- Polar Alignment RA-offset motion can be constrained to a persisted horizontal Az/Alt safe region; the complete slew path is sampled and rejected if it leaves the allowed region.
+- Mount v9 remains HIL-qualified across native EQDrive, direct SynScan/EQDrive Wi-Fi and Classic ASCOM/EQMOD.
 
 ## v0.2.10.48
 

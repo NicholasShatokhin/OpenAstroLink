@@ -21,7 +21,7 @@ public:
     SessionStatus status() const { return status_; }
     std::optional<ObservationBlock> currentBlock() const;
 
-    bool start();
+    bool start(int blockIndex = 0);
     bool beginScheduled();
     void stop(const QString &reason = {});
     void fail(const QString &message);
@@ -34,6 +34,7 @@ signals:
     void statusChanged(const oas::SessionStatus &status);
 
 private:
+    void prepareCurrentBlockStart(bool firstBlock);
     void refreshCurrentBlockFields();
     void publish();
 

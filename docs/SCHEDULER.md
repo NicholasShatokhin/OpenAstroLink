@@ -2,7 +2,17 @@
 
 **Canonical language:** English  
 **Target:** staged delivery from the first supervised beta through OAL 1.0  
-**Implementation status:** v0.2.10.48 provides a mixed-mode, non-durable node executor. DSO blocks execute `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks now execute `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, with fixed-size ROI tracking, `.roi.jsonl` sensor-origin provenance and an optional slow mount-recentering loop calibrated from measured RA/DEC image response. `SessionTarget` remains a legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery and unattended OAL 1.0 hardening remain planned.
+**Implementation status:** v0.2.10.49 provides a mixed DSO/planetary/mosaic node executor with a persistent per-block observing calendar. Each `ObservationBlock` can carry its own `startAtUtc`, optional `parkAfter` / `autoUnparkBefore`, and the node persists the plan, armed state and next-block cursor. DSO blocks execute `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`; planetary blocks execute `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`; mosaic blocks generate sky tiles from optical-profile FOV and reuse the DSO executor per tile. A process restart between blocks resumes at the first unfinished block; a restart inside a block restarts that block. Mid-frame/SER checkpoints, weather/roof safety, meridian recovery and full unattended OAL 1.0 hardening remain planned.
+
+### v0.2.10.49 persistent calendar, mosaic blocks and inter-block parking
+
+Scheduling is now a property of each observation block rather than one timestamp on the whole plan. A block with no `startAtUtc` runs as soon as the previous block completes (or as soon as the calendar is armed when it is first). A block with a future UTC timestamp enters `waiting-block-start` until its own event time. This allows one persisted calendar to represent eclipses, conjunctions, planetary windows, DSO sessions and other events many months ahead.
+
+The node persists the complete plan, whether it is armed, and the index of the first unfinished block. `parkAfter=true` parks after a completed event before the scheduler waits for the next event; `autoUnparkBefore=true` restores observing state immediately before that block begins. A clean operator Stop disarms the calendar. If the node process crashes/restarts while armed, completed blocks are not repeated; the unfinished block restarts from its block boundary.
+
+`mosaic-fits` is a third executable acquisition mode. The block coordinate is the mosaic center. Tile centers are calculated in a tangent plane from main-sensor FOV (`sensorWidthPx`, `sensorHeightPx`, image scale), rows/columns, overlap and grid rotation. Serpentine traversal reduces long return slews. Every tile inherits the normal DSO solve/recenter/autofocus/FITS policy, with optional recenter/autofocus at each tile boundary.
+
+Polar Alignment remains a guided solve/sample workflow in v0.2.10.49, but its RA-offset mount motion can now be restricted to a persisted horizontal safe region. OAL samples the entire requested path in Az/Alt and refuses the slew if any intermediate point leaves the configured region.
 
 ### v0.2.10.48 scheduler lifecycle and editing
 
@@ -22,7 +32,7 @@ A plan may mix both families in one night.
 
 ## 2. Current implementation boundary
 
-From v0.2.10.48, the node owns one `ObservationPlan` / `ObservationBlock` state machine for both DSO and planetary acquisition. All long steps execute asynchronously through the existing `OperationManager` and reuse the same hardware resource locks as interactive commands. The DSO path is:
+From v0.2.10.49, the node owns one persisted `ObservationPlan` / `ObservationBlock` state machine for DSO, planetary and mosaic acquisition. All long steps execute asynchronously through the existing `OperationManager` and reuse the same hardware resource locks as interactive commands. The DSO path is:
 
 ```text
 PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic corrections] -> next frame/block
@@ -30,7 +40,7 @@ PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic cor
 
 The solve/recenter loop plate-solves the actual field, measures pointing error against the block target, performs `Sync + correction slew`, and repeats until the configured arcminute tolerance or attempt limit is reached. Recenter and autofocus may run before the first frame and/or every N completed science frames. Science captures force durable FITS/RAW output when the camera backend supports it.
 
-`SessionTarget` remains accepted by the GUI/API for compatibility and is converted into DSO blocks. Planetary SER blocks are now executable. The implemented planetary path performs a full-frame acquisition after GOTO, detects the bright planetary/lunar target, optionally runs planet-mode autofocus, recentres a fixed-size hardware ROI on the detected centroid and records one or more finite SER runs. During a SER, ROI origin may move while width/height stay fixed; every origin change is written to a same-basename `.roi.jsonl`. Optional mount corrections use an image-response calibration rather than assuming camera orientation. The scheduler is still **non-durable**: node restart/resume, weather holds, meridian-flip recovery and unattended safety are OAL 1.0 work.
+`SessionTarget` remains accepted by the GUI/API for compatibility and is converted into DSO blocks. Planetary SER blocks are now executable. The implemented planetary path performs a full-frame acquisition after GOTO, detects the bright planetary/lunar target, optionally runs planet-mode autofocus, recentres a fixed-size hardware ROI on the detected centroid and records one or more finite SER runs. During a SER, ROI origin may move while width/height stay fixed; every origin change is written to a same-basename `.roi.jsonl`. Optional mount corrections use an image-response calibration rather than assuming camera orientation. The calendar is **block-boundary durable**: plan/armed state/next-block cursor survive node restart. Mid-block frame/SER progress, weather holds, meridian-flip recovery and full unattended safety remain OAL 1.0 work.
 
 ## 3. Plan model
 
@@ -40,10 +50,11 @@ Each block shall contain:
 
 - stable block ID and human-readable name;
 - target resolver input and resolved coordinates/ephemeris;
-- acquisition mode: `dso-fits` or `planetary-ser`;
+- acquisition mode: `dso-fits`, `planetary-ser` or `mosaic-fits`;
 - optical train, camera, mount and focuser bindings;
 - optional guide train;
-- start/end/time-window constraints;
+- optional per-block `startAtUtc` (independent event date/time) and future time-window constraints;
+- optional `parkAfter` / `autoUnparkBefore` inter-block mount policy;
 - minimum altitude / maximum airmass;
 - Sun altitude/twilight constraint;
 - Moon separation/illumination constraint where relevant;
@@ -292,3 +303,8 @@ Autonomous scheduling depends on the broader OAL 1.0 work that is specified but 
 - driver isolation and public conformance tests.
 
 The first supervised beta may expose scheduler building blocks before all of these autonomous-safety requirements are complete, but it must not present itself as unattended-safe.
+
+
+## Optional Polar Alignment motion constraint
+
+Polar Alignment does not require a restricted sky region. By default the workflow may use the normal mount-accessible sky, subject to the mount/backend hard limits. Observatories with balconies, roofs, walls, trees or other obstructions can enable `TelescopeProfile.polarMotionLimits`. When enabled, OAL samples each planned RA-slew path in Az/Alt and rejects the motion before it starts if any sampled point leaves the configured allowed region.

@@ -2,7 +2,17 @@
 
 **Канонічна мова:** англійська; цей файл є українським дзеркалом.  
 **Ціль:** поетапна реалізація від першої supervised beta до OAL 1.0.  
-**Стан реалізації:** у v0.2.10.48 node має mixed-mode non-durable executor. DSO blocks виконують `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks уже виконують `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, із fixed-size ROI tracking, `.roi.jsonl` provenance координат сенсора та опційним повільним mount recentering, який калібрується за реальним RA/DEC image response. `SessionTarget` лишився legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery та hardening до unattended OAL 1.0 ще заплановані.
+**Стан реалізації:** у v0.2.10.49 node має mixed DSO/planetary/mosaic executor і persistent per-block календар. Кожен `ObservationBlock` може мати власний `startAtUtc`, опційні `parkAfter` / `autoUnparkBefore`; node зберігає plan, armed state і cursor наступного незавершеного блока. DSO виконує `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`, planetary — `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, mosaic автоматично генерує тайли з optical-profile FOV і повторно використовує DSO executor для кожного тайла. Restart між блоками продовжує з першого незавершеного; restart посеред блока запускає цей block заново. Mid-frame/SER checkpoints, weather/roof safety, meridian recovery та повний unattended hardening OAL 1.0 ще заплановані.
+
+### v0.2.10.49 — persistent календар, mosaic blocks і Park між подіями
+
+Час запуску тепер належить кожному observation block окремо, а не всьому plan. Block без `startAtUtc` запускається одразу після попереднього (або одразу після arm для першого блока). Block із майбутнім UTC переходить у `waiting-block-start` до власної дати/часу. Один persistent calendar тому може містити затемнення, сполучення, планетарні вікна, DSO-сесії та інші події на багато місяців уперед.
+
+Node зберігає весь plan, armed-state та індекс першого незавершеного блока. `parkAfter=true` ставить монтування в Park після завершеної події перед очікуванням наступної; `autoUnparkBefore=true` автоматично виводить його з Park перед стартом блока. Operator Stop disarm'ить calendar. Після crash/restart завершені blocks не повторюються; незавершений block стартує заново зі своєї межі.
+
+`mosaic-fits` — третій executable acquisition mode. Координата блока є центром мозаїки. Центри тайлів розраховуються в tangent plane з FOV головного сенсора (`sensorWidthPx`, `sensorHeightPx`, image scale), rows/columns, overlap і rotation. Serpentine traversal мінімізує довгі зворотні slew. Кожен tile успадковує звичайні DSO solve/recenter/autofocus/FITS policies; recenter/autofocus можна примусово виконувати на кожній межі тайла.
+
+Polar Alignment у v0.2.10.49 лишається guided solve/sample workflow, але RA-offset рух монтування тепер можна обмежити persistent горизонтальною safe region. OAL семплує весь запитаний шлях у Az/Alt і відхиляє slew, якщо будь-яка проміжна точка виходить за дозволену ділянку.
 
 ### v0.2.10.48 — життєвий цикл та редагування scheduler
 
@@ -22,7 +32,7 @@ Scheduler OpenAstroLink має бути не таймером і не прост
 
 ## 2. Поточна межа реалізації
 
-Починаючи з v0.2.10.48, node має одну `ObservationPlan` / `ObservationBlock` state machine для DSO та planetary acquisition. Усі довгі кроки виконуються асинхронно через `OperationManager` і використовують ті самі resource locks, що й інтерактивні команди. DSO шлях:
+Починаючи з v0.2.10.49, node має одну persisted `ObservationPlan` / `ObservationBlock` state machine для DSO, planetary та mosaic acquisition. Усі довгі кроки виконуються асинхронно через `OperationManager` і використовують ті самі resource locks, що й інтерактивні команди. DSO шлях:
 
 ```text
 PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic corrections] -> next frame/block
@@ -30,7 +40,7 @@ PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic cor
 
 Solve/recenter loop plate-solve-ить реальне поле, вимірює pointing error до target block, робить `Sync + correction slew` і повторює цикл до заданої tolerance в arcmin або ліміту спроб. Recenter та autofocus можна виконувати перед першим science frame і/або кожні N завершених кадрів. Science capture примусово просить durable FITS/RAW output, якщо backend камери це підтримує.
 
-`SessionTarget` ще приймається GUI/API для сумісності й конвертується в DSO blocks. Planetary SER blocks тепер виконуються: після GOTO робиться full-frame acquisition, знаходиться яскравий planet/lunar target, опційно запускається planet-mode autofocus, формується fixed-size hardware ROI і записуються finite SER runs. Під час SER origin ROI може рухатися без зміни width/height; кожна зміна пишеться в `.roi.jsonl`. Опційна mount correction використовує виміряну двовісну калібровку, а не припущення про орієнтацію камери. Scheduler поки **non-durable**: restart/resume node, weather hold, meridian-flip recovery та unattended safety лишаються роботою OAL 1.0.
+`SessionTarget` ще приймається GUI/API для сумісності й конвертується в DSO blocks. Planetary SER blocks тепер виконуються: після GOTO робиться full-frame acquisition, знаходиться яскравий planet/lunar target, опційно запускається planet-mode autofocus, формується fixed-size hardware ROI і записуються finite SER runs. Під час SER origin ROI може рухатися без зміни width/height; кожна зміна пишеться в `.roi.jsonl`. Опційна mount correction використовує виміряну двовісну калібровку, а не припущення про орієнтацію камери. Calendar тепер **durable на межі блоків**: plan/armed state/next-block cursor переживають restart node. Mid-block FITS/SER progress, weather hold, meridian-flip recovery та повна unattended safety лишаються роботою OAL 1.0.
 
 ## 3. Модель плану
 
@@ -40,10 +50,11 @@ Persisted `ObservationPlan` містить впорядковані або prior
 
 - стабільний ID та назву;
 - target resolver input і resolved coordinates/ephemeris;
-- режим `dso-fits` або `planetary-ser`;
+- режим `dso-fits`, `planetary-ser` або `mosaic-fits`;
 - прив'язки optical train, camera, mount, focuser;
 - опційний guide train;
-- time window;
+- опційний per-block `startAtUtc` (окрема дата/час події) та майбутні time-window constraints;
+- опційні `parkAfter` / `autoUnparkBefore` для Park між блоками;
 - minimum altitude / maximum airmass;
 - обмеження за Sun altitude/twilight;
 - Moon separation/illumination за потреби;
@@ -245,3 +256,8 @@ Scheduler зберігає plan revision, current block/phase, completed FITS/SE
 - driver isolation та public conformance suite.
 
 У supervised beta можна показувати scheduler building blocks раніше, але не називати систему unattended-safe до завершення цих вимог.
+
+
+## Опційне обмеження руху Polar Alignment
+
+Polar Alignment не вимагає обмеженої ділянки неба. За замовчуванням workflow може використовувати звичайну доступну монтуванню область неба з урахуванням hard limits backend-а. Для балконів, дахів, стін, дерев або інших перешкод можна ввімкнути `TelescopeProfile.polarMotionLimits`. Коли обмеження ввімкнене, OAL семплує весь запланований RA-slew шлях в Az/Alt і відхиляє рух до його початку, якщо хоча б одна точка виходить за дозволену область.

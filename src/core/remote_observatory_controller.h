@@ -77,8 +77,10 @@ public:
     bool addPolarSample(QString *error=nullptr) override;
     bool slewPolarRaOffset(double deltaDeg,QString *error=nullptr) override;
     PolarAlignmentResult estimatePolarAlignment() override;
+    QString startPolarAlignment(const PolarAlignmentRunRequest &request, QString *error = nullptr) override;
 
     bool setObservationPlan(const ObservationPlan &plan,QString *error=nullptr) override;
+    ObservationPlan observationPlan() const override;
     bool setSessionPlan(const QString &name,const std::vector<SessionTarget> &targets,
                         QString *error=nullptr) override;
     bool startSession(QString *error=nullptr) override;

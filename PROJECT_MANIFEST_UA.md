@@ -1,4 +1,15 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.48
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.49
+
+## v0.2.10.49
+
+- Пакет: `0.2.10.49-calendar-mosaic-polar-safety`
+- Версія Core: `0.2.10.49`
+- Scheduling тепер per-block: кожна подія має власні UTC дату/час, тому persistent calendar node може планувати спостереження на місяці або рік уперед.
+- Node зберігає календар, armed state і cursor наступного блока. Завершені blocks після restart не повторюються; block, перерваний restart процесу, стартує заново з межі блока. Resume всередині FITS/SER лишається роботою OAL 1.0.
+- Blocks підтримують `parkAfter` і `autoUnparkBefore` для опційного Park між рідкими календарними подіями.
+- Додано executable `mosaic-fits` з геометрією тайлів із optical-profile FOV, overlap, rotation, serpentine traversal та звичайними DSO solve/recenter/autofocus/capture policies для кожного тайла.
+- RA-offset рух Polar Alignment можна обмежити persistent горизонтальною Az/Alt safe region; весь шлях slew семплується й відхиляється, якщо виходить за дозволену область.
+- Mount v9 лишається HIL-кваліфікованим для native EQDrive, direct SynScan/EQDrive Wi-Fi та Classic ASCOM/EQMOD.
 
 ## v0.2.10.48
 

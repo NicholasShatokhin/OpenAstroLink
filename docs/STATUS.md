@@ -1,4 +1,12 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.48
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.49
+
+## v0.2.10.49 persistent calendar / mosaic / polar safety
+
+- ✅ Scheduler calendar timestamps are now per `ObservationBlock`, so independent events can be planned months or a year ahead in one node-side calendar.
+- ✅ Calendar JSON, armed state and next-block cursor persist across node restart. Restart between events resumes at the first unfinished block; restart inside an event restarts that block. Mid-frame/SER resume remains future 1.0 checkpoint work.
+- ✅ Optional `parkAfter` and `autoUnparkBefore` allow the mount to Park between sparse events.
+- ✅ `mosaic-fits` executor computes tile centers from optical-profile field of view, rows/columns, overlap and rotation, traverses them serpentine and applies normal DSO solve/recenter/autofocus/FITS policy per tile.
+- ✅ Polar Alignment motion has a persisted Az/Alt safe region; every RA-offset slew samples the complete sky path and is rejected if any intermediate point leaves the allowed region. The solve/sample wizard is still guided rather than a fully automatic composite operation.
 
 ## v0.2.10.48 autofocus / exposure / scheduler HIL follow-up
 
@@ -146,7 +154,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Polar-axis math | ✅ | Sample/estimation API exists |
 | Automatic polar wizard | 🟡 | Full live adjustment orchestration not production-qualified |
 | Guiding | 🟡 | Basic state/API and pulse-guide primitives; production loop pending |
-| Session/scheduler | 🟡 supervised mixed executor | v0.2.10.48 executes DSO FITS/RAW and planetary SER blocks, preflights/stops interactive Live View before camera acquisition, supports block edit/delete/reorder/current-pointing fill and immediate/future in-memory start. Durable restart/recovery and unattended safety remain pending. |
+| Session/scheduler | ✅ persistent mixed calendar / 🟡 unattended hardening | v0.2.10.49 executes DSO FITS/RAW, planetary SER and mosaic FITS blocks with per-block UTC dates, optional Park/Unpark and persisted plan/armed/next-block cursor. Mid-block resume, weather/roof holds, meridian recovery and full unattended safety remain pending. |
 | Target resolver/ephemerides | 🟡 | Not yet a complete normative production service |
 
 ## Mount geometry foundation — v0.2.10.25

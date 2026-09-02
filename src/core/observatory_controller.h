@@ -87,8 +87,10 @@ public:
     virtual bool addPolarSample(QString *error = nullptr) = 0;
     virtual bool slewPolarRaOffset(double deltaDeg, QString *error = nullptr) = 0;
     virtual PolarAlignmentResult estimatePolarAlignment() = 0;
+    virtual QString startPolarAlignment(const PolarAlignmentRunRequest &request, QString *error = nullptr) = 0;
 
     virtual bool setObservationPlan(const ObservationPlan &plan, QString *error = nullptr) = 0;
+    virtual ObservationPlan observationPlan() const = 0;
     // Compatibility wrapper for v0.2.10.45 and earlier clients. Implementations
     // convert legacy SessionTarget entries into DSO FITS observation blocks.
     virtual bool setSessionPlan(const QString &name, const std::vector<SessionTarget> &targets,
@@ -136,6 +138,7 @@ signals:
     void autofocusCompleted(const QJsonObject &result);
     void guidingChanged(const QJsonObject &status);
     void polarSampleCountChanged(int count);
+    void polarAlignmentCompleted(const QJsonObject &result);
     void sessionChanged(const QJsonObject &status);
     void stateChanged(const QJsonObject &state);
     void motionEstimated(const QJsonObject &motion);

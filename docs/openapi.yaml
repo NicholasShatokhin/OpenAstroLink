@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.48
+  version: 0.2.10.49
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -329,6 +329,28 @@ paths:
               required: [deltaDeg]
               properties: { deltaDeg: { type: number } }
       responses: { '200': { $ref: '#/components/responses/Success' } }
+  /polar-align/run:
+    post:
+      summary: Run automatic polar alignment
+      description: Captures and plate-solves 2-5 positions separated by RA slews. The TelescopeProfile polarMotionLimits region is optional. When enabled, every slew path is preflighted and sampled in Az/Alt; when disabled, Polar Alignment uses the normal mount motion limits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                raStepDeg: { type: number, minimum: -60, maximum: 60, default: 15 }
+                sampleCount: { type: integer, minimum: 2, maximum: 5, default: 3 }
+                exposureSec: { type: number, minimum: 0.001, maximum: 30, default: 1 }
+                gain: { type: integer, default: 0 }
+                offset: { type: integer, default: 0 }
+                binX: { type: integer, minimum: 1, default: 2 }
+                binY: { type: integer, minimum: 1, default: 2 }
+                searchRadiusDeg: { type: number, minimum: 1, maximum: 180, default: 20 }
+                returnToStart: { type: boolean, default: false }
+      responses:
+        '202': { $ref: '#/components/responses/Success' }
   /polar-align/estimate:
     get: { responses: { '200': { $ref: '#/components/responses/Success' } } }
   /sessions:
@@ -448,6 +470,15 @@ components:
             longitudeDeg: { type: number, minimum: -180, maximum: 180 }
             elevationM: { type: number }
         mountGeometry: { $ref: '#/components/schemas/MountGeometry' }
+        polarMotionLimits:
+          type: object
+          description: Optional horizontal safe region enforced for Polar Alignment RA-offset motion. If minAzDeg > maxAzDeg, the interval wraps through 0 degrees. The complete slew path is sampled, not only the destination.
+          properties:
+            enabled: { type: boolean, default: false }
+            minAzDeg: { type: number, minimum: 0, maximum: 360, default: 0 }
+            maxAzDeg: { type: number, minimum: 0, maximum: 360, default: 360 }
+            minAltDeg: { type: number, minimum: -90, maximum: 90, default: 0 }
+            maxAltDeg: { type: number, minimum: -90, maximum: 90, default: 90 }
     ExposureRequest:
       type: object
       properties:
@@ -481,17 +512,18 @@ components:
       type: object
       required: [name]
       description: >-
-        v0.2.10.48 accepts mixed DSO FITS/RAW and autonomous planetary SER
-        ObservationPlan `blocks`. Legacy `targets` remains accepted and is converted
-        to DSO FITS blocks. At least
-        one of `blocks` or `targets` must contain an item.
+        v0.2.10.49 accepts a persistent calendar of DSO FITS/RAW, planetary SER,
+        and mosaic FITS ObservationBlock entries. Each block can carry its own UTC
+        start time and inter-block park policy. Legacy `targets` remains accepted
+        and is converted to DSO FITS blocks.
       properties:
         id: { type: string }
         name: { type: string }
         startAtUtc:
           type: string
           format: date-time
-          description: Optional future UTC start. Omit for immediate start. Scheduling is in-memory in v0.2.10.48; durable restart/resume is planned for OAL 1.0.
+          deprecated: true
+          description: Legacy plan-wide start time. v0.2.10.49 migrates it to the first block when that block has no own startAtUtc.
         blocks:
           type: array
           items: { $ref: '#/components/schemas/ObservationBlock' }
@@ -518,10 +550,38 @@ components:
         raDeg: { type: number }
         decDeg: { type: number, minimum: -90, maximum: 90 }
         coordinateFrame: { type: string, enum: [J2000, JNOW], default: J2000 }
-        mode: { type: string, enum: [dso-fits, planetary-ser] }
+        mode: { type: string, enum: [dso-fits, planetary-ser, mosaic-fits] }
+        startAtUtc:
+          type: string
+          format: date-time
+          description: Optional per-block UTC start. Omit to run as soon as the previous block finishes / calendar is armed.
+        parkAfter:
+          type: boolean
+          default: false
+          description: Park the mount after this block before waiting for the next calendar event.
+        autoUnparkBefore:
+          type: boolean
+          default: true
+          description: Automatically unpark before executing this block.
         dso: { $ref: '#/components/schemas/DsoFitsBlock' }
-        planetary:
-          $ref: '#/components/schemas/PlanetarySerBlock'
+        planetary: { $ref: '#/components/schemas/PlanetarySerBlock' }
+        mosaic: { $ref: '#/components/schemas/MosaicFitsBlock' }
+    MosaicFitsBlock:
+      type: object
+      description: >-
+        Rectangular sky mosaic centered on ObservationBlock RA/DEC. Tile centers are
+        computed from the active optical profile/main-sensor field of view, overlap,
+        grid rotation and a serpentine traversal. Each tile uses normal DSO solve,
+        recenter, autofocus and FITS/RAW capture policies.
+      properties:
+        columns: { type: integer, minimum: 1, maximum: 100, default: 2 }
+        rows: { type: integer, minimum: 1, maximum: 100, default: 2 }
+        overlapPercent: { type: number, minimum: 0, maximum: 90, default: 15 }
+        rotationDeg: { type: number, minimum: -180, maximum: 180, default: 0 }
+        serpentine: { type: boolean, default: true }
+        recenterEachTile: { type: boolean, default: true }
+        autofocusEachTile: { type: boolean, default: false }
+        tile: { $ref: '#/components/schemas/DsoFitsBlock' }
     PlanetarySerBlock:
       type: object
       description: >-

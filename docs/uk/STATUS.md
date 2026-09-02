@@ -1,4 +1,12 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.48
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.49
+
+## v0.2.10.49 — persistent calendar / mosaic / Polar safety
+
+- ✅ Час scheduler тепер per `ObservationBlock`: незалежні події можна розпланувати в одному node-calendar на місяці або рік уперед.
+- ✅ Calendar JSON, armed-state і next-block cursor переживають restart node. Restart між подіями продовжує з першого незавершеного блока; restart усередині події запускає цей block заново. Resume всередині FITS/SER лишається майбутнім checkpointing OAL 1.0.
+- ✅ Опційні `parkAfter` та `autoUnparkBefore` дозволяють ставити mount у Park між рідкими подіями.
+- ✅ `mosaic-fits` executor рахує центри тайлів із optical-profile FOV, rows/columns, overlap та rotation, проходить їх serpentine і застосовує звичайний DSO solve/recenter/autofocus/FITS policy для кожного tile.
+- ✅ Polar Alignment motion має persisted Az/Alt safe region; кожний RA-offset slew перевіряє весь шлях і відхиляється, якщо хоча б одна проміжна точка виходить за дозволену ділянку. Solve/sample wizard поки guided, а не один повністю автоматичний composite operation.
 
 ## v0.2.10.48 HIL follow-up автофокуса / експозиції / scheduler
 
@@ -129,7 +137,7 @@
 | Polar math | ✅ |
 | Automatic polar wizard | 🟡 orchestration/HIL pending |
 | Guiding | 🟡 basic API, production loop pending |
-| Durable scheduler | 🟡 supervised mixed executor | v0.2.10.48 виконує DSO FITS/RAW і planetary SER blocks, перед acquisition завершує interactive Live View, підтримує edit/delete/reorder/current-pointing fill та immediate/future in-memory start. Durable restart/recovery й unattended safety ще попереду. |
+| Scheduler/calendar | ✅ persistent mixed calendar / 🟡 unattended hardening | v0.2.10.49 виконує DSO FITS/RAW, planetary SER і mosaic FITS blocks з per-block UTC датами, опційним Park/Unpark та persisted plan/armed/next-block cursor. Mid-block resume, weather/roof hold, meridian recovery й повна unattended safety ще попереду. |
 
 ## Mount geometry foundation — v0.2.10.25
 

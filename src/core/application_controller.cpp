@@ -261,6 +261,50 @@ private:QObject *owner_;std::shared_ptr<IMount> inner_;bool direct_{false};
 };
 }
 static QJsonObject sessionJson(const SessionStatus&s){return sessionStatusToJson(s);}
+static const DsoFitsBlock &imagingSettingsFor(const ObservationBlock &block){
+    return block.mode==ObservationMode::MosaicFits?block.mosaic.tile:block.dso;
+}
+static int imagingFrameTargetFor(const ObservationBlock &block){
+    if(block.mode==ObservationMode::MosaicFits)return std::max(1,block.mosaic.columns)*std::max(1,block.mosaic.rows)*std::max(1,block.mosaic.tile.frameCount);
+    return std::max(1,block.dso.frameCount);
+}
+static EquatorialCoord tangentOffsetEquatorial(const EquatorialCoord &center,double eastDeg,double northDeg){
+    constexpr double D=3.14159265358979323846/180.0,R=180.0/3.14159265358979323846;
+    const auto c0=convertEquatorialFrame(center,EquatorialFrame::J2000);
+    const double ra=c0.raDeg*D,dec=c0.decDeg*D;
+    const cv::Vec3d c{std::cos(dec)*std::cos(ra),std::cos(dec)*std::sin(ra),std::sin(dec)};
+    const cv::Vec3d e{-std::sin(ra),std::cos(ra),0.0};
+    const cv::Vec3d n{-std::sin(dec)*std::cos(ra),-std::sin(dec)*std::sin(ra),std::cos(dec)};
+    cv::Vec3d v=c+std::tan(eastDeg*D)*e+std::tan(northDeg*D)*n;v*=1.0/cv::norm(v);
+    double outRa=std::atan2(v[1],v[0])*R;if(outRa<0)outRa+=360.0;
+    return {outRa,std::asin(std::clamp(v[2],-1.0,1.0))*R,EquatorialFrame::J2000};
+}
+static EquatorialCoord mosaicTargetFor(const ObservationBlock &block,const TelescopeProfile &profile,int completedFrames){
+    if(block.mode!=ObservationMode::MosaicFits)return block.coordinate;
+    const int cols=std::max(1,block.mosaic.columns),rows=std::max(1,block.mosaic.rows),frames=std::max(1,block.mosaic.tile.frameCount);
+    int tile=std::clamp(completedFrames/frames,0,cols*rows-1);int row=tile/cols,col=tile%cols;if(block.mosaic.serpentine&&(row&1))col=cols-1-col;
+    const double scale=profile.arcsecPerPixel();
+    const double fovX=std::max(1,profile.sensorWidthPx)*scale/3600.0,fovY=std::max(1,profile.sensorHeightPx)*scale/3600.0;
+    const double stepX=fovX*(1.0-block.mosaic.overlapPercent/100.0),stepY=fovY*(1.0-block.mosaic.overlapPercent/100.0);
+    const double gx=(double(col)-0.5*double(cols-1))*stepX,gy=(0.5*double(rows-1)-double(row))*stepY;
+    const double a=block.mosaic.rotationDeg*3.14159265358979323846/180.0;
+    const double east=gx*std::cos(a)-gy*std::sin(a),north=gx*std::sin(a)+gy*std::cos(a);
+    return tangentOffsetEquatorial(block.coordinate,east,north);
+}
+static bool azimuthAllowed(double az,const PolarMotionLimits &l){
+    az=std::fmod(az+360.0,360.0);double lo=std::fmod(l.minAzDeg+360.0,360.0),hi=std::fmod(l.maxAzDeg+360.0,360.0);
+    if(std::abs(l.maxAzDeg-l.minAzDeg)>=359.999)return true;
+    return lo<=hi?(az>=lo&&az<=hi):(az>=lo||az<=hi);
+}
+static bool horizontalAllowed(const HorizontalCoord &h,const PolarMotionLimits &l){return h.altDeg>=l.minAltDeg&&h.altDeg<=l.maxAltDeg&&azimuthAllowed(h.azDeg,l);}
+static bool polarPathAllowed(const EquatorialCoord &start,double deltaRaDeg,const TelescopeProfile &profile,QString *error){
+    const auto &limits=profile.polarMotionLimits;if(!limits.enabled){if(error)error->clear();return true;}
+    const int samples=std::max(8,int(std::ceil(std::abs(deltaRaDeg)/2.0))+1);const auto utc=QDateTime::currentDateTimeUtc();
+    for(int i=0;i<=samples;++i){const double f=double(i)/double(samples);EquatorialCoord q=start;q.raDeg=std::fmod(start.raDeg+deltaRaDeg*f+360.0,360.0);const auto h=equatorialToHorizontal(q,profile.observer,utc);
+        if(!horizontalAllowed(h,limits)){if(error)*error=QString("Polar-alignment slew rejected by safe sky region at sample %1/%2: Az=%3 deg Alt=%4 deg; allowed Az=%5..%6 deg Alt=%7..%8 deg").arg(i).arg(samples).arg(h.azDeg,0,'f',2).arg(h.altDeg,0,'f',2).arg(limits.minAzDeg,0,'f',1).arg(limits.maxAzDeg,0,'f',1).arg(limits.minAltDeg,0,'f',1).arg(limits.maxAltDeg,0,'f',1);return false;}
+    }
+    if(error)error->clear();return true;
+}
 ApplicationController::ApplicationController(QObject *parent):ObservatoryController(parent),scheduler_(this),operations_(this){
     profile_=settings_.loadProfile();
     // Persisted serial overrides are applied before native drivers perform their
@@ -322,7 +366,8 @@ ApplicationController::ApplicationController(QObject *parent):ObservatoryControl
     #ifdef OAS_HAVE_POSITIONING
     if(profile_.observer.latitudeDeg==0.0&&profile_.observer.longitudeDeg==0.0)QTimer::singleShot(0,this,&ApplicationController::requestSystemLocation);
 #endif
-    connect(&scheduler_,&Scheduler::statusChanged,this,[this](const SessionStatus&s){auto j=sessionJson(s);emit sessionChanged(j);if(oalWsServer_)oalWsServer_->broadcast("sessionUpdate",j);emitState();});
+    connect(&scheduler_,&Scheduler::statusChanged,this,[this](const SessionStatus&s){auto j=sessionJson(s);emit sessionChanged(j);if(oalWsServer_)oalWsServer_->broadcast("sessionUpdate",j);if(!s.active&&(s.state=="completed"||s.state=="failed"||s.state=="stopped"))settings_.saveSchedulerArmed(false);emitState();});
+    {const auto savedPlan=settings_.loadObservationPlan();if(!savedPlan.blocks.empty()){scheduler_.setPlan(savedPlan);emit logMessage(QString("Persisted observation calendar restored: %1 (%2 block(s))").arg(savedPlan.name).arg(savedPlan.blocks.size()));if(settings_.schedulerArmed())QTimer::singleShot(2500,this,[this](){if(shuttingDown_)return;QString e;if(!startSession(&e))emit logMessage("Persisted observation calendar could not be re-armed: "+e);});}}
     // Hardware enumeration is owned by the application/node lifecycle (one
     // initial scan after the control plane is online, then explicit user
     // refreshes).  Do not start a second implicit scan from the controller
@@ -1055,13 +1100,14 @@ QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*e
     emit logMessage("Autofocus operation accepted: "+id);return id;
 }
 bool ApplicationController::cancelOperation(const QString&id,QString*error){
-    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningAdaptiveSolve=kind=="solver.adaptive"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";const bool runningLiveView=kind=="camera.live-view"&&before.value("state").toString()=="running";
+    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningAdaptiveSolve=kind=="solver.adaptive"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";const bool runningLiveView=kind=="camera.live-view"&&before.value("state").toString()=="running";const bool runningPolar=kind=="polar.align"&&before.value("state").toString()=="running";
     if(!operations_.cancel(id,error))return false;
     if(runningExposure&&camera_&&camera_->canAbortExposure()){QString abortError;if(!camera_->abortExposure(&abortError)&&!abortError.isEmpty())emit logMessage("Exposure abort warning: "+abortError);}
     else if(runningExposure&&camera_)emit logMessage("Exposure cancellation requested; this camera backend cannot interrupt an in-progress capture, so the frame will be discarded when readout returns");
     if(runningAdaptiveSolve&&camera_&&camera_->canAbortExposure()){QString abortError;if(!camera_->abortExposure(&abortError)&&!abortError.isEmpty())emit logMessage("Adaptive solve exposure abort warning: "+abortError);}
     else if(runningAdaptiveSolve&&camera_)emit logMessage("Adaptive solve cancellation requested; current short exposure cannot be interrupted by this backend");
     if(runningGuideExposure&&guideCamera_&&guideCamera_->canAbortExposure())guideCamera_->abortExposure(nullptr);
+    if(runningPolar){if(camera_&&camera_->canAbortExposure())camera_->abortExposure(nullptr);if(mount_)mount_->abortMotion(nullptr);}
     // Native QHY Live View is a continuous SDK stream, not a single exposure.
     // Let its worker leave the frame loop and call StopQHYCCDLive itself; using
     // CancelQHYCCDExposingAndReadout here corrupts the subsequent still mode.
@@ -1214,8 +1260,41 @@ GuidingStatus ApplicationController::stopGuiding(){guiding_.stop();auto s=guidin
 GuidingStatus ApplicationController::guideUsingLastSolve(){QString busy;if(!ensureResourcesAvailable({"mount"},&busy)){emit logMessage("Guide update skipped: "+busy);return guiding_.status();}auto s=guiding_.update({lastSolve_.raDeg,lastSolve_.decDeg},mount_.get());auto j=QJsonObject{{"active",s.active},{"raErrorArcsec",s.raErrorArcsec},{"decErrorArcsec",s.decErrorArcsec},{"rmsArcsec",s.rmsArcsec}};emit guidingChanged(j);if(oalWsServer_)oalWsServer_->broadcast("guidingUpdate",j);return s;}
 void ApplicationController::clearPolarSamples(){polarSamples_.clear();emit polarSampleCountChanged(0);if(oalWsServer_)oalWsServer_->broadcast("polarSampleCount",QJsonObject{{"count",0}});}
 bool ApplicationController::addPolarSample(QString*e){if(!lastSolve_.success){if(e)*e="Last plate solve is invalid";return false;}MountStatus m;if(!mountStatus(m,e))return false;polarSamples_.push_back({lastSolve_,m.coordinate.raDeg});int n=int(polarSamples_.size());emit polarSampleCountChanged(n);if(oalWsServer_)oalWsServer_->broadcast("polarSampleCount",QJsonObject{{"count",n}});return true;}
-bool ApplicationController::slewPolarRaOffset(double d,QString*e){MountStatus m;if(!mountStatus(m,e))return false;EquatorialCoord t=m.coordinate;t.raDeg=std::fmod(t.raDeg+d+360.0,360.0);return slewMount(t,e);}
+bool ApplicationController::slewPolarRaOffset(double d,QString*e){MountStatus m;if(!mountStatus(m,e))return false;if(!polarPathAllowed(m.coordinate,d,profile_,e))return false;EquatorialCoord target=m.coordinate;target.raDeg=std::fmod(target.raDeg+d+360.0,360.0);return slewMount(target,e);}
 PolarAlignmentResult ApplicationController::estimatePolarAlignment(){return polarEstimator_.estimate(polarSamples_,profile_.observer,QDateTime::currentDateTimeUtc());}
+QString ApplicationController::startPolarAlignment(const PolarAlignmentRunRequest&request,QString*error){
+    if(!camera_||!mount_||!solver_){if(error)*error="Automatic polar alignment requires camera, mount and plate solver";return{};}
+    PolarAlignmentRunRequest r=request;r.raStepDeg=std::clamp(r.raStepDeg,-60.0,60.0);r.sampleCount=std::clamp(r.sampleCount,2,5);r.exposure.exposureSec=std::clamp(r.exposure.exposureSec,0.001,30.0);r.exposure.binX=std::max(1,r.exposure.binX);r.exposure.binY=std::max(1,r.exposure.binY);r.exposure.saveRaw=false;r.searchRadiusDeg=std::clamp(r.searchRadiusDeg,1.0,180.0);
+    if(std::abs(r.raStepDeg)<1.0){if(error)*error="Automatic polar-alignment RA step must be at least 1 degree";return{};}
+    MountStatus initial;QString statusError;if(!mountStatus(initial,&statusError)||!initial.coordinateValid){if(error)*error=statusError.isEmpty()?"Mount coordinate model is not valid":statusError;return{};}
+    // Reject the complete intended path before any exposure/motion begins.
+    EquatorialCoord preflight=initial.coordinate;for(int i=1;i<r.sampleCount;++i){QString pe;if(!polarPathAllowed(preflight,r.raStepDeg,profile_,&pe)){if(error)*error=pe;return{};}preflight.raDeg=std::fmod(preflight.raDeg+r.raStepDeg+360.0,360.0);}
+    auto cam=camera_;auto mnt=mount_;auto solver=solver_;const TelescopeProfile profile=profile_;const EquatorialCoord startCoord=initial.coordinate;
+    const QString id=operations_.submit("polar.align",{"camera","mount","solver"},true,[this,cam,mnt,solver,profile,startCoord,r](OperationContext&ctx){
+        OperationOutcome out;ThreadMarshalledCamera cameraProxy(this,cam);ThreadMarshalledMount mountProxy(this,mnt);std::vector<PolarSample> samples;samples.reserve(size_t(r.sampleCount));QString err;
+        auto waitIdle=[&]()->bool{for(int i=0;i<3000;++i){if(ctx.isCancellationRequested()){mountProxy.abortMotion(nullptr);return false;}MountStatus st;if(!mountProxy.status(st,&err))return false;if(!st.slewing)return true;QThread::msleep(200);}err="Polar-alignment slew did not finish within 10 minutes";mountProxy.abortMotion(nullptr);return false;};
+        auto publishSolve=[this](const CameraFrame&frame,const SolveResult&solve,int sampleNo){QMetaObject::invokeMethod(this,[this,frame,solve,sampleNo](){commitCapturedFrame(frame,false,false);lastSolve_=solve;auto j=solveToJson(solve);j["polarSample"]=sampleNo;emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(QString("Polar automatic sample %1 solved: RA=%2 DEC=%3 rotation=%4").arg(sampleNo).arg(solve.raDeg,0,'f',6).arg(solve.decDeg,0,'f',6).arg(solve.rotationDeg,0,'f',3));},Qt::BlockingQueuedConnection);};
+        MountStatus st;if(!mountProxy.status(st,&err)){out.problem={{"code","POLAR_MOUNT_STATUS_FAILED"},{"message",err}};return out;}if(st.parked){if(!mountProxy.park(false,&err)||!waitIdle()){out.problem={{"code","POLAR_UNPARK_FAILED"},{"message",err}};return out;}}
+        for(int sampleNo=0;sampleNo<r.sampleCount;++sampleNo){
+            if(ctx.isCancellationRequested()){out.cancelled=true;return out;}
+            if(!mountProxy.status(st,&err)||!st.coordinateValid){out.problem={{"code","POLAR_MOUNT_STATUS_FAILED"},{"message",err.isEmpty()?"Mount coordinate is invalid":err}};return out;}
+            CameraFrame frame;ctx.reportProgress(0.05+0.75*double(sampleNo)/double(r.sampleCount),"polar.capture",{{"sample",sampleNo+1},{"samples",r.sampleCount},{"exposureSec",r.exposure.exposureSec}});
+            if(!cameraProxy.capture(r.exposure,frame,&err)){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","POLAR_CAPTURE_FAILED"},{"message",err},{"sample",sampleNo+1}};return out;}
+            SolveHint hint;hint.raDeg=st.coordinate.raDeg;hint.decDeg=st.coordinate.decDeg;hint.searchRadiusDeg=r.searchRadiusDeg;ctx.reportProgress(0.10+0.75*double(sampleNo)/double(r.sampleCount),"polar.solve",{{"sample",sampleNo+1},{"samples",r.sampleCount}});
+            const SolveResult solved=solver->solve(frame,profile,hint);publishSolve(frame,solved,sampleNo+1);if(!solved.success){out.problem={{"code","POLAR_SOLVE_FAILED"},{"message",solved.message.isEmpty()?"Plate solve failed during automatic polar alignment":solved.message},{"sample",sampleNo+1}};return out;}
+            samples.push_back({solved,st.coordinate.raDeg});
+            if(sampleNo+1<r.sampleCount){QString pathError;if(!polarPathAllowed(st.coordinate,r.raStepDeg,profile,&pathError)){out.problem={{"code","POLAR_SAFE_REGION_REJECTED"},{"message",pathError}};return out;}EquatorialCoord target=st.coordinate;target.raDeg=std::fmod(target.raDeg+r.raStepDeg+360.0,360.0);ctx.reportProgress(0.18+0.75*double(sampleNo)/double(r.sampleCount),"polar.slew",{{"sample",sampleNo+1},{"deltaRaDeg",r.raStepDeg}});if(!mountProxy.slewTo(target,&err)||!waitIdle()){if(ctx.isCancellationRequested()){out.cancelled=true;return out;}out.problem={{"code","POLAR_SLEW_FAILED"},{"message",err}};return out;}}
+        }
+        const auto result=polarEstimator_.estimate(samples,profile.observer,QDateTime::currentDateTimeUtc());if(!result.success){out.problem={{"code","POLAR_ESTIMATE_FAILED"},{"message",result.message}};return out;}
+        if(r.returnToStart){MountStatus now;if(mountProxy.status(now,&err)&&now.coordinateValid){double delta=startCoord.raDeg-now.coordinate.raDeg;while(delta>180)delta-=360;while(delta<-180)delta+=360;QString pathError;if(polarPathAllowed(now.coordinate,delta,profile,&pathError)){if(!mountProxy.slewTo(startCoord,&err)||!waitIdle())QMetaObject::invokeMethod(this,[this,err](){emit logMessage("Polar return-to-start warning: "+err);},Qt::QueuedConnection);}else QMetaObject::invokeMethod(this,[this,pathError](){emit logMessage("Polar return-to-start skipped: "+pathError);},Qt::QueuedConnection);}}
+        QJsonArray sampleJson;for(size_t i=0;i<samples.size();++i)sampleJson.append(QJsonObject{{"index",int(i+1)},{"mountRaDeg",samples[i].mountRaDeg},{"raDeg",samples[i].solve.raDeg},{"decDeg",samples[i].solve.decDeg},{"rotationDeg",samples[i].solve.rotationDeg}});
+        QJsonObject resultJson{{"success",result.success},{"axisRaDeg",result.axisRaDeg},{"axisDecDeg",result.axisDecDeg},{"totalErrorArcmin",result.totalErrorArcmin},{"altitudeAdjustmentArcmin",result.altitudeAdjustmentArcmin},{"azimuthAdjustmentArcmin",result.azimuthAdjustmentArcmin},{"message",result.message},{"samples",sampleJson}};
+        QMetaObject::invokeMethod(this,[this,samples,resultJson](){polarSamples_=samples;emit polarSampleCountChanged(int(samples.size()));emit polarAlignmentCompleted(resultJson);if(oalWsServer_){oalWsServer_->broadcast("polarSampleCount",QJsonObject{{"count",int(samples.size())}});oalWsServer_->broadcast("polarAlignmentResult",resultJson);}emit logMessage(QString("Automatic polar alignment: total=%1 arcmin, altitude adjust=%2 arcmin, azimuth adjust=%3 arcmin").arg(resultJson.value("totalErrorArcmin").toDouble(),0,'f',2).arg(resultJson.value("altitudeAdjustmentArcmin").toDouble(),0,'f',2).arg(resultJson.value("azimuthAdjustmentArcmin").toDouble(),0,'f',2));},Qt::BlockingQueuedConnection);
+        out.success=true;out.result=resultJson;ctx.reportProgress(1.0,"completed");return out;
+    });
+    emit logMessage(QString("Automatic polar-alignment operation accepted: %1 — %2 samples, RA step %3 deg, safe-region constraint %4")
+                    .arg(id).arg(r.sampleCount).arg(r.raStepDeg,0,'f',2).arg(profile_.polarMotionLimits.enabled?"ON":"OFF"));return id;
+}
 bool ApplicationController::setObservationPlan(const ObservationPlan&plan,QString*e){
     if(plan.blocks.empty()){if(e)*e="Observation plan has no blocks";return false;}
     if(scheduler_.status().active){if(e)*e="Cannot replace an active observation plan";return false;}
@@ -1225,15 +1304,19 @@ bool ApplicationController::setObservationPlan(const ObservationPlan&plan,QStrin
         if(block.mode==ObservationMode::DsoFits){
             if(block.dso.frameCount<1){if(e)*e="DSO block frameCount must be >= 1";return false;}
             if(block.dso.exposure.exposureSec<=0.0){if(e)*e="DSO exposure must be > 0";return false;}
-        }else{
+        }else if(block.mode==ObservationMode::PlanetarySer){
             if(block.planetary.serRuns<1){if(e)*e="Planetary block serRuns must be >= 1";return false;}
             if(block.planetary.durationSec<=0.0){if(e)*e="Planetary SER duration must be > 0";return false;}
             if(block.planetary.stream.exposureSec<=0.0){if(e)*e="Planetary stream exposure must be > 0";return false;}
             if(block.planetary.roiWidth<0||block.planetary.roiHeight<0){if(e)*e="Planetary ROI dimensions cannot be negative";return false;}
+        }else{
+            if(block.mosaic.columns<1||block.mosaic.rows<1){if(e)*e="Mosaic rows/columns must be >= 1";return false;}
+            if(block.mosaic.tile.frameCount<1||block.mosaic.tile.exposure.exposureSec<=0.0){if(e)*e="Mosaic tile exposure/frame count is invalid";return false;}
+            if(block.mosaic.overlapPercent<0.0||block.mosaic.overlapPercent>=95.0){if(e)*e="Mosaic overlap must be in [0,95) percent";return false;}
         }
     }
-    scheduler_.setPlan(plan);
-    emit logMessage(QString("Observation plan loaded: %1 (%2 block(s))").arg(plan.name).arg(plan.blocks.size()));
+    scheduler_.setPlan(plan);settings_.saveObservationPlan(scheduler_.plan());settings_.saveSchedulerNextBlockIndex(0);
+    emit logMessage(QString("Observation calendar loaded and persisted: %1 (%2 block(s))").arg(plan.name).arg(plan.blocks.size()));
     return true;
 }
 bool ApplicationController::setSessionPlan(const QString&name,const std::vector<SessionTarget>&targets,QString*e){
@@ -1243,11 +1326,12 @@ bool ApplicationController::setSessionPlan(const QString&name,const std::vector<
     return setObservationPlan(plan,e);
 }
 bool ApplicationController::startSession(QString*e){
-    if(!scheduler_.start()){if(e)*e="No observation blocks supplied or session already active";return false;}
-    sessionRecenterAttempt_=0;planetaryRoi_={};planetaryLastCentroid_={};planetaryMountCalibration_={};
+    int resume=settings_.schedulerNextBlockIndex();if(resume>=int(scheduler_.plan().blocks.size())){resume=0;settings_.saveSchedulerNextBlockIndex(0);}
+    if(!scheduler_.start(resume)){if(e)*e="No observation blocks supplied or session already active";return false;}
+    sessionRecenterAttempt_=0;planetaryRoi_={};planetaryLastCentroid_={};planetaryMountCalibration_={};settings_.saveSchedulerArmed(true);
     const auto st=scheduler_.status();
     if(st.state=="scheduled"){
-        emit logMessage(QString("Observation session scheduled: %1 for %2 UTC").arg(st.id,st.scheduledStartUtc.toUTC().toString(Qt::ISODateWithMs)));
+        emit logMessage(QString("Observation calendar armed: %1; next block %2 at %3 UTC").arg(st.id,st.currentBlockName,st.scheduledStartUtc.toUTC().toString(Qt::ISODateWithMs)));
         armScheduledSessionStart(st.id);
     }else{
         emit logMessage(QString("Observation session started: %1").arg(st.id));
@@ -1269,24 +1353,45 @@ void ApplicationController::armScheduledSessionStart(const QString &sessionId){
     const int delay=int(std::min<qint64>(remaining,3600000));
     QTimer::singleShot(std::max(1,delay),this,[this,sessionId](){armScheduledSessionStart(sessionId);});
 }
+void ApplicationController::continueSessionAfterBlockAdvance(){
+    const auto st=scheduler_.status();
+    if(!st.active){settings_.saveSchedulerArmed(false);return;}
+    if(st.state=="scheduled"){emit logMessage(QString("Scheduler waiting for block %1 until %2 UTC").arg(st.currentBlockName,st.scheduledStartUtc.toString(Qt::ISODateWithMs)));armScheduledSessionStart(st.id);return;}
+    QTimer::singleShot(0,this,[this](){scheduleSessionStep();});
+}
+void ApplicationController::pollInterBlockPark(){
+    const auto st=scheduler_.status();if(!st.active||st.currentStep!="park-after-block")return;
+    MountStatus m;QString e;if(!mountStatus(m,&e)){scheduler_.fail("Could not verify inter-block park: "+e);return;}
+    if(m.slewing||!m.parked){QTimer::singleShot(500,this,[this](){pollInterBlockPark();});return;}
+    emit logMessage(QString("Scheduler inter-block park completed after %1").arg(st.currentBlockName));settings_.saveSchedulerNextBlockIndex(st.blockIndex+1);scheduler_.advanceBlock();continueSessionAfterBlockAdvance();
+}
+void ApplicationController::completeCurrentObservationBlock(){
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("Completed observation block disappeared");return;}
+    if(block->parkAfter){QString e;if(!parkMount(true,&e)){scheduler_.fail("Inter-block park could not start: "+e);return;}scheduler_.setStep("park-after-block");QTimer::singleShot(500,this,[this](){pollInterBlockPark();});return;}
+    settings_.saveSchedulerNextBlockIndex(scheduler_.status().blockIndex+1);scheduler_.advanceBlock();continueSessionAfterBlockAdvance();
+}
 void ApplicationController::stopSession(){
     const auto st=scheduler_.status();
-    scheduler_.stop("Stopped by operator");
+    scheduler_.stop("Stopped by operator");settings_.saveSchedulerArmed(false);
     if(!st.currentOperationId.isEmpty())cancelOperation(st.currentOperationId,nullptr);
     emit logMessage("Observation session stopped by operator");
 }
 
 bool ApplicationController::sessionRecenterDue(const ObservationBlock&block)const{
-    if(block.mode!=ObservationMode::DsoFits)return false;
-    const int n=scheduler_.status().currentBlockCompletedFrames;
-    if(n==0)return block.dso.recenter.beforeFirstFrame;
-    return block.dso.recenter.everyNFrames>0 && (n%block.dso.recenter.everyNFrames)==0;
+    if(block.mode!=ObservationMode::DsoFits&&block.mode!=ObservationMode::MosaicFits)return false;
+    const auto &d=currentImagingSettings(block);const int n=scheduler_.status().currentBlockCompletedFrames;
+    int local=n;
+    if(block.mode==ObservationMode::MosaicFits){const int f=std::max(1,block.mosaic.tile.frameCount);local=n%f;if(local==0&&n>0)return block.mosaic.recenterEachTile&&d.recenter.beforeFirstFrame;}
+    if(local==0)return d.recenter.beforeFirstFrame;
+    return d.recenter.everyNFrames>0 && (local%d.recenter.everyNFrames)==0;
 }
 bool ApplicationController::sessionAutofocusDue(const ObservationBlock&block)const{
-    if(block.mode!=ObservationMode::DsoFits)return false;
-    const int n=scheduler_.status().currentBlockCompletedFrames;
-    if(n==0)return block.dso.autofocus.beforeFirstFrame;
-    return block.dso.autofocus.everyNFrames>0 && (n%block.dso.autofocus.everyNFrames)==0;
+    if(block.mode!=ObservationMode::DsoFits&&block.mode!=ObservationMode::MosaicFits)return false;
+    const auto &d=currentImagingSettings(block);const int n=scheduler_.status().currentBlockCompletedFrames;
+    int local=n;
+    if(block.mode==ObservationMode::MosaicFits){const int f=std::max(1,block.mosaic.tile.frameCount);local=n%f;if(local==0&&n>0)return block.mosaic.autofocusEachTile&&d.autofocus.beforeFirstFrame;}
+    if(local==0)return d.autofocus.beforeFirstFrame;
+    return d.autofocus.everyNFrames>0 && (local%d.autofocus.everyNFrames)==0;
 }
 bool ApplicationController::planetaryAutofocusDue(const ObservationBlock&block)const{
     if(block.mode!=ObservationMode::PlanetarySer)return false;
@@ -1294,37 +1399,42 @@ bool ApplicationController::planetaryAutofocusDue(const ObservationBlock&block)c
     if(n==0)return block.planetary.autofocus.beforeFirstRun;
     return block.planetary.autofocus.everyNRuns>0 && (n%block.planetary.autofocus.everyNRuns)==0;
 }
+EquatorialCoord ApplicationController::currentImagingTarget(const ObservationBlock&block)const{return mosaicTargetFor(block,profile_,scheduler_.status().currentBlockCompletedFrames);}
+const DsoFitsBlock &ApplicationController::currentImagingSettings(const ObservationBlock&block)const{return imagingSettingsFor(block);}
+int ApplicationController::currentImagingFrameTarget(const ObservationBlock&block)const{return imagingFrameTargetFor(block);}
 
 void ApplicationController::startCurrentDsoSlew(){
-    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
-    QString e;const QString id=startMountSlew(block->coordinate,&e);
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}const auto target=currentImagingTarget(*block);
+    QString e;const QString id=startMountSlew(target,&e);
     if(id.isEmpty()){scheduler_.fail("Scheduler slew could not start: "+e);return;}
     scheduler_.setStep("slew",id);
-    emit logMessage(QString("Scheduler [%1] slew -> %2 RA=%3 DEC=%4").arg(block->id).arg(block->name).arg(block->coordinate.raDeg,0,'f',6).arg(block->coordinate.decDeg,0,'f',6));
+    QString extra;if(block->mode==ObservationMode::MosaicFits)extra=QString(" tile %1/%2").arg(scheduler_.status().currentTileIndex+1).arg(scheduler_.status().currentTileCount);
+    emit logMessage(QString("Scheduler [%1]%2 slew -> %3 RA=%4 DEC=%5").arg(block->id,extra,block->name).arg(target.raDeg,0,'f',6).arg(target.decDeg,0,'f',6));
 }
 void ApplicationController::startCurrentDsoSolve(){
-    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
-    AdaptiveSolveRequest r;r.exposure.exposureSec=block->dso.recenter.solveExposureSec;r.exposure.saveRaw=false;r.useMountHint=true;
-    r.hint.raDeg=block->coordinate.raDeg;r.hint.decDeg=block->coordinate.decDeg;r.hint.searchRadiusDeg=20.0;
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}const auto target=currentImagingTarget(*block);const auto &d=currentImagingSettings(*block);
+    AdaptiveSolveRequest r;r.exposure.exposureSec=d.recenter.solveExposureSec;r.exposure.saveRaw=false;r.useMountHint=true;
+    r.hint.raDeg=target.raDeg;r.hint.decDeg=target.decDeg;r.hint.searchRadiusDeg=20.0;
     QString e;const QString id=startAdaptiveSolve(r,&e);
     if(id.isEmpty()){scheduler_.fail("Scheduler plate solve could not start: "+e);return;}
     scheduler_.setStep("solve",id);
 }
 void ApplicationController::startCurrentDsoAutofocus(){
-    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
-    QString e;const QString id=startAutofocus(block->dso.autofocus.request,&e);
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}const auto &d=currentImagingSettings(*block);
+    QString e;const QString id=startAutofocus(d.autofocus.request,&e);
     if(id.isEmpty()){scheduler_.fail("Scheduler autofocus could not start: "+e);return;}
     scheduler_.setStep("autofocus",id);
 }
 void ApplicationController::startCurrentDsoCapture(){
-    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}
-    ExposureRequest r=block->dso.exposure;r.saveRaw=true;
+    const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("No current observation block");return;}const auto &d=currentImagingSettings(*block);
+    ExposureRequest r=d.exposure;r.saveRaw=true;
     QString e;const QString id=startCapture(r,&e);
     if(id.isEmpty()){scheduler_.fail("Scheduler science exposure could not start: "+e);return;}
     scheduler_.setStep("capture",id);
-    emit logMessage(QString("Scheduler [%1] science frame %2/%3: %4 s%5")
-        .arg(block->id).arg(scheduler_.status().currentBlockCompletedFrames+1).arg(block->dso.frameCount)
-        .arg(r.exposureSec,0,'g',8).arg(block->dso.filter.isEmpty()?QString():QString(" filter=%1 (metadata until filter-wheel executor lands)").arg(block->dso.filter)));
+    int localFrame=scheduler_.status().currentBlockCompletedFrames+1,total=d.frameCount;QString tile;
+    if(block->mode==ObservationMode::MosaicFits){localFrame=(scheduler_.status().currentBlockCompletedFrames%d.frameCount)+1;tile=QString(" tile %1/%2").arg(scheduler_.status().currentTileIndex+1).arg(scheduler_.status().currentTileCount);}
+    emit logMessage(QString("Scheduler [%1]%2 science frame %3/%4: %5 s%6").arg(block->id,tile).arg(localFrame).arg(total)
+        .arg(r.exposureSec,0,'g',8).arg(d.filter.isEmpty()?QString():QString(" filter=%1 (metadata until filter-wheel executor lands)").arg(d.filter)));
 }
 
 void ApplicationController::startCurrentPlanetarySlew(){
@@ -1413,7 +1523,7 @@ void ApplicationController::startCurrentPlanetarySer(){
 
 void ApplicationController::scheduleSessionStep(){
     const auto st=scheduler_.status();if(!st.active)return;
-    if(st.state=="scheduled"||st.currentStep=="waiting-start")return;
+    if(st.state=="scheduled"||st.currentStep=="waiting-start"||st.currentStep=="waiting-block-start")return;
     const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("Observation plan cursor is outside the block list");return;}
     if(st.currentStep=="waiting-camera"){
         // At the actual execution time a plan owns the camera lifecycle. Cancel
@@ -1436,8 +1546,14 @@ void ApplicationController::scheduleSessionStep(){
         QTimer::singleShot(0,this,[this](){scheduleSessionStep();});
         return;
     }
+    if(st.currentStep=="unpark-before-block"){
+        MountStatus ms;QString e;if(!mountStatus(ms,&e)){scheduler_.fail("Could not verify scheduler unpark: "+e);return;}
+        if(ms.parked||ms.slewing){QTimer::singleShot(250,this,[this](){scheduleSessionStep();});return;}
+        scheduler_.setStep("prepare-block");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+    }
     if(st.currentStep=="prepare-block"){
         sessionRecenterAttempt_=0;
+        if(block->autoUnparkBefore){MountStatus ms;QString e;if(mountStatus(ms,&e)&&ms.parked){if(!parkMount(false,&e)){scheduler_.fail("Scheduler could not unpark before block: "+e);return;}scheduler_.setStep("unpark-before-block");QTimer::singleShot(250,this,[this](){scheduleSessionStep();});return;}}
         if(block->mode==ObservationMode::PlanetarySer){planetaryRoi_={};planetaryLastCentroid_={};planetaryMountCalibration_={};startCurrentPlanetarySlew();}
         else startCurrentDsoSlew();
         return;
@@ -1488,7 +1604,7 @@ void ApplicationController::handleSessionOperationUpdate(const QJsonObject&o){
         if(step=="planetary-ser"){
             const auto r=o.value("result").toObject(),fr=r.value("finalRoi").toObject();if(!fr.isEmpty())planetaryRoi_=cv::Rect(fr.value("x").toInt(),fr.value("y").toInt(),fr.value("width").toInt(),fr.value("height").toInt());scheduler_.markFrameCompleted();const auto after=scheduler_.status();
             emit logMessage(QString("Planetary SER completed: %1 (%2 frames), ROI provenance=%3").arg(r.value("serPath").toString()).arg(r.value("frames").toInt()).arg(r.value("roiProvenancePath").toString()));
-            if(after.currentBlockCompletedFrames>=block->planetary.serRuns){scheduler_.advanceBlock();QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}
+            if(after.currentBlockCompletedFrames>=block->planetary.serRuns){completeCurrentObservationBlock();return;}
             scheduler_.setStep("planetary-acquire-pending");const int delay=int(std::lround(block->planetary.pauseSec*1000.0));QTimer::singleShot(std::max(0,delay),this,[this](){scheduleSessionStep();});return;
         }
         return;
@@ -1499,13 +1615,15 @@ void ApplicationController::handleSessionOperationUpdate(const QJsonObject&o){
     }
     if(step=="recenter-slew"){scheduler_.setStep("solve-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}
     if(step=="solve"){
-        const auto result=o.value("result").toObject();EquatorialCoord solved;solved.raDeg=result.value("raDeg").toDouble();solved.decDeg=result.value("decDeg").toDouble();solved.frame=equatorialFrameFromString(result.value("coordinateFrame").toString("J2000"));const auto solvedJ2000=convertEquatorialFrame(solved,EquatorialFrame::J2000);const auto targetJ2000=convertEquatorialFrame(block->coordinate,EquatorialFrame::J2000);const double errorArcmin=60.0*skyAngularSeparationDeg(solvedJ2000,targetJ2000);emit logMessage(QString("Scheduler solve/recenter: block=%1 pointing error=%2 arcmin attempt=%3/%4").arg(block->id).arg(errorArcmin,0,'f',3).arg(sessionRecenterAttempt_).arg(block->dso.recenter.maxAttempts));
-        if(errorArcmin>block->dso.recenter.toleranceArcmin){if(sessionRecenterAttempt_>=block->dso.recenter.maxAttempts){scheduler_.fail(QString("Recenter did not converge: %1 arcmin > %2 arcmin tolerance").arg(errorArcmin,0,'f',3).arg(block->dso.recenter.toleranceArcmin,0,'f',3));return;}QString e;if(!syncMount(solvedJ2000,&e)){scheduler_.fail("Plate-solve Sync failed before recenter: "+e);return;}++sessionRecenterAttempt_;QString e2;const QString id=startMountSlew(targetJ2000,&e2);if(id.isEmpty()){scheduler_.fail("Recenter slew could not start: "+e2);return;}scheduler_.setStep("recenter-slew",id);return;}
+        const auto &d=currentImagingSettings(*block);const auto result=o.value("result").toObject();EquatorialCoord solved;solved.raDeg=result.value("raDeg").toDouble();solved.decDeg=result.value("decDeg").toDouble();solved.frame=equatorialFrameFromString(result.value("coordinateFrame").toString("J2000"));const auto solvedJ2000=convertEquatorialFrame(solved,EquatorialFrame::J2000);const auto targetJ2000=convertEquatorialFrame(currentImagingTarget(*block),EquatorialFrame::J2000);const double errorArcmin=60.0*skyAngularSeparationDeg(solvedJ2000,targetJ2000);emit logMessage(QString("Scheduler solve/recenter: block=%1 pointing error=%2 arcmin attempt=%3/%4").arg(block->id).arg(errorArcmin,0,'f',3).arg(sessionRecenterAttempt_).arg(d.recenter.maxAttempts));
+        if(errorArcmin>d.recenter.toleranceArcmin){if(sessionRecenterAttempt_>=d.recenter.maxAttempts){scheduler_.fail(QString("Recenter did not converge: %1 arcmin > %2 arcmin tolerance").arg(errorArcmin,0,'f',3).arg(d.recenter.toleranceArcmin,0,'f',3));return;}QString e;if(!syncMount(solvedJ2000,&e)){scheduler_.fail("Plate-solve Sync failed before recenter: "+e);return;}++sessionRecenterAttempt_;QString e2;const QString id=startMountSlew(targetJ2000,&e2);if(id.isEmpty()){scheduler_.fail("Recenter slew could not start: "+e2);return;}scheduler_.setStep("recenter-slew",id);return;}
         sessionRecenterAttempt_=0;if(sessionAutofocusDue(*block))scheduler_.setStep("autofocus-pending");else scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
     }
     if(step=="autofocus"){scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}
     if(step=="capture"){
-        scheduler_.markFrameCompleted();const auto after=scheduler_.status();if(after.currentBlockCompletedFrames>=block->dso.frameCount){emit logMessage(QString("Scheduler block completed: %1 (%2 science frame(s))").arg(block->name).arg(after.currentBlockCompletedFrames));scheduler_.advanceBlock();QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}sessionRecenterAttempt_=0;if(sessionRecenterDue(*block))scheduler_.setStep("solve-pending");else if(sessionAutofocusDue(*block))scheduler_.setStep("autofocus-pending");else scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
+        scheduler_.markFrameCompleted();const auto after=scheduler_.status();const int target=currentImagingFrameTarget(*block);const auto &d=currentImagingSettings(*block);if(after.currentBlockCompletedFrames>=target){emit logMessage(QString("Scheduler block completed: %1 (%2 science frame(s))").arg(block->name).arg(after.currentBlockCompletedFrames));completeCurrentObservationBlock();return;}
+        if(block->mode==ObservationMode::MosaicFits&&(after.currentBlockCompletedFrames%d.frameCount)==0){sessionRecenterAttempt_=0;startCurrentDsoSlew();return;}
+        sessionRecenterAttempt_=0;if(sessionRecenterDue(*block))scheduler_.setStep("solve-pending");else if(sessionAutofocusDue(*block))scheduler_.setStep("autofocus-pending");else scheduler_.setStep("capture-pending");QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;
     }
 }
 bool ApplicationController::startOalServer(quint16 hp,bool we,quint16 wp,QString*e){if(!oalServer_)oalServer_=std::make_unique<OalServer>(this);if(!oalServer_->start(hp,e))return false;if(we){if(!oalWsServer_)oalWsServer_=std::make_unique<OalWsServer>(this);if(!oalWsServer_->start(wp,e)){oalServer_->stop();return false;}}settings_.saveServer(true,hp,we,wp);emit logMessage(QString("OAL server listening on %1; WebSocket %2").arg(hp).arg(we?QString::number(wp):"disabled"));return true;}

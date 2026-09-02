@@ -35,6 +35,13 @@ public:
 
     QString nativeSerialPort(const QString &driverId) const;
     void saveNativeSerialPort(const QString &driverId, const QString &port) const;
+
+    ObservationPlan loadObservationPlan() const;
+    void saveObservationPlan(const ObservationPlan &plan) const;
+    bool schedulerArmed() const;
+    void saveSchedulerArmed(bool armed) const;
+    int schedulerNextBlockIndex() const;
+    void saveSchedulerNextBlockIndex(int index) const;
 private:
     DeviceBinding loadBinding(const QString &prefix) const;
     void saveBinding(const QString &prefix, const DeviceBinding &binding) const;

@@ -102,6 +102,16 @@ struct ObserverLocation {
     double elevationM{0.0};
 };
 
+struct PolarMotionLimits {
+    bool enabled{false};
+    // Horizontal safe region used by automated/manual polar-alignment slews.
+    // If minAzDeg > maxAzDeg the interval wraps through north (e.g. 300..60).
+    double minAzDeg{0.0};
+    double maxAzDeg{360.0};
+    double minAltDeg{20.0};
+    double maxAltDeg{85.0};
+};
+
 struct TelescopeProfile {
     QString name{"Default"};
 
@@ -126,6 +136,7 @@ struct TelescopeProfile {
 
     ObserverLocation observer{};
     MountGeometryConfig mount{};
+    PolarMotionLimits polarMotionLimits{};
 
     double focalRatio() const {
         return apertureMm > 0.0 ? focalLengthMm / apertureMm : 0.0;
@@ -334,6 +345,16 @@ struct PolarAlignmentResult {
     QString message;
 };
 
+struct PolarAlignmentRunRequest {
+    // Automatic constrained workflow: solve current field, rotate RA by this
+    // amount between samples, solve again, then estimate the physical RA axis.
+    double raStepDeg{15.0};
+    int sampleCount{3};
+    ExposureRequest exposure{1.0,2,2,0,0,{},false,{}};
+    double searchRadiusDeg{20.0};
+    bool returnToStart{false};
+};
+
 // Legacy session target retained for wire/API compatibility. New scheduler
 // code converts this into an ObservationPlan containing DSO FITS blocks.
 struct SessionTarget {
@@ -344,15 +365,18 @@ struct SessionTarget {
     QString filter;
 };
 
-enum class ObservationMode { DsoFits, PlanetarySer };
+enum class ObservationMode { DsoFits, PlanetarySer, MosaicFits };
 
 inline QString observationModeName(ObservationMode mode) {
-    return mode == ObservationMode::PlanetarySer ? "planetary-ser" : "dso-fits";
+    if (mode == ObservationMode::PlanetarySer) return "planetary-ser";
+    if (mode == ObservationMode::MosaicFits) return "mosaic-fits";
+    return "dso-fits";
 }
 inline ObservationMode observationModeFromString(const QString &text, ObservationMode fallback = ObservationMode::DsoFits) {
     const QString s = text.trimmed().toLower();
     if (s == "dso-fits" || s == "dso" || s == "fits") return ObservationMode::DsoFits;
     if (s == "planetary-ser" || s == "planetary" || s == "ser") return ObservationMode::PlanetarySer;
+    if (s == "mosaic-fits" || s == "mosaic") return ObservationMode::MosaicFits;
     return fallback;
 }
 
@@ -417,20 +441,43 @@ struct PlanetarySerBlock {
     PlanetaryTrackingPolicy tracking{};
 };
 
+struct MosaicFitsBlock {
+    // Centre of the requested mosaic is ObservationBlock::coordinate. Tile FOV
+    // is derived from the active optical profile and main-sensor dimensions.
+    int columns{2};
+    int rows{2};
+    double overlapPercent{15.0};
+    // Rotation of the sensor X axis east of celestial east. Manual until a
+    // rotator/plate-solve orientation feedback is integrated.
+    double rotationDeg{0.0};
+    bool serpentine{true};
+    bool recenterEachTile{true};
+    bool autofocusEachTile{false};
+    DsoFitsBlock tile{};
+};
+
 struct ObservationBlock {
     QString id;
     QString name;
     EquatorialCoord coordinate{};
     ObservationMode mode{ObservationMode::DsoFits};
+    // Invalid means execute as soon as the previous block completes. A valid
+    // UTC value turns this block into an independent calendar event.
+    QDateTime startAtUtc;
+    // Optional inter-block observatory policy. The next block automatically
+    // unparks before its slew when required.
+    bool parkAfter{false};
+    bool autoUnparkBefore{true};
     DsoFitsBlock dso{};
     PlanetarySerBlock planetary{};
+    MosaicFitsBlock mosaic{};
 };
 
 struct ObservationPlan {
     QString id;
     QString name;
-    // Invalid means start immediately. Valid UTC timestamp schedules this
-    // in-memory plan for a future start; durable restart persistence is OAL 1.0.
+    // Deprecated compatibility field from v0.2.10.48. If block 0 has no own
+    // timestamp, this value is migrated to block 0 when the plan is loaded.
     QDateTime startAtUtc;
     std::vector<ObservationBlock> blocks;
 };
@@ -450,6 +497,8 @@ struct SessionStatus {
     QString lastError;
     QString state{"idle"};
     QDateTime scheduledStartUtc;
+    int currentTileIndex{0};
+    int currentTileCount{0};
 
     // v0.2.10.45 and earlier clients used targetIndex/targetCount. Keep mirror
     // fields until the public session API is versioned independently.
@@ -479,7 +528,9 @@ inline ExposureRequest exposureRequestFromJson(const QJsonObject &o, const Expos
 
 inline QJsonObject observationBlockToJson(const ObservationBlock &b) {
     QJsonObject root{{"id",b.id},{"name",b.name},{"raDeg",b.coordinate.raDeg},{"decDeg",b.coordinate.decDeg},
-                     {"coordinateFrame",b.coordinate.frame==EquatorialFrame::JNow?"JNOW":"J2000"},{"mode",observationModeName(b.mode)}};
+                     {"coordinateFrame",b.coordinate.frame==EquatorialFrame::JNow?"JNOW":"J2000"},{"mode",observationModeName(b.mode)},
+                     {"parkAfter",b.parkAfter},{"autoUnparkBefore",b.autoUnparkBefore}};
+    if(b.startAtUtc.isValid()) root["startAtUtc"]=b.startAtUtc.toUTC().toString(Qt::ISODateWithMs);
     if(b.mode==ObservationMode::DsoFits){
         const auto &d=b.dso;
         root["dso"]=QJsonObject{{"exposure",exposureRequestToJson(d.exposure)},{"frameCount",d.frameCount},{"filter",d.filter},
@@ -490,7 +541,7 @@ inline QJsonObject observationBlockToJson(const ObservationBlock &b) {
                                       {"rangeSteps",d.autofocus.request.rangeSteps},{"coarseStep",d.autofocus.request.coarseStep},{"fineStep",d.autofocus.request.fineStep},
                                       {"framesPerPosition",d.autofocus.request.framesPerPosition},{"settleMs",d.autofocus.request.settleMs},
                                       {"exposureSec",d.autofocus.request.exposureSec},{"gain",d.autofocus.request.gain},{"minStars",d.autofocus.request.minStars}}}};
-    }else{
+    }else if(b.mode==ObservationMode::PlanetarySer){
         const auto &p=b.planetary;
         root["planetary"]=QJsonObject{{"serRuns",p.serRuns},{"durationSec",p.durationSec},{"pauseSec",p.pauseSec},{"trackingRate",trackingRateName(p.trackingRate)},
             {"stream",QJsonObject{{"exposureSec",p.stream.exposureSec},{"gain",p.stream.gain},{"offset",p.stream.offset},{"binX",p.stream.binX},{"binY",p.stream.binY},{"targetFps",p.stream.targetFps},{"debayer",p.stream.debayer},{"bayerPattern",bayerPatternName(p.stream.bayerPattern)}}},
@@ -504,6 +555,14 @@ inline QJsonObject observationBlockToJson(const ObservationBlock &b) {
                                      {"autoCalibrateMount",p.tracking.autoCalibrateMount},{"calibrationArcsec",p.tracking.calibrationArcsec},
                                      {"maxMountCorrectionArcsec",p.tracking.maxMountCorrectionArcsec},{"mountSettleMs",p.tracking.mountSettleMs},
                                      {"lostTargetFrames",p.tracking.lostTargetFrames}}}};
+    }else{
+        const auto &m=b.mosaic;
+        const auto &d=m.tile;
+        root["mosaic"]=QJsonObject{{"columns",m.columns},{"rows",m.rows},{"overlapPercent",m.overlapPercent},{"rotationDeg",m.rotationDeg},
+            {"serpentine",m.serpentine},{"recenterEachTile",m.recenterEachTile},{"autofocusEachTile",m.autofocusEachTile},
+            {"tile",QJsonObject{{"exposure",exposureRequestToJson(d.exposure)},{"frameCount",d.frameCount},{"filter",d.filter},
+                {"recenter",QJsonObject{{"beforeFirstFrame",d.recenter.beforeFirstFrame},{"everyNFrames",d.recenter.everyNFrames},{"toleranceArcmin",d.recenter.toleranceArcmin},{"maxAttempts",d.recenter.maxAttempts},{"solveExposureSec",d.recenter.solveExposureSec}}},
+                {"autofocus",QJsonObject{{"beforeFirstFrame",d.autofocus.beforeFirstFrame},{"everyNFrames",d.autofocus.everyNFrames},{"mode",d.autofocus.request.mode==AutofocusMode::Scene?"scene":d.autofocus.request.mode==AutofocusMode::Planet?"planet":d.autofocus.request.mode==AutofocusMode::Bahtinov?"bahtinov":"stars"},{"rangeSteps",d.autofocus.request.rangeSteps},{"coarseStep",d.autofocus.request.coarseStep},{"fineStep",d.autofocus.request.fineStep},{"framesPerPosition",d.autofocus.request.framesPerPosition},{"settleMs",d.autofocus.request.settleMs},{"exposureSec",d.autofocus.request.exposureSec},{"gain",d.autofocus.request.gain},{"minStars",d.autofocus.request.minStars}}}}}};
     }
     return root;
 }
@@ -512,18 +571,25 @@ inline ObservationBlock observationBlockFromJson(const QJsonObject &o) {
     ObservationBlock b;b.id=o.value("id").toString();b.name=o.value("name").toString();
     b.coordinate.raDeg=o.value("raDeg").toDouble();b.coordinate.decDeg=o.value("decDeg").toDouble();
     b.coordinate.frame=o.value("coordinateFrame").toString("J2000").trimmed().toUpper()=="JNOW"?EquatorialFrame::JNow:EquatorialFrame::J2000;
+    const QString blockStart=o.value("startAtUtc").toString();if(!blockStart.isEmpty())b.startAtUtc=QDateTime::fromString(blockStart,Qt::ISODateWithMs).toUTC();
+    b.parkAfter=o.value("parkAfter").toBool(false);b.autoUnparkBefore=o.value("autoUnparkBefore").toBool(true);
     b.mode=observationModeFromString(o.value("mode").toString("dso-fits"));
     if(b.mode==ObservationMode::DsoFits){
         const auto d=o.value("dso").toObject();b.dso.exposure=exposureRequestFromJson(d.value("exposure").toObject(),b.dso.exposure);b.dso.exposure.saveRaw=true;
         b.dso.frameCount=std::max(1,d.value("frameCount").toInt(b.dso.frameCount));b.dso.filter=d.value("filter").toString();
         const auto r=d.value("recenter").toObject();if(!r.isEmpty()){b.dso.recenter.beforeFirstFrame=r.value("beforeFirstFrame").toBool(b.dso.recenter.beforeFirstFrame);b.dso.recenter.everyNFrames=std::max(0,r.value("everyNFrames").toInt(b.dso.recenter.everyNFrames));b.dso.recenter.toleranceArcmin=std::max(0.1,r.value("toleranceArcmin").toDouble(b.dso.recenter.toleranceArcmin));b.dso.recenter.maxAttempts=std::clamp(r.value("maxAttempts").toInt(b.dso.recenter.maxAttempts),0,10);b.dso.recenter.solveExposureSec=std::clamp(r.value("solveExposureSec").toDouble(b.dso.recenter.solveExposureSec),0.001,30.0);}
         const auto a=d.value("autofocus").toObject();if(!a.isEmpty()){b.dso.autofocus.beforeFirstFrame=a.value("beforeFirstFrame").toBool(b.dso.autofocus.beforeFirstFrame);b.dso.autofocus.everyNFrames=std::max(0,a.value("everyNFrames").toInt(b.dso.autofocus.everyNFrames));const QString m=a.value("mode").toString("stars").toLower();b.dso.autofocus.request.mode=m=="planet"?AutofocusMode::Planet:m=="scene"?AutofocusMode::Scene:m=="bahtinov"?AutofocusMode::Bahtinov:AutofocusMode::Stars;b.dso.autofocus.request.rangeSteps=a.value("rangeSteps").toInt(b.dso.autofocus.request.rangeSteps);b.dso.autofocus.request.coarseStep=a.value("coarseStep").toInt(b.dso.autofocus.request.coarseStep);b.dso.autofocus.request.fineStep=a.value("fineStep").toInt(b.dso.autofocus.request.fineStep);b.dso.autofocus.request.framesPerPosition=a.value("framesPerPosition").toInt(b.dso.autofocus.request.framesPerPosition);b.dso.autofocus.request.settleMs=a.value("settleMs").toInt(b.dso.autofocus.request.settleMs);b.dso.autofocus.request.exposureSec=a.value("exposureSec").toDouble(b.dso.autofocus.request.exposureSec);b.dso.autofocus.request.gain=a.value("gain").toInt(b.dso.autofocus.request.gain);b.dso.autofocus.request.minStars=a.value("minStars").toInt(b.dso.autofocus.request.minStars);}
-    }else{
+    }else if(b.mode==ObservationMode::PlanetarySer){
         const auto p=o.value("planetary").toObject();b.planetary.serRuns=std::max(1,p.value("serRuns").toInt(b.planetary.serRuns));b.planetary.durationSec=std::max(0.1,p.value("durationSec").toDouble(b.planetary.durationSec));b.planetary.pauseSec=std::max(0.0,p.value("pauseSec").toDouble(b.planetary.pauseSec));b.planetary.trackingRate=trackingRateFromString(p.value("trackingRate").toString("sidereal"));
         const auto st=p.value("stream").toObject();if(!st.isEmpty()){b.planetary.stream.exposureSec=st.value("exposureSec").toDouble(b.planetary.stream.exposureSec);b.planetary.stream.gain=st.value("gain").toInt(b.planetary.stream.gain);b.planetary.stream.offset=st.value("offset").toInt(b.planetary.stream.offset);b.planetary.stream.binX=st.value("binX").toInt(b.planetary.stream.binX);b.planetary.stream.binY=st.value("binY").toInt(b.planetary.stream.binY);b.planetary.stream.targetFps=st.value("targetFps").toDouble(b.planetary.stream.targetFps);b.planetary.stream.debayer=st.value("debayer").toBool(b.planetary.stream.debayer);b.planetary.stream.bayerPattern=bayerPatternFromString(st.value("bayerPattern").toString("AUTO"));}
         const auto roi=p.value("roi").toObject();b.planetary.roiX=roi.value("x").toInt();b.planetary.roiY=roi.value("y").toInt();b.planetary.roiWidth=roi.value("width").toInt();b.planetary.roiHeight=roi.value("height").toInt();
         const auto a=p.value("autofocus").toObject();if(!a.isEmpty()){b.planetary.autofocus.beforeFirstRun=a.value("beforeFirstRun").toBool(b.planetary.autofocus.beforeFirstRun);b.planetary.autofocus.everyNRuns=std::max(0,a.value("everyNRuns").toInt(b.planetary.autofocus.everyNRuns));b.planetary.autofocus.request.mode=AutofocusMode::Planet;b.planetary.autofocus.request.rangeSteps=a.value("rangeSteps").toInt(b.planetary.autofocus.request.rangeSteps);b.planetary.autofocus.request.coarseStep=a.value("coarseStep").toInt(b.planetary.autofocus.request.coarseStep);b.planetary.autofocus.request.fineStep=a.value("fineStep").toInt(b.planetary.autofocus.request.fineStep);b.planetary.autofocus.request.framesPerPosition=a.value("framesPerPosition").toInt(b.planetary.autofocus.request.framesPerPosition);b.planetary.autofocus.request.settleMs=a.value("settleMs").toInt(b.planetary.autofocus.request.settleMs);b.planetary.autofocus.request.exposureSec=a.value("exposureSec").toDouble(b.planetary.autofocus.request.exposureSec);b.planetary.autofocus.request.gain=a.value("gain").toInt(b.planetary.autofocus.request.gain);}
         const auto tr=p.value("tracking").toObject();if(!tr.isEmpty()){b.planetary.tracking.allowRoiShift=tr.value("allowRoiShift").toBool(b.planetary.tracking.allowRoiShift);b.planetary.tracking.roiShiftThresholdPx=std::max(4,tr.value("roiShiftThresholdPx").toInt(b.planetary.tracking.roiShiftThresholdPx));b.planetary.tracking.mountCorrections=tr.value("mountCorrections").toBool(b.planetary.tracking.mountCorrections);b.planetary.tracking.mountCorrectionThresholdPx=std::max(b.planetary.tracking.roiShiftThresholdPx+4,tr.value("mountCorrectionThresholdPx").toInt(b.planetary.tracking.mountCorrectionThresholdPx));b.planetary.tracking.autoCalibrateMount=tr.value("autoCalibrateMount").toBool(b.planetary.tracking.autoCalibrateMount);b.planetary.tracking.calibrationArcsec=std::max(1.0,tr.value("calibrationArcsec").toDouble(b.planetary.tracking.calibrationArcsec));b.planetary.tracking.maxMountCorrectionArcsec=std::max(1.0,tr.value("maxMountCorrectionArcsec").toDouble(b.planetary.tracking.maxMountCorrectionArcsec));b.planetary.tracking.mountSettleMs=std::max(0,tr.value("mountSettleMs").toInt(b.planetary.tracking.mountSettleMs));b.planetary.tracking.lostTargetFrames=std::max(1,tr.value("lostTargetFrames").toInt(b.planetary.tracking.lostTargetFrames));}
+    }else{
+        const auto m=o.value("mosaic").toObject();b.mosaic.columns=std::clamp(m.value("columns").toInt(b.mosaic.columns),1,100);b.mosaic.rows=std::clamp(m.value("rows").toInt(b.mosaic.rows),1,100);b.mosaic.overlapPercent=std::clamp(m.value("overlapPercent").toDouble(b.mosaic.overlapPercent),0.0,90.0);b.mosaic.rotationDeg=m.value("rotationDeg").toDouble(b.mosaic.rotationDeg);b.mosaic.serpentine=m.value("serpentine").toBool(b.mosaic.serpentine);b.mosaic.recenterEachTile=m.value("recenterEachTile").toBool(b.mosaic.recenterEachTile);b.mosaic.autofocusEachTile=m.value("autofocusEachTile").toBool(b.mosaic.autofocusEachTile);
+        const auto d=m.value("tile").toObject();b.mosaic.tile.exposure=exposureRequestFromJson(d.value("exposure").toObject(),b.mosaic.tile.exposure);b.mosaic.tile.exposure.saveRaw=true;b.mosaic.tile.frameCount=std::max(1,d.value("frameCount").toInt(b.mosaic.tile.frameCount));b.mosaic.tile.filter=d.value("filter").toString();
+        const auto r=d.value("recenter").toObject();if(!r.isEmpty()){b.mosaic.tile.recenter.beforeFirstFrame=r.value("beforeFirstFrame").toBool(b.mosaic.tile.recenter.beforeFirstFrame);b.mosaic.tile.recenter.everyNFrames=std::max(0,r.value("everyNFrames").toInt(b.mosaic.tile.recenter.everyNFrames));b.mosaic.tile.recenter.toleranceArcmin=std::max(0.1,r.value("toleranceArcmin").toDouble(b.mosaic.tile.recenter.toleranceArcmin));b.mosaic.tile.recenter.maxAttempts=std::clamp(r.value("maxAttempts").toInt(b.mosaic.tile.recenter.maxAttempts),0,10);b.mosaic.tile.recenter.solveExposureSec=std::clamp(r.value("solveExposureSec").toDouble(b.mosaic.tile.recenter.solveExposureSec),0.001,30.0);}
+        const auto a=d.value("autofocus").toObject();if(!a.isEmpty()){b.mosaic.tile.autofocus.beforeFirstFrame=a.value("beforeFirstFrame").toBool(b.mosaic.tile.autofocus.beforeFirstFrame);b.mosaic.tile.autofocus.everyNFrames=std::max(0,a.value("everyNFrames").toInt(b.mosaic.tile.autofocus.everyNFrames));const QString am=a.value("mode").toString("stars").toLower();b.mosaic.tile.autofocus.request.mode=am=="planet"?AutofocusMode::Planet:am=="scene"?AutofocusMode::Scene:am=="bahtinov"?AutofocusMode::Bahtinov:AutofocusMode::Stars;b.mosaic.tile.autofocus.request.rangeSteps=a.value("rangeSteps").toInt(b.mosaic.tile.autofocus.request.rangeSteps);b.mosaic.tile.autofocus.request.coarseStep=a.value("coarseStep").toInt(b.mosaic.tile.autofocus.request.coarseStep);b.mosaic.tile.autofocus.request.fineStep=a.value("fineStep").toInt(b.mosaic.tile.autofocus.request.fineStep);b.mosaic.tile.autofocus.request.framesPerPosition=a.value("framesPerPosition").toInt(b.mosaic.tile.autofocus.request.framesPerPosition);b.mosaic.tile.autofocus.request.settleMs=a.value("settleMs").toInt(b.mosaic.tile.autofocus.request.settleMs);b.mosaic.tile.autofocus.request.exposureSec=a.value("exposureSec").toDouble(b.mosaic.tile.autofocus.request.exposureSec);b.mosaic.tile.autofocus.request.gain=a.value("gain").toInt(b.mosaic.tile.autofocus.request.gain);b.mosaic.tile.autofocus.request.minStars=a.value("minStars").toInt(b.mosaic.tile.autofocus.request.minStars);}
     }
     return b;
 }
@@ -539,6 +605,7 @@ inline ObservationPlan observationPlanFromJson(const QJsonObject &o) {
     ObservationPlan p;p.id=o.value("id").toString();p.name=o.value("name").toString("OAL observing plan");
     const QString start=o.value("startAtUtc").toString();if(!start.isEmpty())p.startAtUtc=QDateTime::fromString(start,Qt::ISODateWithMs).toUTC();
     for(const auto &v:o.value("blocks").toArray())if(v.isObject())p.blocks.push_back(observationBlockFromJson(v.toObject()));
+    if(p.startAtUtc.isValid()&&!p.blocks.empty()&&!p.blocks.front().startAtUtc.isValid())p.blocks.front().startAtUtc=p.startAtUtc;
     return p;
 }
 
@@ -554,7 +621,7 @@ inline QJsonObject sessionStatusToJson(const SessionStatus &s) {
     return QJsonObject{{"id",s.id},{"name",s.name},{"active",s.active},{"blockIndex",s.blockIndex},{"blockCount",s.blockCount},
         {"targetIndex",s.targetIndex},{"targetCount",s.targetCount},{"completedFrames",s.completedFrames},{"currentBlockCompletedFrames",s.currentBlockCompletedFrames},
         {"currentBlockId",s.currentBlockId},{"currentBlockName",s.currentBlockName},{"currentStep",s.currentStep},{"currentOperationId",s.currentOperationId},
-        {"lastError",s.lastError},{"state",s.state},{"scheduledStartUtc",s.scheduledStartUtc.isValid()?QJsonValue(s.scheduledStartUtc.toUTC().toString(Qt::ISODateWithMs)):QJsonValue(QJsonValue::Null)}};
+        {"lastError",s.lastError},{"state",s.state},{"currentTileIndex",s.currentTileIndex},{"currentTileCount",s.currentTileCount},{"scheduledStartUtc",s.scheduledStartUtc.isValid()?QJsonValue(s.scheduledStartUtc.toUTC().toString(Qt::ISODateWithMs)):QJsonValue(QJsonValue::Null)}};
 }
 
 inline QJsonObject coordToJson(const EquatorialCoord &c) {

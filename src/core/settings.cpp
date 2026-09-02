@@ -1,4 +1,6 @@
 #include "core/settings.h"
+#include <QJsonDocument>
+#include <algorithm>
 
 namespace oas {
 TelescopeProfile AppSettings::loadProfile() const {
@@ -36,6 +38,11 @@ TelescopeProfile AppSettings::loadProfile() const {
     p.mount.nativeCoordinateModelVersion = settings_.value("mountGeometry/nativeCoordinateModelVersion", p.mount.nativeCoordinateModelVersion).toInt();
     p.mount.preferBackendSite = settings_.value("mountGeometry/preferBackendSite", p.mount.preferBackendSite).toBool();
     p.mount.maxGotoAxisDeltaDeg = settings_.value("mountGeometry/maxGotoAxisDeltaDeg", p.mount.maxGotoAxisDeltaDeg).toDouble();
+    p.polarMotionLimits.enabled = settings_.value("polarMotion/enabled", p.polarMotionLimits.enabled).toBool();
+    p.polarMotionLimits.minAzDeg = settings_.value("polarMotion/minAzDeg", p.polarMotionLimits.minAzDeg).toDouble();
+    p.polarMotionLimits.maxAzDeg = settings_.value("polarMotion/maxAzDeg", p.polarMotionLimits.maxAzDeg).toDouble();
+    p.polarMotionLimits.minAltDeg = settings_.value("polarMotion/minAltDeg", p.polarMotionLimits.minAltDeg).toDouble();
+    p.polarMotionLimits.maxAltDeg = settings_.value("polarMotion/maxAltDeg", p.polarMotionLimits.maxAltDeg).toDouble();
     return p;
 }
 void AppSettings::saveProfile(const TelescopeProfile &p) const {
@@ -72,6 +79,11 @@ void AppSettings::saveProfile(const TelescopeProfile &p) const {
     settings_.setValue("mountGeometry/nativeCoordinateModelVersion", p.mount.nativeCoordinateModelVersion);
     settings_.setValue("mountGeometry/preferBackendSite", p.mount.preferBackendSite);
     settings_.setValue("mountGeometry/maxGotoAxisDeltaDeg", p.mount.maxGotoAxisDeltaDeg);
+    settings_.setValue("polarMotion/enabled", p.polarMotionLimits.enabled);
+    settings_.setValue("polarMotion/minAzDeg", p.polarMotionLimits.minAzDeg);
+    settings_.setValue("polarMotion/maxAzDeg", p.polarMotionLimits.maxAzDeg);
+    settings_.setValue("polarMotion/minAltDeg", p.polarMotionLimits.minAltDeg);
+    settings_.setValue("polarMotion/maxAltDeg", p.polarMotionLimits.maxAltDeg);
 }
 bool AppSettings::oalEnabled() const { return settings_.value("server/enabled", false).toBool(); }
 quint16 AppSettings::oalPort() const { return settings_.value("server/port", 8080).value<quint16>(); }
@@ -119,4 +131,19 @@ void AppSettings::saveNativeSerialPort(const QString &driverId, const QString &p
     if (value.isEmpty()) settings_.remove("nativeSerial/" + key + "/port");
     else settings_.setValue("nativeSerial/" + key + "/port", value);
 }
+ObservationPlan AppSettings::loadObservationPlan() const {
+    const QByteArray raw=settings_.value("scheduler/planJson").toByteArray();
+    if(raw.isEmpty())return {};
+    QJsonParseError pe;const auto doc=QJsonDocument::fromJson(raw,&pe);
+    if(pe.error!=QJsonParseError::NoError||!doc.isObject())return {};
+    return observationPlanFromJson(doc.object());
+}
+void AppSettings::saveObservationPlan(const ObservationPlan &plan) const {
+    settings_.setValue("scheduler/planJson",QJsonDocument(observationPlanToJson(plan)).toJson(QJsonDocument::Compact));
+}
+bool AppSettings::schedulerArmed() const { return settings_.value("scheduler/armed",false).toBool(); }
+void AppSettings::saveSchedulerArmed(bool armed) const { settings_.setValue("scheduler/armed",armed); }
+int AppSettings::schedulerNextBlockIndex() const { return std::max(0,settings_.value("scheduler/nextBlockIndex",0).toInt()); }
+void AppSettings::saveSchedulerNextBlockIndex(int index) const { settings_.setValue("scheduler/nextBlockIndex",std::max(0,index)); }
+
 } // namespace oas

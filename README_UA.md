@@ -1,5 +1,13 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.49 — persistent календар спостережень, мозаїки та опційно обмежений рух Polar Alignment
+
+- Кожен `ObservationBlock` тепер має власний `startAtUtc`, тому один календар node може містити незалежні події на місяці або рік уперед, а не один час старту на весь план.
+- Календар, armed-state і cursor наступного блока зберігаються на node. Restart між блоками продовжує з першого незавершеного блока; restart посеред блока запускає цей блок заново. Resume всередині FITS/SER лишається завданням OAL 1.0.
+- Кожен block має `parkAfter` та `autoUnparkBefore`: телескоп може ставати в Park між віддаленими подіями й автоматично прокидатися перед наступною.
+- Додано `mosaic-fits`: scheduler обчислює центри тайлів із optical profile/FOV головного сенсора, rows/columns, overlap та rotation, проходить їх serpentine і застосовує звичайні DSO slew/solve/recenter/autofocus/FITS policies до кожного тайла.
+- Рух Polar Alignment по RA-offset тепер можна обмежити дозволеною Az/Alt ділянкою. OAL перевіряє весь шлях slew і відхиляє його, якщо будь-яка проміжна точка виходить за safe region.
+
 ## v0.2.10.48 — безпечний Scene AF, збіжна експозиція та lifecycle scheduler
 
 - Етап HIL монтування закрито: native EQDrive, direct SynScan/EQDrive Wi-Fi та Classic ASCOM/EQMOD на тесті 2026-09-02 наводяться однаково правильно з direct-MC coordinate model v9 (`Axis1=+1`, `Axis2=-1`).
@@ -23,7 +31,7 @@
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.48 — безпечний Scene AF, збіжна still auto-exposure, редаговані/відкладені observing plans + HIL-кваліфікований direct-MC v9 mapping**
+**Поточний пакет: v0.2.10.49 — persistent per-block календар, DSO/planetary/mosaic execution, опційно обмежений рух Polar Alignment + HIL-кваліфікований direct-MC v9 mapping**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

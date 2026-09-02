@@ -36,14 +36,16 @@ private:
     QLabel *mountStatus_{}; QLabel *mountSiteTimeStatus_{}; QCheckBox *mountTracking_{}; QComboBox *mountTrackingRate_{}; QCheckBox *mountParked_{}; QSpinBox *mountManualRate_{}; QDoubleSpinBox *mountSiteLat_{}; QDoubleSpinBox *mountSiteLon_{}; QDoubleSpinBox *mountSiteElevation_{}; QDateTimeEdit *mountConversionUtc_{}; QCheckBox *mountUseSystemUtc_{}; QCheckBox *mountPreferBackendSite_{}; QTimer *mountClockTimer_{};
     QSpinBox *focusPosition_{}; QComboBox *focusMode_{}; QSpinBox *focusJogStep_{}; QSpinBox *focusRange_{}; QSpinBox *coarseStep_{}; QSpinBox *fineStep_{}; QSpinBox *focusFrames_{}; QDoubleSpinBox *focusExposure_{}; QSpinBox *focusGain_{}; QSpinBox *focusMinStars_{}; QLabel *focuserStatus_{};
     QPushButton *focusMoveButton_{}; QPushButton *focusHaltButton_{}; QPushButton *autofocusButton_{}; QTimer *focusMotionPollTimer_{}; bool focusTargetDirty_{false}; bool focusTargetInitialized_{false}; bool autofocusBusy_{false}; QString autofocusOperationId_;
-    QDoubleSpinBox *polarStep_{}; QLabel *polarSamples_{}; QLabel *polarResult_{};
+    QDoubleSpinBox *polarStep_{}; QDoubleSpinBox *polarExposure_{}; QSpinBox *polarAutoSamples_{}; QCheckBox *polarReturnToStart_{}; QLabel *polarSamples_{}; QLabel *polarResult_{}; QCheckBox *polarSafeEnabled_{}; QDoubleSpinBox *polarMinAz_{}; QDoubleSpinBox *polarMaxAz_{}; QDoubleSpinBox *polarMinAlt_{}; QDoubleSpinBox *polarMaxAlt_{};
     QListWidget *operationsList_{}; QPushButton *cancelOperationButton_{};
     QLineEdit *targetName_{}; QDoubleSpinBox *targetRa_{}; QDoubleSpinBox *targetDec_{}; QDoubleSpinBox *targetExposure_{}; QSpinBox *targetRepeats_{};
     QCheckBox *targetRecenterBefore_{}; QSpinBox *targetRecenterEvery_{}; QDoubleSpinBox *targetRecenterTolerance_{};
     QCheckBox *targetAutofocusBefore_{}; QSpinBox *targetAutofocusEvery_{};
     QDoubleSpinBox *planetExposure_{}; QSpinBox *planetGain_{}; QDoubleSpinBox *planetFps_{}; QDoubleSpinBox *planetDuration_{}; QSpinBox *planetRuns_{}; QSpinBox *planetRoiW_{}; QSpinBox *planetRoiH_{};
     QCheckBox *planetAutofocusBefore_{}; QSpinBox *planetAutofocusEvery_{}; QCheckBox *planetRoiTracking_{}; QCheckBox *planetMountCorrections_{}; QComboBox *planetTrackingRate_{};
-    QListWidget *targetList_{}; QComboBox *sessionStartMode_{}; QDateTimeEdit *sessionStartAt_{}; std::vector<ObservationBlock> targets_;
+    QSpinBox *mosaicCols_{}; QSpinBox *mosaicRows_{}; QDoubleSpinBox *mosaicOverlap_{}; QDoubleSpinBox *mosaicRotation_{}; QCheckBox *mosaicSerpentine_{}; QCheckBox *mosaicRecenterEach_{}; QCheckBox *mosaicAutofocusEach_{};
+    QComboBox *blockStartMode_{}; QDateTimeEdit *blockStartAt_{}; QCheckBox *blockParkAfter_{};
+    QListWidget *targetList_{}; std::vector<ObservationBlock> targets_;
     QCheckBox *serverEnabled_{}; QSpinBox *serverPort_{}; QCheckBox *wsEnabled_{}; QSpinBox *wsPort_{};
     QCheckBox *stellariumEnabled_{}; QSpinBox *stellariumPort_{};
     QLineEdit *opticalDesign_{}; QDoubleSpinBox *aperture_{}; QDoubleSpinBox *obstruction_{};

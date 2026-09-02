@@ -1,5 +1,13 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.49 — persistent observing calendar, mosaics and optional polar-motion safety
+
+- Every `ObservationBlock` can now carry its own `startAtUtc`, so a single node calendar can schedule independent astronomical events months or a year ahead instead of applying one start time to an entire plan.
+- The calendar, armed state and next-block cursor are persisted on the node. A restart between blocks resumes from the first unfinished block; a restart inside a block restarts that block from its beginning. Frame/SER mid-block checkpoint resume remains an OAL 1.0 item.
+- Each block has `parkAfter` and `autoUnparkBefore`, allowing the telescope to return to Park between distant events and wake for the next scheduled block.
+- Added `mosaic-fits`: the scheduler derives tile centers from the optical profile/main-sensor field of view, grid rows/columns, overlap and rotation, traverses tiles serpentine, and reuses normal DSO slew/solve/recenter/autofocus/FITS policies per tile.
+- Polar Alignment manual/guided RA-offset motion can now be constrained to a configured Az/Alt safe region. OAL samples the complete requested slew path and rejects motion if any intermediate point leaves the allowed sky region.
+
 ## v0.2.10.48 — safe scene AF, convergent exposure and scheduler lifecycle
 
 - Mount qualification milestone: native EQDrive, direct SynScan/EQDrive Wi-Fi and Classic ASCOM/EQMOD now point identically on the 2026-09-02 HIL with direct-MC coordinate model v9 (`Axis1=+1`, `Axis2=-1`).
@@ -23,7 +31,7 @@
 - QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
 - Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
 
-**Current package: v0.2.10.48 — safe scene autofocus, convergent still auto-exposure, editable/scheduled observing plans + HIL-qualified direct-MC v9 mapping**
+**Current package: v0.2.10.49 — persistent per-block observing calendar, DSO/planetary/mosaic execution, optional constrained polar motion + HIL-qualified direct-MC v9 mapping**
 
 ## v0.2.10.46 — ObservationPlan and supervised DSO executor
 

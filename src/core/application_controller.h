@@ -100,9 +100,11 @@ public:
     bool addPolarSample(QString *error=nullptr) override;
     bool slewPolarRaOffset(double deltaDeg,QString *error=nullptr) override;
     PolarAlignmentResult estimatePolarAlignment() override;
+    QString startPolarAlignment(const PolarAlignmentRunRequest &request, QString *error = nullptr) override;
     int polarSampleCount() const{return int(polarSamples_.size());}
 
     bool setObservationPlan(const ObservationPlan &plan,QString *error=nullptr) override;
+    ObservationPlan observationPlan() const override{return scheduler_.plan();}
     bool setSessionPlan(const QString &name,const std::vector<SessionTarget> &targets,
                         QString *error=nullptr) override;
     bool startSession(QString *error=nullptr) override;
@@ -150,6 +152,9 @@ private:
     bool nativeDriverHasCachedDevice(const QString &driverId) const;
     void scheduleSessionStep();
     void armScheduledSessionStart(const QString &sessionId);
+    void continueSessionAfterBlockAdvance();
+    void completeCurrentObservationBlock();
+    void pollInterBlockPark();
     void handleSessionOperationUpdate(const QJsonObject &operation);
     void startCurrentDsoSlew();
     void startCurrentDsoSolve();
@@ -163,6 +168,9 @@ private:
     bool planetaryAutofocusDue(const ObservationBlock &block) const;
     bool sessionRecenterDue(const ObservationBlock &block) const;
     bool sessionAutofocusDue(const ObservationBlock &block) const;
+    EquatorialCoord currentImagingTarget(const ObservationBlock &block) const;
+    const DsoFitsBlock &currentImagingSettings(const ObservationBlock &block) const;
+    int currentImagingFrameTarget(const ObservationBlock &block) const;
     static QImage toQImage(const cv::Mat &image);
     void emitState();
     std::shared_ptr<OalDriverPluginLoader> driverLoader_;
