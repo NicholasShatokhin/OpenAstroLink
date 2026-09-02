@@ -1,4 +1,15 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.47
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.48
+
+## v0.2.10.48
+
+- Package: `0.2.10.48-safe-af-exposure-scheduler-lifecycle`
+- Core version: `0.2.10.48`
+- HIL milestone: native EQDrive, direct SynScan/EQDrive Wi-Fi and Classic ASCOM/EQMOD now point consistently on the real mount with direct-MC coordinate model v9 (`Axis1=+1`, `Axis2=-1`).
+- Scene autofocus now meters and freezes a dedicated AF exposure, probes both directions from the starting focus, brackets/refines a local contrast peak, and transactionally restores the starting position on flat/failed/cancelled searches.
+- Remote 16-bit preview no longer applies a second per-frame min/max stretch; display auto-stretch also no longer converts clipped/flat white frames into black previews.
+- Still histogram auto-exposure has an explicit convergence/LOCKED state, retains the best exposure and only reacquires after a persistent scene change; Live/AF frames do not mutate the still controller.
+- Scheduler autonomous acquisition preflights and finalizes interactive Live View before waiting for the camera lock; GUI supports block edit/delete/clear/reorder, current J2000 mount-pointing fill, Start now and future in-memory UTC start.
+- Future scheduling is still non-durable across node restart; durable scheduler recovery, weather/roof safety, meridian recovery and unattended hardening remain OAL 1.0 work.
 
 ## v0.2.10.47
 

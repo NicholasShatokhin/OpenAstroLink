@@ -1,7 +1,7 @@
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 checks={
- 'version':('CMakeLists.txt','VERSION 0.2.10.47'),
+ 'version':('CMakeLists.txt','VERSION 0.2.10.48'),
  'home config':('src/core/astro_types.h','autoHomeSync'),
  'home tolerance':('src/core/astro_types.h','homeToleranceDeg'),
  'home model':('src/core/mount_geometry.cpp','MountGeometryModel::syncHome'),

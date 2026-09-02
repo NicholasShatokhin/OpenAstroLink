@@ -2,7 +2,12 @@
 
 **Canonical language:** English  
 **Target:** staged delivery from the first supervised beta through OAL 1.0  
-**Implementation status:** v0.2.10.47 provides a mixed-mode, non-durable node executor. DSO blocks execute `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks now execute `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, with fixed-size ROI tracking, `.roi.jsonl` sensor-origin provenance and an optional slow mount-recentering loop calibrated from measured RA/DEC image response. `SessionTarget` remains a legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery and unattended OAL 1.0 hardening remain planned.
+**Implementation status:** v0.2.10.48 provides a mixed-mode, non-durable node executor. DSO blocks execute `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks now execute `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, with fixed-size ROI tracking, `.roi.jsonl` sensor-origin provenance and an optional slow mount-recentering loop calibrated from measured RA/DEC image response. `SessionTarget` remains a legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery and unattended OAL 1.0 hardening remain planned.
+
+### v0.2.10.48 scheduler lifecycle and editing
+
+The supervised scheduler now supports immediate or future in-memory start, editing/deleting/reordering plan blocks in the GUI, copying the mount's current J2000 pointing into a block, and a `waiting-camera` preflight. If interactive Live View owns the main-camera lock when a plan starts, the node cancels/finalizes Live View first and begins autonomous acquisition only after the camera resource is free. This prevents a queued science exposure from appearing to hang behind a continuous preview.
+
 
 ## 1. Goals
 
@@ -17,7 +22,7 @@ A plan may mix both families in one night.
 
 ## 2. Current implementation boundary
 
-From v0.2.10.47, the node owns one `ObservationPlan` / `ObservationBlock` state machine for both DSO and planetary acquisition. All long steps execute asynchronously through the existing `OperationManager` and reuse the same hardware resource locks as interactive commands. The DSO path is:
+From v0.2.10.48, the node owns one `ObservationPlan` / `ObservationBlock` state machine for both DSO and planetary acquisition. All long steps execute asynchronously through the existing `OperationManager` and reuse the same hardware resource locks as interactive commands. The DSO path is:
 
 ```text
 PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic corrections] -> next frame/block
@@ -166,7 +171,7 @@ Required parameters include:
 
 ## 8. Planetary ROI and automatic centering
 
-**v0.2.10.47 implementation:** full-frame bright-object detection, hardware ROI start, fixed-size ROI shifts during SER, ROI provenance, and optional two-axis calibrated mount micro-slew correction are implemented. The mount loop is disabled by default because it requires HIL qualification per backend; ROI-only tracking is the default.
+**v0.2.10.48 implementation:** full-frame bright-object detection, hardware ROI start, fixed-size ROI shifts during SER, ROI provenance, and optional two-axis calibrated mount micro-slew correction are implemented. The mount loop is disabled by default because it requires HIL qualification per backend; ROI-only tracking is the default.
 
 The scheduler shall support two complementary centering loops.
 

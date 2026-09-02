@@ -29,7 +29,7 @@ private:
     bool liveViewBusy_{false}; QString liveViewOperationId_; int finderWizardStep_{0};
     QDoubleSpinBox *exposure_{}; QComboBox *solverBackend_{}; QLineEdit *catalogPath_{}; QLineEdit *modelPath_{}; QSpinBox *gain_{}; QDoubleSpinBox *hintRa_{}; QDoubleSpinBox *hintDec_{}; QDoubleSpinBox *hintRadius_{};
     QSpinBox *solveBin_{}; QSpinBox *solveStackFrames_{}; QSpinBox *solveMinStars_{}; QDoubleSpinBox *solveBaseExposure_{}; QDoubleSpinBox *solveMaxExposure_{};
-    QCheckBox *saveScience_{}; QCheckBox *histogramEnabled_{}; QCheckBox *histogramAutoExposure_{}; QLabel *histogramView_{}; QLabel *histogramStats_{}; QDoubleSpinBox *histogramTarget_{}; QPushButton *histogramApplyButton_{}; double histogramSuggestedExposure_{0.0};
+    QCheckBox *saveScience_{}; QCheckBox *histogramEnabled_{}; QCheckBox *histogramAutoExposure_{}; QLabel *histogramView_{}; QLabel *histogramStats_{}; QDoubleSpinBox *histogramTarget_{}; QPushButton *histogramApplyButton_{}; double histogramSuggestedExposure_{0.0}; double histogramAutoBestExposure_{0.0}; double histogramAutoBestObjective_{1.0e9}; double histogramAutoPreviousSignedError_{0.0}; bool histogramAutoHavePrevious_{false}; bool histogramAutoConverged_{false}; int histogramAutoOutOfBandFrames_{0};
     QPushButton *captureButton_{}; QPushButton *captureSolveButton_{}; QPushButton *solveButton_{}; QPushButton *adaptiveSolveButton_{}; QPushButton *motionButton_{}; QTabWidget *tabs_{}; bool captureBusy_{false}; bool captureSolveRequested_{false}; QString captureOperationId_; QString pendingSolveFrameId_; bool adaptiveSolveBusy_{false}; QString adaptiveSolveOperationId_;
     QDoubleSpinBox *mountRa_{}; QDoubleSpinBox *mountDec_{}; QComboBox *mountFrame_{};
     QDoubleSpinBox *mountJNowRa_{}; QDoubleSpinBox *mountJNowDec_{}; QDoubleSpinBox *mountAz_{}; QDoubleSpinBox *mountAlt_{}; QDoubleSpinBox *mountGalL_{}; QDoubleSpinBox *mountGalB_{}; QLabel *mountCoordEpoch_{}; bool mountCoordinateSyncing_{false};
@@ -43,7 +43,7 @@ private:
     QCheckBox *targetAutofocusBefore_{}; QSpinBox *targetAutofocusEvery_{};
     QDoubleSpinBox *planetExposure_{}; QSpinBox *planetGain_{}; QDoubleSpinBox *planetFps_{}; QDoubleSpinBox *planetDuration_{}; QSpinBox *planetRuns_{}; QSpinBox *planetRoiW_{}; QSpinBox *planetRoiH_{};
     QCheckBox *planetAutofocusBefore_{}; QSpinBox *planetAutofocusEvery_{}; QCheckBox *planetRoiTracking_{}; QCheckBox *planetMountCorrections_{}; QComboBox *planetTrackingRate_{};
-    QListWidget *targetList_{}; std::vector<ObservationBlock> targets_;
+    QListWidget *targetList_{}; QComboBox *sessionStartMode_{}; QDateTimeEdit *sessionStartAt_{}; std::vector<ObservationBlock> targets_;
     QCheckBox *serverEnabled_{}; QSpinBox *serverPort_{}; QCheckBox *wsEnabled_{}; QSpinBox *wsPort_{};
     QCheckBox *stellariumEnabled_{}; QSpinBox *stellariumPort_{};
     QLineEdit *opticalDesign_{}; QDoubleSpinBox *aperture_{}; QDoubleSpinBox *obstruction_{};

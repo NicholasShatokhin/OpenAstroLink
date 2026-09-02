@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.47
+  version: 0.2.10.48
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -481,13 +481,17 @@ components:
       type: object
       required: [name]
       description: >-
-        v0.2.10.47 accepts mixed DSO FITS/RAW and autonomous planetary SER
+        v0.2.10.48 accepts mixed DSO FITS/RAW and autonomous planetary SER
         ObservationPlan `blocks`. Legacy `targets` remains accepted and is converted
         to DSO FITS blocks. At least
         one of `blocks` or `targets` must contain an item.
       properties:
         id: { type: string }
         name: { type: string }
+        startAtUtc:
+          type: string
+          format: date-time
+          description: Optional future UTC start. Omit for immediate start. Scheduling is in-memory in v0.2.10.48; durable restart/resume is planned for OAL 1.0.
         blocks:
           type: array
           items: { $ref: '#/components/schemas/ObservationBlock' }

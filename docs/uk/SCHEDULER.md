@@ -2,7 +2,12 @@
 
 **Канонічна мова:** англійська; цей файл є українським дзеркалом.  
 **Ціль:** поетапна реалізація від першої supervised beta до OAL 1.0.  
-**Стан реалізації:** у v0.2.10.47 node має mixed-mode non-durable executor. DSO blocks виконують `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks уже виконують `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, із fixed-size ROI tracking, `.roi.jsonl` provenance координат сенсора та опційним повільним mount recentering, який калібрується за реальним RA/DEC image response. `SessionTarget` лишився legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery та hardening до unattended OAL 1.0 ще заплановані.
+**Стан реалізації:** у v0.2.10.48 node має mixed-mode non-durable executor. DSO blocks виконують `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`. Planetary blocks уже виконують `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, із fixed-size ROI tracking, `.roi.jsonl` provenance координат сенсора та опційним повільним mount recentering, який калібрується за реальним RA/DEC image response. `SessionTarget` лишився legacy DSO compatibility wrapper. Durable checkpoints/restart, weather/roof safety, meridian recovery та hardening до unattended OAL 1.0 ще заплановані.
+
+### v0.2.10.48 — життєвий цикл та редагування scheduler
+
+Supervised scheduler тепер підтримує негайний або відкладений у пам'яті старт, редагування/видалення/перестановку блоків у GUI, копіювання поточного J2000-напрямку монтування в блок і preflight `waiting-camera`. Якщо при старті плану main-camera lock утримує інтерактивний Live View, node спочатку скасовує/фіналізує Live View і лише після звільнення камери починає автономну зйомку. Це прибирає ситуацію, коли science exposure виглядає завислою, хоча насправді стоїть у черзі за безперервним preview.
+
 
 ## 1. Мета
 
@@ -17,7 +22,7 @@ Scheduler OpenAstroLink має бути не таймером і не прост
 
 ## 2. Поточна межа реалізації
 
-Починаючи з v0.2.10.47, node має одну `ObservationPlan` / `ObservationBlock` state machine для DSO та planetary acquisition. Усі довгі кроки виконуються асинхронно через `OperationManager` і використовують ті самі resource locks, що й інтерактивні команди. DSO шлях:
+Починаючи з v0.2.10.48, node має одну `ObservationPlan` / `ObservationBlock` state machine для DSO та planetary acquisition. Усі довгі кроки виконуються асинхронно через `OperationManager` і використовують ті самі resource locks, що й інтерактивні команди. DSO шлях:
 
 ```text
 PREPARE_BLOCK -> SLEW -> SOLVE/RECENTER -> AUTOFOCUS -> CAPTURE -> [periodic corrections] -> next frame/block
@@ -155,7 +160,7 @@ Planetary block має бути окремим scheduler operation, а не ем
 
 ## 8. ROI та автоматичне центрування планети
 
-**Реалізація v0.2.10.47:** full-frame bright-object detection, старт hardware ROI, fixed-size ROI shifts під час SER, ROI provenance та опційна двовісно калібрована mount micro-slew correction уже реалізовані. Mount loop за замовчуванням вимкнений до HIL-кваліфікації конкретного backend; ROI-only tracking є стандартним режимом.
+**Реалізація v0.2.10.48:** full-frame bright-object detection, старт hardware ROI, fixed-size ROI shifts під час SER, ROI provenance та опційна двовісно калібрована mount micro-slew correction уже реалізовані. Mount loop за замовчуванням вимкнений до HIL-кваліфікації конкретного backend; ROI-only tracking є стандартним режимом.
 
 ### 8.1 ROI tracking
 

@@ -64,15 +64,26 @@ bool Scheduler::start() {
     if (plan_.blocks.empty() || status_.active) return false;
     status_.id = "session-" + QDateTime::currentDateTimeUtc().toString("yyyyMMddTHHmmsszzz");
     status_.active = true;
-    status_.state = "running";
     status_.blockIndex = 0;
     status_.targetIndex = 0;
     status_.completedFrames = 0;
     status_.currentBlockCompletedFrames = 0;
     status_.currentOperationId.clear();
     status_.lastError.clear();
-    status_.currentStep = "prepare-block";
+    status_.scheduledStartUtc = plan_.startAtUtc.isValid() ? plan_.startAtUtc.toUTC() : QDateTime{};
+    const bool future = status_.scheduledStartUtc.isValid() && status_.scheduledStartUtc > QDateTime::currentDateTimeUtc().addMSecs(250);
+    if(!future)status_.scheduledStartUtc={};
+    status_.state = future ? "scheduled" : "running";
+    status_.currentStep = future ? "waiting-start" : "waiting-camera";
     refreshCurrentBlockFields();
+    publish();
+    return true;
+}
+
+bool Scheduler::beginScheduled() {
+    if (!status_.active || status_.state != "scheduled") return false;
+    status_.state = "running";
+    status_.currentStep = "waiting-camera";
     publish();
     return true;
 }
@@ -82,6 +93,7 @@ void Scheduler::stop(const QString &reason) {
     status_.state = "stopped";
     status_.currentStep = "stopped";
     status_.currentOperationId.clear();
+    status_.scheduledStartUtc = {};
     if (!reason.isEmpty()) status_.lastError = reason;
     publish();
 }
@@ -91,6 +103,7 @@ void Scheduler::fail(const QString &message) {
     status_.state = "failed";
     status_.currentStep = "failed";
     status_.currentOperationId.clear();
+    status_.scheduledStartUtc = {};
     status_.lastError = message;
     publish();
 }

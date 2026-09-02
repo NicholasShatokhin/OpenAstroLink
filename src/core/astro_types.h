@@ -429,6 +429,9 @@ struct ObservationBlock {
 struct ObservationPlan {
     QString id;
     QString name;
+    // Invalid means start immediately. Valid UTC timestamp schedules this
+    // in-memory plan for a future start; durable restart persistence is OAL 1.0.
+    QDateTime startAtUtc;
     std::vector<ObservationBlock> blocks;
 };
 
@@ -446,6 +449,7 @@ struct SessionStatus {
     QString currentOperationId;
     QString lastError;
     QString state{"idle"};
+    QDateTime scheduledStartUtc;
 
     // v0.2.10.45 and earlier clients used targetIndex/targetCount. Keep mirror
     // fields until the public session API is versioned independently.
@@ -526,11 +530,14 @@ inline ObservationBlock observationBlockFromJson(const QJsonObject &o) {
 
 inline QJsonObject observationPlanToJson(const ObservationPlan &p) {
     QJsonArray blocks;for(const auto &b:p.blocks)blocks.append(observationBlockToJson(b));
-    return QJsonObject{{"id",p.id},{"name",p.name},{"blocks",blocks}};
+    QJsonObject out{{"id",p.id},{"name",p.name},{"blocks",blocks}};
+    if(p.startAtUtc.isValid())out["startAtUtc"]=p.startAtUtc.toUTC().toString(Qt::ISODateWithMs);
+    return out;
 }
 
 inline ObservationPlan observationPlanFromJson(const QJsonObject &o) {
     ObservationPlan p;p.id=o.value("id").toString();p.name=o.value("name").toString("OAL observing plan");
+    const QString start=o.value("startAtUtc").toString();if(!start.isEmpty())p.startAtUtc=QDateTime::fromString(start,Qt::ISODateWithMs).toUTC();
     for(const auto &v:o.value("blocks").toArray())if(v.isObject())p.blocks.push_back(observationBlockFromJson(v.toObject()));
     return p;
 }
@@ -547,7 +554,7 @@ inline QJsonObject sessionStatusToJson(const SessionStatus &s) {
     return QJsonObject{{"id",s.id},{"name",s.name},{"active",s.active},{"blockIndex",s.blockIndex},{"blockCount",s.blockCount},
         {"targetIndex",s.targetIndex},{"targetCount",s.targetCount},{"completedFrames",s.completedFrames},{"currentBlockCompletedFrames",s.currentBlockCompletedFrames},
         {"currentBlockId",s.currentBlockId},{"currentBlockName",s.currentBlockName},{"currentStep",s.currentStep},{"currentOperationId",s.currentOperationId},
-        {"lastError",s.lastError},{"state",s.state}};
+        {"lastError",s.lastError},{"state",s.state},{"scheduledStartUtc",s.scheduledStartUtc.isValid()?QJsonValue(s.scheduledStartUtc.toUTC().toString(Qt::ISODateWithMs)):QJsonValue(QJsonValue::Null)}};
 }
 
 inline QJsonObject coordToJson(const EquatorialCoord &c) {

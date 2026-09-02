@@ -1,4 +1,11 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.47
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.48
+
+## v0.2.10.48 HIL follow-up автофокуса / експозиції / scheduler
+
+- ✅ Mount milestone: native EQDrive, direct SynScan/EQDrive Wi-Fi та Classic ASCOM/EQMOD тепер HIL-підтверджено однаково правильно наводять те саме реальне монтування з coordinate model v9.
+- 🟡 Scene autofocus перероблено після денного HIL: він окремо підбирає й фіксує AF exposure, пробує обидва напрямки фокуса, bracket/refine локальний максимум контрасту та повертається у стартову позицію при flat/failed/cancelled пошуку. Нова поведінка ще потребує convergence HIL на реальній сцені.
+- 🟡 Still auto-exposure тепер зберігає абсолютну 16-bit sensor scale по всьому remote path, фіксує результат після входу в target band і повторно шукає експозицію лише після стійкої зміни сцени. Фінальний convergence HIL ще потрібен.
+- 🟡 Scheduler перед автономною зйомкою завершує interactive Live View, підтримує edit/delete/reorder/current-pointing fill та immediate/future in-memory UTC start. Durable restart/resume лишається роботою OAL 1.0.
 
 ## v0.2.10.47 build-fix 3 — перерахунок direct-MC дзеркальності схід/захід
 
@@ -72,7 +79,7 @@
 | Per-device disconnect | ✅ | Main/guide camera, mount, focuser незалежні |
 | HTTP API | ✅ | `/api/v1` |
 | WebSocket events | 🟡 | Є, але sequence/replay contract ще відсутній |
-| Stellarium bridge | ✅ базовий HIL | Stellarium GOTO підтверджено через node та Classic ASCOM/EQMOD; parity native mount ще кваліфікується |
+| Stellarium bridge | ✅ HIL | Stellarium GOTO і live mount position підтверджені; native EQDrive, direct SynScan/EQDrive Wi-Fi та Classic ASCOM/EQMOD тепер однаково правильно наводять реальне монтування. |
 
 ## Operations
 
@@ -92,13 +99,13 @@
 
 | Driver | Стан | Примітка |
 |---|---|---|
-| QHY | 🟡 активний HIL | QHY5III462C discovery/connect/single capture підтверджені; користувацькі кадри зберігаються у FITS. У v0.2.10.34 Finder Live View переведено на native QHYCCD continuous stream, а health-probe виконується лише в idle та вимагає три послідовні помилки перед disconnect. Наступний Windows HIL: Live→Stop→Capture і повторний reconnect |
-| Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
+| QHY | ✅ core HIL / 🟡 workflow hardening | QHY5III462C discovery/connect, повторні FITS, native Live View, Live→Stop→Capture та SER запис підтверджені HIL. v0.2.10.48 виправляє remote 16-bit preview scale і збіжність still auto-exposure; новий lock/reacquire ще треба фінально перевірити HIL. |
+| Canon EOS | ✅ базовий HIL / 🟡 regression | EOS 550D EDSDK capture і передавання CR2 уже підтверджені HIL; для актуального релізу ще потрібні regression, довгий Bulb та hotplug/reconnect. |
 | ZWO ASI | ✅ реалізовано / 🟡 HIL pending | Native ASI SDK і multi-camera discovery реалізовані; реальної ZWO camera ще не кваліфіковано |
 | ZWO EAF | ✅ реалізовано / 🟡 HIL pending | Native EAF SDK реалізований; реальний ZWO EAF ще не кваліфіковано |
 | Gemini EAF | ✅ базовий HIL | Windows native discovery/connection, прямий рух і рух під час autofocus підтверджені; ще потрібні long-run/reconnect/limits тести |
 | Sky-Watcher/SynScan | ✅ базовий direct Wi-Fi HIL | `synscan-wifi` UDP/11880 підключився і фізично рухав mount; `synscan-app` лишається compatibility path через SynScan Pro/App UDP/11881 |
-| EQDrive native | ✅ базовий HIL / 🟡 geometry | `oal.eqdrive` знайшов і рухав реальний контролер; v0.2.10.25 переводить raw axes через Core GEM/fork/Alt-Az geometry layer та mechanical Park; long-slew/pier-flip HIL ще потрібен |
+| EQDrive native | ✅ HIL | Direct-MC coordinate model v9 (`Axis1=+1`, `Axis2=-1`) HIL-кваліфікований проти Classic ASCOM/EQMOD; native serial і direct Wi-Fi тепер наводять однаково. Meridian-flip/limit automation лишається майбутнім hardening. |
 | INDI | ✅ | Optional compatibility client |
 | Alpaca | ✅ | Compatibility |
 | LX200 | ✅ | Minimal compatibility |
@@ -113,7 +120,7 @@
 | Preview | ✅ |
 | Native frame publication | ✅ |
 | Durable FITS/RAW store | ⏳ |
-| Planetary SER pipeline | ⏳ |
+| Planetary SER pipeline | 🟡 реалізовано / частковий HIL | Native SER + metadata sidecar підтверджені HIL. Autonomous full-frame acquisition, hardware ROI tracking і `.roi.jsonl` provenance реалізовані; реальний autonomous planetary tracking та drop/jitter accounting ще потребують HIL/hardening. |
 | ASTAP | 🟡 adapter є, real-sky HIL pending |
 | Coordinate frames | ✅ foundation: J2000 canonical; JNow/of-date input via precession; full apparent/topocentric corrections ще не реалізовані |
 | Adaptive urban solve | 🟡 короткі експозиції + оцінка якості + background removal + registration/stack + mount hint + retry реалізовані; потрібен HIL у міському небі |
@@ -122,7 +129,7 @@
 | Polar math | ✅ |
 | Automatic polar wizard | 🟡 orchestration/HIL pending |
 | Guiding | 🟡 basic API, production loop pending |
-| Durable scheduler | 🟡 mixed executor | v0.2.10.47 виконує DSO FITS/RAW і planetary SER blocks; planetary tracking/mount correction потребують HIL, durable restart/recovery ще попереду |
+| Durable scheduler | 🟡 supervised mixed executor | v0.2.10.48 виконує DSO FITS/RAW і planetary SER blocks, перед acquisition завершує interactive Live View, підтримує edit/delete/reorder/current-pointing fill та immediate/future in-memory start. Durable restart/recovery й unattended safety ще попереду. |
 
 ## Mount geometry foundation — v0.2.10.25
 

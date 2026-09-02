@@ -1,5 +1,13 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.48 — safe scene AF, convergent exposure and scheduler lifecycle
+
+- Mount qualification milestone: native EQDrive, direct SynScan/EQDrive Wi-Fi and Classic ASCOM/EQMOD now point identically on the 2026-09-02 HIL with direct-MC coordinate model v9 (`Axis1=+1`, `Axis2=-1`).
+- Scene autofocus now meters its own exposure, uses a local contrast-detect search that probes both directions and brackets a peak, and **restores the starting focuser position on unreliable/failed focus** instead of leaving the telescope at the end of a blind sweep.
+- Remote 16-bit previews preserve the same fixed sensor scale as the node, fixing saturated AF frames that could render black and stopping remote histogram measurements from losing absolute exposure information. Histogram Auto now has an explicit convergence/lock state and only unlocks after a persistent illumination change.
+- Scheduler start has a camera-resource preflight: an active interactive Live View is stopped/finalized before autonomous capture. The GUI can update, delete, clear and reorder blocks, copy the current telescope pointing into a target, and start immediately or at a selected date/time. Future scheduling is in-memory; durable restart/resume remains OAL 1.0 work.
+
+
 ## v0.2.10.47 build-fix 3 — direct-MC DEC/polar-distance mirror correction
 
 - Follow-up HIL on 2026-09-02 showed an exact east/west sky mirror even after the Axis1 hypothesis in build-fix 2. Recomputing the recorded target from raw encoder deltas under all four axis-sign mappings proves that Axis1 inversion cannot create that mirror; the DEC/polar-distance mapping can.
@@ -15,7 +23,7 @@
 - QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
 - Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
 
-**Current package: v0.2.10.47 build-fix 3 — mixed DSO / planetary scheduler executor + direct-MC v9 mapping**
+**Current package: v0.2.10.48 — safe scene autofocus, convergent still auto-exposure, editable/scheduled observing plans + HIL-qualified direct-MC v9 mapping**
 
 ## v0.2.10.46 — ObservationPlan and supervised DSO executor
 

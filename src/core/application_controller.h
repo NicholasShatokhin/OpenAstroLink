@@ -149,6 +149,7 @@ private:
     void scheduleCanonHotplugRediscovery(quint64 generation);
     bool nativeDriverHasCachedDevice(const QString &driverId) const;
     void scheduleSessionStep();
+    void armScheduledSessionStart(const QString &sessionId);
     void handleSessionOperationUpdate(const QJsonObject &operation);
     void startCurrentDsoSlew();
     void startCurrentDsoSolve();

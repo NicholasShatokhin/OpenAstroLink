@@ -1,4 +1,11 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.47
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.48
+
+## v0.2.10.48 autofocus / exposure / scheduler HIL follow-up
+
+- ✅ Mount milestone: native EQDrive, direct SynScan/EQDrive Wi-Fi and Classic ASCOM/EQMOD are now HIL-confirmed to point consistently on the same real hardware with coordinate model v9.
+- 🟡 Scene autofocus was redesigned after daylight HIL: it meters a fixed AF exposure, probes both focus directions, brackets/refines a local contrast peak, and rolls back to the starting focuser position on flat/failed/cancelled searches. The new behaviour still needs real-scene convergence HIL.
+- 🟡 Still auto-exposure now preserves absolute 16-bit sensor scale end-to-end, locks once the target band is reached, and only reacquires after a persistent scene change. Final convergence HIL is pending.
+- 🟡 Scheduler now stops/finalizes interactive Live View before autonomous camera acquisition, supports edit/delete/reorder/current-pointing fill, and can start immediately or at a future in-memory UTC time. Durable restart/resume remains OAL 1.0 work.
 
 ## v0.2.10.47 build-fix 3 — direct-MC east/west mirror recomputation
 
@@ -71,7 +78,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Per-device disconnect | ✅ | Main camera, guide camera, mount, focuser independent |
 | HTTP API | ✅ | `/api/v1` reference API present |
 | WebSocket state/events | 🟡 | Channel exists; reliable sequence/replay contract still missing |
-| Stellarium bridge | ✅ basic HIL | Stellarium GOTO confirmed through node and Classic ASCOM/EQMOD; native-mount parity still pending |
+| Stellarium bridge | ✅ HIL | Stellarium GOTO and live mount position are confirmed; native EQDrive, direct SynScan/EQDrive Wi-Fi and Classic ASCOM/EQMOD now point consistently on the real mount. |
 
 ## Operations
 
@@ -101,14 +108,14 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 
 | Driver | Status | Notes |
 |---|---|---|
-| QHY | 🟡 HIL active | QHY5III462C discovery/connect/single capture confirmed; user captures spool to FITS. v0.2.10.34 moves Finder Live View to native QHYCCD continuous streaming and makes health probing idle-only with a three-strike disconnect rule; Live→Stop→Capture and repeated reconnect remain the next Windows HIL checks |
-| Canon EOS | 🟡 | EDSDK Windows / libgphoto2 Linux; HIL pending |
+| QHY | ✅ core HIL / 🟡 workflow hardening | QHY5III462C discovery/connect, repeated FITS capture, native Live View, Live→Stop→Capture and SER recording are HIL-confirmed. v0.2.10.48 fixes remote 16-bit preview scaling and still auto-exposure convergence; the new lock/reacquire behaviour needs one final HIL pass. |
+| Canon EOS | ✅ basic HIL / 🟡 regression | EOS 550D EDSDK capture and CR2 transfer have been HIL-confirmed; current-release regression, long Bulb and hotplug/reconnect still need qualification. |
 | ZWO ASI | ✅ implemented / 🟡 HIL pending | Native ASI SDK and multi-camera discovery implemented; real ZWO camera not yet qualified |
 | ZWO EAF | ✅ implemented / 🟡 HIL pending | Native EAF SDK implementation exists; real ZWO EAF not yet qualified |
 | Gemini EAF | ✅ basic HIL | Windows native discovery/connection, direct motion and autofocus-driven motion confirmed; active serial health polling now detects physical disconnect and refreshes the device catalogue; optical autofocus convergence/repeatability remains to qualify |
 | Sky-Watcher/SynScan | ✅ direct Wi-Fi basic HIL | Serial SynScan path retained; `synscan-wifi` direct Motor Controller UDP/11880 has connected and physically moved the mount; `synscan-app` remains the SynScan Pro/App UDP/11881 compatibility path |
 | Sky-Watcher direct motor-controller | 🧪 | Shared Motor Controller codec now follows EQMOD/INDI status/direction semantics and is used by direct Wi-Fi plus the EQDrive native fallback |
-| EQDrive native | ✅ basic HIL / 🟡 geometry | Separate `oal.eqdrive` discovered and moved the real controller; raw axes route through the Core geometry layer. HIL exposed unqualified installation axis signs, so sky GOTO is back under a 15° qualification envelope until orientation is verified; pier-flip HIL remains pending |
+| EQDrive native | ✅ HIL | Direct-MC coordinate model v9 (`Axis1=+1`, `Axis2=-1`) is HIL-qualified against Classic ASCOM/EQMOD; native serial and direct Wi-Fi now point identically. Meridian-flip/limit automation remains future hardening. |
 | INDI compatibility | ✅ | Optional compatibility client; independent of native drivers |
 | Classic ASCOM | ✅ basic HIL | Windows out-of-process COM bridge; EQMOD HEQ5/6 connect, park/unpark and Stellarium-driven GOTO confirmed |
 | ASCOM Alpaca | ✅ | Compatibility backend |
@@ -125,7 +132,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Native frame publication | ✅ | Driver ABI supports non-JSON frame handoff |
 | Canon original-file spool | ✅ | Driver path supports original file handling |
 | Durable FITS/RAW store | ⏳ | Final science data plane not complete |
-| Planetary SER pipeline | ⏳ | Production ring-buffer/SER/drop accounting not complete |
+| Planetary SER pipeline | 🟡 implemented / HIL partial | Native SER + metadata sidecar are HIL-confirmed. Autonomous full-frame acquisition, hardware ROI tracking and `.roi.jsonl` provenance are implemented; real planetary autonomous tracking and drop/jitter accounting still need HIL/hardening. |
 
 ## Astronomy workflows
 
@@ -139,7 +146,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | Polar-axis math | ✅ | Sample/estimation API exists |
 | Automatic polar wizard | 🟡 | Full live adjustment orchestration not production-qualified |
 | Guiding | 🟡 | Basic state/API and pulse-guide primitives; production loop pending |
-| Session/scheduler | 🟡 mixed executor | v0.2.10.47 executes DSO FITS/RAW and planetary SER blocks; planetary ROI tracking and optional slow mount correction require real-sky HIL, while durable restart/recovery remains pending |
+| Session/scheduler | 🟡 supervised mixed executor | v0.2.10.48 executes DSO FITS/RAW and planetary SER blocks, preflights/stops interactive Live View before camera acquisition, supports block edit/delete/reorder/current-pointing fill and immediate/future in-memory start. Durable restart/recovery and unattended safety remain pending. |
 | Target resolver/ephemerides | 🟡 | Not yet a complete normative production service |
 
 ## Mount geometry foundation — v0.2.10.25

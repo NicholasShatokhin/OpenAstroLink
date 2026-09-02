@@ -1,5 +1,13 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.48 — безпечний Scene AF, збіжна експозиція та lifecycle scheduler
+
+- Етап HIL монтування закрито: native EQDrive, direct SynScan/EQDrive Wi-Fi та Classic ASCOM/EQMOD на тесті 2026-09-02 наводяться однаково правильно з direct-MC coordinate model v9 (`Axis1=+1`, `Axis2=-1`).
+- Scene autofocus тепер окремо підбирає AF-витримку, пробує обидва напрями та bracket'ить локальний максимум контрасту, а при ненадійному/невдалому фокусуванні **повертає фокусер у стартову позицію**, замість залишати телескоп у кінці сліпого sweep.
+- Remote 16-bit preview використовує ту саму фіксовану шкалу сенсора, що й node: пересвічені AF-кадри більше не повинні перетворюватися на чорний екран, а histogram Auto не втрачає абсолютну яскравість. Auto exposure має explicit convergence/lock і розблоковується лише після стійкої зміни освітлення.
+- Scheduler має camera-resource preflight: активний інтерактивний Live View спочатку зупиняється/фіналізується, і лише потім починається автономна зйомка. GUI дозволяє оновлювати, видаляти, очищати й переставляти блоки, копіювати поточний напрям монтування в ціль та стартувати зараз або у вибрані дату/час. Відкладений старт у v0.2.10.48 зберігається в пам'яті; durable restart/resume лишається планом OAL 1.0.
+
+
 ## v0.2.10.47 build-fix 3 — виправлення дзеркальності DEC/polar-distance direct-MC
 
 - Повторний HIL 2026-09-02 показав точне дзеркало схід↔захід навіть після гіпотези build-fix 2 про Axis1. Перерахунок записаної цілі за raw encoder deltas для всіх чотирьох комбінацій знаків показує: інверсія Axis1 не може створити таке дзеркало, а DEC/polar-distance mapping — може.
@@ -15,7 +23,7 @@
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.47 build-fix 3 — mixed DSO / planetary scheduler executor + direct-MC v9 mapping**
+**Поточний пакет: v0.2.10.48 — безпечний Scene AF, збіжна still auto-exposure, редаговані/відкладені observing plans + HIL-кваліфікований direct-MC v9 mapping**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

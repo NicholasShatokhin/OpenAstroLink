@@ -1245,9 +1245,29 @@ bool ApplicationController::setSessionPlan(const QString&name,const std::vector<
 bool ApplicationController::startSession(QString*e){
     if(!scheduler_.start()){if(e)*e="No observation blocks supplied or session already active";return false;}
     sessionRecenterAttempt_=0;planetaryRoi_={};planetaryLastCentroid_={};planetaryMountCalibration_={};
-    emit logMessage(QString("Observation session started: %1").arg(scheduler_.status().id));
-    QTimer::singleShot(0,this,[this](){scheduleSessionStep();});
+    const auto st=scheduler_.status();
+    if(st.state=="scheduled"){
+        emit logMessage(QString("Observation session scheduled: %1 for %2 UTC").arg(st.id,st.scheduledStartUtc.toUTC().toString(Qt::ISODateWithMs)));
+        armScheduledSessionStart(st.id);
+    }else{
+        emit logMessage(QString("Observation session started: %1").arg(st.id));
+        QTimer::singleShot(0,this,[this](){scheduleSessionStep();});
+    }
     return true;
+}
+
+void ApplicationController::armScheduledSessionStart(const QString &sessionId){
+    const auto st=scheduler_.status();
+    if(!st.active||st.id!=sessionId||st.state!="scheduled"||!st.scheduledStartUtc.isValid())return;
+    const qint64 remaining=QDateTime::currentDateTimeUtc().msecsTo(st.scheduledStartUtc);
+    if(remaining<=0){
+        if(scheduler_.beginScheduled()){emit logMessage(QString("Scheduled observation session starting now: %1").arg(sessionId));QTimer::singleShot(0,this,[this](){scheduleSessionStep();});}
+        return;
+    }
+    // Re-arm in bounded chunks so dates beyond QTimer's int-millisecond range
+    // are safe and stop/replacement of a session is naturally respected.
+    const int delay=int(std::min<qint64>(remaining,3600000));
+    QTimer::singleShot(std::max(1,delay),this,[this,sessionId](){armScheduledSessionStart(sessionId);});
 }
 void ApplicationController::stopSession(){
     const auto st=scheduler_.status();
@@ -1393,7 +1413,29 @@ void ApplicationController::startCurrentPlanetarySer(){
 
 void ApplicationController::scheduleSessionStep(){
     const auto st=scheduler_.status();if(!st.active)return;
+    if(st.state=="scheduled"||st.currentStep=="waiting-start")return;
     const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("Observation plan cursor is outside the block list");return;}
+    if(st.currentStep=="waiting-camera"){
+        // At the actual execution time a plan owns the camera lifecycle. Cancel
+        // queued/running interactive Live View so it cannot jump ahead of the
+        // scheduler after a mount slew, then wait until any running stream has
+        // finalized and released the camera lock.
+        for(const auto &v:operations_.operationsJson(true)){const auto op=v.toObject();if(op.value("kind").toString()=="camera.live-view"&&!op.value("cancelRequested").toBool())operations_.cancel(op.value("id").toString(),nullptr);}
+        QString owner;
+        if(operations_.isResourceLocked("camera",&owner)){
+            const auto op=operations_.operationJson(owner);
+            if(op.value("kind").toString()=="camera.live-view"&&!op.value("cancelRequested").toBool()){
+                operations_.cancel(owner,nullptr);
+                emit logMessage(QString("Scheduler preflight: stopping Live View operation %1 before autonomous capture").arg(owner));
+            }
+            scheduler_.setStep("waiting-camera");
+            QTimer::singleShot(100,this,[this](){scheduleSessionStep();});
+            return;
+        }
+        scheduler_.setStep("prepare-block");
+        QTimer::singleShot(0,this,[this](){scheduleSessionStep();});
+        return;
+    }
     if(st.currentStep=="prepare-block"){
         sessionRecenterAttempt_=0;
         if(block->mode==ObservationMode::PlanetarySer){planetaryRoi_={};planetaryLastCentroid_={};planetaryMountCalibration_={};startCurrentPlanetarySlew();}

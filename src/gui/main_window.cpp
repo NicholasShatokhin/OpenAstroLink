@@ -69,7 +69,12 @@ static QImage autoStretchPreview(const QImage &input){
     for(int y=0;y<sample.height();++y){const uchar*r=sample.constScanLine(y);for(int x=0;x<sample.width();++x){++hist[r[x]];++total;}}
     if(!total)return rgb;
     auto pct=[&](double p){quint64 target=quint64(p*double(total-1)),acc=0;for(int i=0;i<256;++i){acc+=hist[size_t(i)];if(acc>target)return i;}return 255;};
-    const int lo=pct(0.01),hi=std::max(lo+8,pct(0.995));const double scale=255.0/double(hi-lo);
+    const int lo=pct(0.01),hiPct=pct(0.995);
+    // Do not invent a black preview from an almost-uniform saturated frame.
+    // If there is no useful dynamic range to stretch, keep the physical display
+    // level so white stays white and the exposure warning remains truthful.
+    if(hiPct-lo<8||lo>=248)return rgb;
+    const int hi=hiPct;const double scale=255.0/double(hi-lo);
     for(int y=0;y<rgb.height();++y){uchar*r=rgb.scanLine(y);for(int x=0;x<rgb.width();++x)for(int c=0;c<3;++c){const int v=r[3*x+c];r[3*x+c]=uchar(std::clamp(int(std::lround((v-lo)*scale)),0,255));}}
     return rgb;
 }
@@ -182,7 +187,7 @@ QWidget *MainWindow::buildLiveFinderTab(){
     liveDebayer_=new QCheckBox("Debayer color preview (preview only; science data stays RAW)");liveDebayer_->setChecked(false);liveBayerPattern_=new QComboBox;liveBayerPattern_->addItems({"Auto from camera/driver","RGGB","BGGR","GRBG","GBRG"});
     liveRecordSer_=new QCheckBox("Record raw Live View to SER");liveRecordSer_->setChecked(false);liveSerPath_=new QLineEdit;liveSerPath_->setPlaceholderText("blank = Pictures/OpenAstroLink/SER/Live_*.ser on node");
     f->addRow("Exposure, s",liveExposure_);f->addRow("Gain",liveGain_);f->addRow("Offset",liveOffset_);f->addRow("Bin",liveBin_);f->addRow("Target FPS",liveFps_);f->addRow(liveAutoStretch_);f->addRow(liveCrosshair_);f->addRow(liveMilDot_);f->addRow(liveAngularGrid_);f->addRow(liveHighlight_);f->addRow(liveDebayer_);f->addRow("Bayer pattern",liveBayerPattern_);f->addRow(liveRecordSer_);f->addRow("SER path on node",liveSerPath_);
-    liveViewButton_=new QPushButton("Start Live View");sceneAutofocusButton_=new QPushButton("Scene autofocus using these camera settings");liveTargetStatus_=new QLabel("Bright target: waiting for a frame");liveTargetStatus_->setWordWrap(true);f->addRow(liveViewButton_);f->addRow(sceneAutofocusButton_);f->addRow(liveTargetStatus_);l->addWidget(liveBox);
+    liveViewButton_=new QPushButton("Start Live View");sceneAutofocusButton_=new QPushButton("Scene autofocus (auto-meter + safe contrast search)");liveTargetStatus_=new QLabel("Bright target: waiting for a frame");liveTargetStatus_->setWordWrap(true);f->addRow(liveViewButton_);f->addRow(sceneAutofocusButton_);f->addRow(liveTargetStatus_);l->addWidget(liveBox);
     connect(liveViewButton_,&QPushButton::clicked,this,[this](){
         if(liveViewBusy_&&!liveViewOperationId_.isEmpty()){QString e;if(!c_->cancelOperation(liveViewOperationId_,&e))showError(e);else appendLog("Live View stop requested");return;}
         LiveViewRequest r;r.exposureSec=liveExposure_->value();r.gain=liveGain_->value();r.offset=liveOffset_?liveOffset_->value():0;r.binX=r.binY=liveBin_->value();r.targetFps=liveFps_->value();r.debayer=liveDebayer_&&liveDebayer_->isChecked();if(liveBayerPattern_){const QString p=liveBayerPattern_->currentIndex()==0?"AUTO":liveBayerPattern_->currentText();r.bayerPattern=bayerPatternFromString(p);}r.recordSer=liveRecordSer_&&liveRecordSer_->isChecked();if(liveSerPath_)r.serPath=liveSerPath_->text().trimmed();QString e;const QString id=c_->startLiveView(r,&e);if(id.isEmpty()){showError(e);return;}liveViewOperationId_=id;setLiveViewBusy(true);appendLog(QString("Live View started: %1").arg(id));
@@ -268,7 +273,7 @@ QWidget *MainWindow::buildCaptureTab(){
     saveScience_=new QCheckBox("Save user captures as science files");saveScience_->setChecked(true);
     f->addRow("Exposure, s",exposure_);f->addRow("Gain",gain_);f->addRow(saveScience_);f->addRow("Solver",solverBackend_);f->addRow("Catalog CSV",catalogPath_);f->addRow("Neural model",modelPath_);f->addRow("Hint RA J2000, deg",hintRa_);f->addRow("Hint DEC J2000, deg",hintDec_);f->addRow("Search radius, deg",hintRadius_);
     f->addRow("Adaptive base exposure, s",solveBaseExposure_);f->addRow("Adaptive solve bin",solveBin_);f->addRow("Adaptive stack frames",solveStackFrames_);f->addRow("Adaptive max single exposure, s",solveMaxExposure_);f->addRow("Adaptive minimum stars",solveMinStars_);l->addLayout(f);
-    auto*histGroup=new QGroupBox("Preview histogram / exposure assistant");auto*histLayout=new QVBoxLayout(histGroup);auto*histControls=new QFormLayout;histogramEnabled_=new QCheckBox("Compute after each received frame");histogramAutoExposure_=new QCheckBox("Auto-apply suggested exposure to next capture");histogramTarget_=dspin(3.0,40.0,18.0,1);histogramTarget_->setSuffix(" %");histControls->addRow(histogramEnabled_);histControls->addRow("Target background",histogramTarget_);histControls->addRow(histogramAutoExposure_);histLayout->addLayout(histControls);histogramView_=new QLabel("Histogram disabled");histogramView_->setAlignment(Qt::AlignCenter);histogramView_->setMinimumHeight(150);histogramView_->setStyleSheet("background:#101010;color:#bbb;border:1px solid #444");histogramStats_=new QLabel("Uses fixed sensor scale for linear 8/16-bit camera frames; Canon embedded-JPEG guidance remains approximate.");histogramStats_->setWordWrap(true);histogramApplyButton_=new QPushButton("Apply suggested exposure");histogramApplyButton_->setEnabled(false);histLayout->addWidget(histogramView_);histLayout->addWidget(histogramStats_);histLayout->addWidget(histogramApplyButton_);connect(histogramEnabled_,&QCheckBox::toggled,this,[this](bool on){if(!on){histogramView_->setText("Histogram disabled");histogramView_->setPixmap(QPixmap());histogramStats_->setText("Uses fixed sensor scale for linear 8/16-bit camera frames; Canon embedded-JPEG guidance remains approximate.");histogramApplyButton_->setEnabled(false);histogramSuggestedExposure_=0.0;}else if(!lastImage_.isNull())updateHistogram(lastImage_,false);});connect(histogramApplyButton_,&QPushButton::clicked,this,[this](){if(histogramSuggestedExposure_>0.0){exposure_->setValue(histogramSuggestedExposure_);appendLog(QString("Histogram suggestion applied: next exposure %1 s; ISO/gain unchanged").arg(histogramSuggestedExposure_,0,'g',5));}});l->addWidget(histGroup);
+    auto*histGroup=new QGroupBox("Preview histogram / exposure assistant");auto*histLayout=new QVBoxLayout(histGroup);auto*histControls=new QFormLayout;histogramEnabled_=new QCheckBox("Compute after each received frame");histogramAutoExposure_=new QCheckBox("Auto-apply suggested exposure to next capture");histogramTarget_=dspin(3.0,40.0,18.0,1);histogramTarget_->setSuffix(" %");histControls->addRow(histogramEnabled_);histControls->addRow("Target background",histogramTarget_);histControls->addRow(histogramAutoExposure_);histLayout->addLayout(histControls);histogramView_=new QLabel("Histogram disabled");histogramView_->setAlignment(Qt::AlignCenter);histogramView_->setMinimumHeight(150);histogramView_->setStyleSheet("background:#101010;color:#bbb;border:1px solid #444");histogramStats_=new QLabel("Uses fixed sensor scale for linear 8/16-bit camera frames; Canon embedded-JPEG guidance remains approximate.");histogramStats_->setWordWrap(true);histogramApplyButton_=new QPushButton("Apply suggested exposure");histogramApplyButton_->setEnabled(false);histLayout->addWidget(histogramView_);histLayout->addWidget(histogramStats_);histLayout->addWidget(histogramApplyButton_);auto resetHistogramAuto=[this](){histogramAutoBestExposure_=0.0;histogramAutoBestObjective_=1.0e9;histogramAutoPreviousSignedError_=0.0;histogramAutoHavePrevious_=false;histogramAutoConverged_=false;histogramAutoOutOfBandFrames_=0;};connect(histogramEnabled_,&QCheckBox::toggled,this,[this,resetHistogramAuto](bool on){resetHistogramAuto();if(!on){histogramView_->setText("Histogram disabled");histogramView_->setPixmap(QPixmap());histogramStats_->setText("Uses fixed sensor scale for linear 8/16-bit camera frames; Canon embedded-JPEG guidance remains approximate.");histogramApplyButton_->setEnabled(false);histogramSuggestedExposure_=0.0;}else if(!lastImage_.isNull())updateHistogram(lastImage_,false);});connect(histogramAutoExposure_,&QCheckBox::toggled,this,[resetHistogramAuto](bool){resetHistogramAuto();});connect(histogramTarget_,qOverload<double>(&QDoubleSpinBox::valueChanged),this,[resetHistogramAuto](double){resetHistogramAuto();});connect(histogramApplyButton_,&QPushButton::clicked,this,[this](){if(histogramSuggestedExposure_>0.0){exposure_->setValue(histogramSuggestedExposure_);appendLog(QString("Histogram suggestion applied: next exposure %1 s; ISO/gain unchanged").arg(histogramSuggestedExposure_,0,'g',5));}});l->addWidget(histGroup);
     auto*loadCatalog=new QPushButton("Load catalog");auto*loadModel=new QPushButton("Load neural model");connect(loadCatalog,&QPushButton::clicked,this,[this](){QString e;if(!c_->loadCatalog(catalogPath_->text(),&e))showError(e);});connect(loadModel,&QPushButton::clicked,this,[this](){QString e;if(!c_->loadNeuralModel(modelPath_->text(),&e))showError(e);});connect(solverBackend_,&QComboBox::currentTextChanged,this,[this](const QString&x){QString e;if(!c_->selectSolver(x,&e))showError(e);});
     captureButton_=new QPushButton("Capture");solveButton_=new QPushButton("Solve last frame");captureSolveButton_=new QPushButton("Capture + solve");adaptiveSolveButton_=new QPushButton("Adaptive urban capture + solve");motionButton_=new QPushButton("Estimate motion between last two frames");
     auto startCapture=[this](bool solveAfter){if(captureBusy_&&!captureOperationId_.isEmpty()){QString e;if(!c_->cancelOperation(captureOperationId_,&e))showError(e);else appendLog("Exposure cancellation requested");return;}ExposureRequest r;r.exposureSec=exposure_->value();r.gain=gain_->value();r.saveRaw=!saveScience_||saveScience_->isChecked();captureSolveRequested_=solveAfter;QString e;const QString id=c_->startCapture(r,&e);if(id.isEmpty()){captureSolveRequested_=false;showError(e);return;}captureOperationId_=id;setCaptureBusy(true);appendLog(QString("Exposure operation started: %1 (%2 s)").arg(id).arg(r.exposureSec));};
@@ -293,38 +298,63 @@ void MainWindow::updateHistogram(const QImage &image,bool allowAutoApply){
     const int targetBin=int(std::lround(std::clamp(histogramTarget_?histogramTarget_->value()/100.0:0.18,0.0,1.0)*255.0));
     const int targetX=int(std::lround(double(targetBin)*(W-1)/255.0));painter.setPen(QPen(QColor(90,220,120),1,Qt::DashLine));painter.drawLine(targetX,0,targetX,H);painter.setPen(QPen(QColor(240,190,80),1));const int medX=int(std::lround(double(p50)*(W-1)/255.0));painter.drawLine(medX,0,medX,H);painter.end();histogramView_->setPixmap(QPixmap::fromImage(plot));
     const double median=double(p50)/255.0,target=histogramTarget_?histogramTarget_->value()/100.0:0.18;
-    // Proportional exposure controller in fixed sensor scale. Damping avoids
-    // overshooting on noisy frames while preserving the exposure~signal ratio.
-    // Example from the 2026-09-01 QHY HIL: 16 ms mean~11.9%, 32 ms~22.6%;
-    // an 18% target should converge near the middle, not bounce 16<->32 ms.
-    const double measured=std::max(1.0/255.0,median);
-    const double ratio=target/measured;
-    double factor=std::pow(std::clamp(ratio,0.08,12.0),0.72);
-    factor=std::clamp(factor,0.40,2.75);
-    // Use the bright tail as a second constraint. A lunar/planetary field can
-    // have a dark median while the target itself is already near saturation;
-    // chasing only the median would overexpose it. P99 is robust against a few
-    // hot pixels but reacts to a real bright target.
     const double p99Level=std::max(1.0/255.0,double(p99)/255.0);
-    if(p99Level>0.80){
-        const double highlightFactor=std::pow(0.80/p99Level,0.85);
-        factor=std::min(factor,highlightFactor);
+    if(!allowAutoApply){
+        histogramStats_->setText(QString("Sensor-scale preview only: P1=%1%, median=%2%, P99=%3%, low clip=%4%, high clip=%5%. Live/AF frames do not change the still-capture auto-exposure controller.")
+            .arg(100.0*p01/255.0,0,'f',1).arg(100.0*p50/255.0,0,'f',1).arg(100.0*p99/255.0,0,'f',1).arg(100.0*lowClip,0,'f',2).arg(100.0*highClip,0,'f',2));
+        histogramApplyButton_->setEnabled(false);return;
     }
-    // Saturated frames need a stronger but still proportional retreat. This is
-    // intentionally not the old hard /2 step.
-    if(highClip>0.005)factor=std::min(factor,0.68);
-    if(lowClip>0.80&&median<0.015&&p99Level<0.55)factor=std::max(factor,1.35);
+    const double measured=std::max(1.0/255.0,median);
     const double current=std::max(0.0001,exposure_?exposure_->value():1.0);
-    double next=std::clamp(current*factor,0.0001,3600.0);
+    const double signedError=std::log(measured/std::max(1.0/255.0,target));
     const double relativeError=std::abs(median-target)/std::max(0.01,target);
-    // 8% target dead-band prevents a stable exposure from chattering because of
-    // preview quantization and shot noise.
-    if(relativeError<0.08&&highClip<=0.005&&p99Level<=0.80)next=current;
+    const double objective=std::abs(signedError)+8.0*highClip+std::max(0.0,p99Level-0.88)*3.0;
+
+    if(histogramAutoBestExposure_<=0.0||objective<histogramAutoBestObjective_){
+        histogramAutoBestObjective_=objective;histogramAutoBestExposure_=current;
+    }
+
+    const bool healthyHighlights=highClip<=0.002&&p99Level<=0.92;
+    const bool inBand=relativeError<=0.14&&healthyHighlights;
+    const bool crossed=histogramAutoHavePrevious_&&((histogramAutoPreviousSignedError_<0.0&&signedError>0.0)||(histogramAutoPreviousSignedError_>0.0&&signedError<0.0));
+    if(inBand){
+        histogramAutoConverged_=true;histogramAutoBestExposure_=current;histogramAutoBestObjective_=objective;histogramAutoOutOfBandFrames_=0;
+    }
+    if(histogramAutoConverged_){
+        const bool sceneChanged=relativeError>0.40||highClip>0.02||p99Level>0.98;
+        histogramAutoOutOfBandFrames_=sceneChanged?histogramAutoOutOfBandFrames_+1:0;
+        if(histogramAutoOutOfBandFrames_>=2){histogramAutoConverged_=false;histogramAutoBestExposure_=current;histogramAutoBestObjective_=objective;histogramAutoHavePrevious_=false;histogramAutoOutOfBandFrames_=0;appendLog("Histogram auto exposure unlocked after a persistent scene/illumination change");}
+    }
+
+    double factor=1.0,next=current;
+    if(!histogramAutoConverged_){
+        const double ratio=target/measured;
+        factor=std::pow(std::clamp(ratio,0.08,12.0),0.68);
+        factor=std::clamp(factor,0.45,2.50);
+        if(p99Level>0.88)factor=std::min(factor,std::pow(0.88/p99Level,0.90));
+        if(highClip>0.005)factor=std::min(factor,0.45);
+        if(lowClip>0.80&&median<0.015&&p99Level<0.55)factor=std::max(factor,1.35);
+        next=std::clamp(current*factor,0.0001,3600.0);
+        // A sign crossing is expected while converging; the damped proportional
+        // step continues toward the target instead of declaring success early.
+    }else if(histogramAutoBestExposure_>0.0){
+        next=histogramAutoBestExposure_;
+    }
+    Q_UNUSED(crossed);histogramAutoPreviousSignedError_=signedError;histogramAutoHavePrevious_=true;
     histogramSuggestedExposure_=next;const double delta=std::abs(histogramSuggestedExposure_/current-1.0);
-    QString advice;if(highClip>0.005)advice="highlights clipped — reduce exposure proportionally";else if(p99Level>0.80)advice="bright target near saturation — P99 ceiling limits exposure";else if(median<target*0.92)advice="background low — proportional increase";else if(median>target*1.08)advice="background high — proportional decrease";else advice="background within 8% target dead-band";
-    histogramStats_->setText(QString("Sensor-scale histogram (log display): P1=%1%, median=%2%, P99=%3%, low clip=%4%, high clip=%5%. %6. Ratio=%7x, damped factor=%8x. Suggested next exposure: %9 s (ISO/gain unchanged).")
-        .arg(100.0*p01/255.0,0,'f',1).arg(100.0*p50/255.0,0,'f',1).arg(100.0*p99/255.0,0,'f',1).arg(100.0*lowClip,0,'f',2).arg(100.0*highClip,0,'f',2).arg(advice).arg(ratio,0,'f',2).arg(next==current?1.0:factor,0,'f',2).arg(histogramSuggestedExposure_,0,'g',5));
-    histogramApplyButton_->setEnabled(delta>0.025);if(allowAutoApply&&histogramAutoExposure_&&histogramAutoExposure_->isChecked()&&delta>0.025){exposure_->setValue(histogramSuggestedExposure_);appendLog(QString("Histogram auto exposure: next capture %1 s (sensor-scale proportional controller; ISO/gain unchanged)").arg(histogramSuggestedExposure_,0,'g',5));}
+    QString advice;
+    if(histogramAutoConverged_)advice=QString("AUTO LOCKED near optimum (%1 s); change scene/target or toggle Auto to reacquire").arg(histogramAutoBestExposure_,0,'g',5);
+    else if(highClip>0.005)advice="highlights clipped — reduce exposure";
+    else if(p99Level>0.88)advice="bright tail near saturation — shorten exposure";
+    else if(median<target*0.86)advice="background low — increase exposure";
+    else if(median>target*1.14)advice="background high — decrease exposure";
+    else advice="inside acquisition band — locking exposure";
+    histogramStats_->setText(QString("Sensor-scale histogram: P1=%1%, median=%2%, P99=%3%, low clip=%4%, high clip=%5%. %6. Best=%7 s; suggested=%8 s.")
+        .arg(100.0*p01/255.0,0,'f',1).arg(100.0*p50/255.0,0,'f',1).arg(100.0*p99/255.0,0,'f',1).arg(100.0*lowClip,0,'f',2).arg(100.0*highClip,0,'f',2).arg(advice).arg(histogramAutoBestExposure_,0,'g',5).arg(histogramSuggestedExposure_,0,'g',5));
+    histogramApplyButton_->setEnabled(!histogramAutoConverged_&&delta>0.025);
+    if(allowAutoApply&&histogramAutoExposure_&&histogramAutoExposure_->isChecked()&&!histogramAutoConverged_&&delta>0.025){exposure_->setValue(histogramSuggestedExposure_);appendLog(QString("Histogram auto exposure: next capture %1 s (convergent sensor-scale controller)").arg(histogramSuggestedExposure_,0,'g',5));}
+    else if(allowAutoApply&&histogramAutoExposure_&&histogramAutoExposure_->isChecked()&&histogramAutoConverged_){appendLog(QString("Histogram auto exposure LOCKED at %1 s; median=%2%, P99=%3%").arg(histogramAutoBestExposure_,0,'g',5).arg(100.0*median,0,'f',1).arg(100.0*p99Level,0,'f',1));}
+
 }
 
 QWidget *MainWindow::buildMountTab(){
@@ -363,9 +393,10 @@ QWidget *MainWindow::buildMountTab(){
     syncPair(mountRa_,mountDec_,"j2000");syncPair(mountJNowRa_,mountJNowDec_,"jnow");syncPair(mountAz_,mountAlt_,"horizontal");syncPair(mountGalL_,mountGalB_,"galactic");
     synchronizeMountCoordinatesFrom("j2000");
 
-    auto*presetRow=new QHBoxLayout;auto*polaris=new QPushButton("Polaris preset (J2000)");auto*refreshTransforms=new QPushButton("Refresh coordinate transforms for current UTC");
+    auto*presetRow=new QHBoxLayout;auto*polaris=new QPushButton("Polaris preset (J2000)");auto*currentPointing=new QPushButton("Use current mount pointing as target");auto*refreshTransforms=new QPushButton("Refresh coordinate transforms for current UTC");
     connect(polaris,&QPushButton::clicked,this,[this](){mountCoordinateSyncing_=true;{QSignalBlocker a(mountRa_),b(mountDec_);mountRa_->setValue(37.9545607);mountDec_->setValue(89.2641090);}mountCoordinateSyncing_=false;synchronizeMountCoordinatesFrom("j2000");appendLog("Target fields set to Polaris J2000. This does NOT Sync the mount until you press Sync explicitly.");});
-    connect(refreshTransforms,&QPushButton::clicked,this,[this](){synchronizeMountCoordinatesFrom("j2000");});presetRow->addWidget(polaris);presetRow->addWidget(refreshTransforms);l->addLayout(presetRow);
+    connect(currentPointing,&QPushButton::clicked,this,[this](){MountStatus st;QString e;if(!c_->mountStatus(st,&e)||!st.coordinateValid){showError(e.isEmpty()?"Mount does not currently report a valid sky coordinate":e);return;}const auto j=convertEquatorialFrame(st.coordinate,EquatorialFrame::J2000);mountCoordinateSyncing_=true;{QSignalBlocker a(mountRa_),b(mountDec_);mountRa_->setValue(j.raDeg);mountDec_->setValue(j.decDeg);}mountCoordinateSyncing_=false;synchronizeMountCoordinatesFrom("j2000");appendLog(QString("Target fields copied from current mount pointing: RA=%1 DEC=%2 J2000").arg(j.raDeg,0,'f',6).arg(j.decDeg,0,'f',6));});
+    connect(refreshTransforms,&QPushButton::clicked,this,[this](){synchronizeMountCoordinatesFrom("j2000");});presetRow->addWidget(polaris);presetRow->addWidget(currentPointing);presetRow->addWidget(refreshTransforms);l->addLayout(presetRow);
 
     mountFrame_=new QComboBox;mountFrame_->addItem("J2000 / catalog",int(EquatorialFrame::J2000));mountFrame_->addItem("JNow / of-date",int(EquatorialFrame::JNow));
     auto*displayRow=new QHBoxLayout;displayRow->addWidget(new QLabel("Mount status equatorial display:"));displayRow->addWidget(mountFrame_);l->addLayout(displayRow);
@@ -417,7 +448,7 @@ void MainWindow::synchronizeMountCoordinatesFrom(const QString &system){
 
 QWidget *MainWindow::buildFocusTab(){
     auto*w=new QWidget;auto*l=new QVBoxLayout(w);auto*f=new QFormLayout;focusPosition_=ispin(0,200000,20000);connect(focusPosition_,qOverload<int>(&QSpinBox::valueChanged),this,[this](int){focusTargetDirty_=true;});focusMode_=new QComboBox;focusMode_->addItems({"stars","scene","planet","bahtinov"});focusRange_=ispin(100,50000,1600);coarseStep_=ispin(1,10000,200);fineStep_=ispin(1,5000,40);focusFrames_=ispin(1,30,3);focusExposure_=dspin(0.0001,30.0,0.05,4);focusGain_=ispin(0,102400,100);focusMinStars_=ispin(1,100,3);
-    f->addRow("Target position",focusPosition_);f->addRow("AF mode",focusMode_);f->addRow("AF exposure, s",focusExposure_);f->addRow("AF gain",focusGain_);f->addRow("Minimum stars (star mode)",focusMinStars_);f->addRow("Range",focusRange_);f->addRow("Coarse step",coarseStep_);f->addRow("Fine step",fineStep_);f->addRow("Frames / point",focusFrames_);l->addLayout(f);
+    f->addRow("Target position",focusPosition_);f->addRow("AF mode",focusMode_);f->addRow("AF starting exposure, s (Scene auto-meters)",focusExposure_);f->addRow("AF gain",focusGain_);f->addRow("Minimum stars (star mode)",focusMinStars_);f->addRow("Range",focusRange_);f->addRow("Coarse step",coarseStep_);f->addRow("Fine step",fineStep_);f->addRow("Frames / point",focusFrames_);l->addLayout(f);
     focuserStatus_=new QLabel("Focuser status: unavailable");focuserStatus_->setWordWrap(true);l->addWidget(focuserStatus_);
     auto*refresh=new QPushButton("Refresh focuser status");connect(refresh,&QPushButton::clicked,this,&MainWindow::refreshFocuserStatus);l->addWidget(refresh);
     auto*jogBox=new QGroupBox("Manual focus jog");auto*jogLayout=new QHBoxLayout(jogBox);focusJogStep_=ispin(1,10000,50);jogLayout->addWidget(new QLabel("Step"));jogLayout->addWidget(focusJogStep_);
@@ -436,11 +467,12 @@ QWidget *MainWindow::buildSchedulerTab(){
     auto*w=new QWidget;auto*l=new QVBoxLayout(w);
     auto*dsoBox=new QGroupBox("DSO FITS / RAW block");auto*f=new QFormLayout(dsoBox);
     targetName_=new QLineEdit("M42");targetRa_=dspin(0,360,83.8221,6);targetDec_=dspin(-90,90,-5.3911,6);
+    auto*useCurrent=new QPushButton("Use current telescope pointing (J2000)");
     targetExposure_=dspin(0.001,3600,30,3);targetRepeats_=ispin(1,10000,10);
     targetRecenterBefore_=new QCheckBox("Solve/recenter before first science frame");targetRecenterBefore_->setChecked(true);
     targetRecenterEvery_=ispin(0,10000,0);targetRecenterTolerance_=dspin(0.1,120.0,2.0,2);
     targetAutofocusBefore_=new QCheckBox("Autofocus before first science frame");targetAutofocusBefore_->setChecked(true);targetAutofocusEvery_=ispin(0,10000,0);
-    f->addRow("Name",targetName_);f->addRow("RA J2000",targetRa_);f->addRow("DEC J2000",targetDec_);f->addRow("Science exposure",targetExposure_);f->addRow("Science frames",targetRepeats_);
+    f->addRow("Name",targetName_);f->addRow("RA J2000",targetRa_);f->addRow("DEC J2000",targetDec_);f->addRow(useCurrent);f->addRow("Science exposure",targetExposure_);f->addRow("Science frames",targetRepeats_);
     f->addRow(targetRecenterBefore_);f->addRow("Recenter every N frames (0=off)",targetRecenterEvery_);f->addRow("Recenter tolerance, arcmin",targetRecenterTolerance_);f->addRow(targetAutofocusBefore_);f->addRow("Autofocus every N frames (0=off)",targetAutofocusEvery_);l->addWidget(dsoBox);
 
     auto*planetBox=new QGroupBox("Planetary high-speed SER block");auto*pf=new QFormLayout(planetBox);
@@ -448,13 +480,35 @@ QWidget *MainWindow::buildSchedulerTab(){
     planetAutofocusBefore_=new QCheckBox("Planetary autofocus before first SER");planetAutofocusBefore_->setChecked(true);planetAutofocusEvery_=ispin(0,10000,0);planetRoiTracking_=new QCheckBox("Track target by moving hardware ROI");planetRoiTracking_->setChecked(true);planetMountCorrections_=new QCheckBox("Allow calibrated mount corrections when ROI drifts far from sensor centre (HIL-sensitive)");planetMountCorrections_->setChecked(false);planetTrackingRate_=new QComboBox;planetTrackingRate_->addItems(QStringList{"sidereal","lunar","solar"});
     pf->addRow("Exposure, s",planetExposure_);pf->addRow("Gain",planetGain_);pf->addRow("Target FPS",planetFps_);pf->addRow("SER duration, s",planetDuration_);pf->addRow("SER runs",planetRuns_);pf->addRow("ROI width (0=auto)",planetRoiW_);pf->addRow("ROI height (0=auto)",planetRoiH_);pf->addRow("Tracking rate",planetTrackingRate_);pf->addRow(planetAutofocusBefore_);pf->addRow("Autofocus every N SER runs (0=off)",planetAutofocusEvery_);pf->addRow(planetRoiTracking_);pf->addRow(planetMountCorrections_);l->addWidget(planetBox);
 
-    auto*note=new QLabel("v0.2.10.47 mixed-mode executor: DSO blocks run slew → solve/recenter → autofocus → FITS/RAW. Planetary blocks run GOTO → full-frame planet acquisition → planetary autofocus → hardware ROI → finite SER, with ROI provenance and optional calibrated slow mount correction. Both block types may be mixed in one ObservationPlan.");note->setWordWrap(true);l->addWidget(note);
+    auto*timingBox=new QGroupBox("Plan start time");auto*timing=new QHBoxLayout(timingBox);sessionStartMode_=new QComboBox;sessionStartMode_->addItems({"Start now","Start at date/time"});sessionStartAt_=new QDateTimeEdit(QDateTime::currentDateTime().addSecs(60));sessionStartAt_->setCalendarPopup(true);sessionStartAt_->setDisplayFormat("yyyy-MM-dd HH:mm:ss t");sessionStartAt_->setEnabled(false);timing->addWidget(sessionStartMode_);timing->addWidget(sessionStartAt_);l->addWidget(timingBox);
+    connect(sessionStartMode_,qOverload<int>(&QComboBox::currentIndexChanged),this,[this](int i){sessionStartAt_->setEnabled(i==1);if(i==1&&sessionStartAt_->dateTime()<=QDateTime::currentDateTime())sessionStartAt_->setDateTime(QDateTime::currentDateTime().addSecs(60));});
+
+    auto*note=new QLabel("v0.2.10.48 mixed-mode executor. Starting a plan automatically stops an interactive Live View that holds the main-camera lock. Future start times are in-memory scheduling; durable restart/resume remains planned for OAL 1.0.");note->setWordWrap(true);l->addWidget(note);
     targetList_=new QListWidget;l->addWidget(targetList_);
-    auto*addDso=new QPushButton("Add DSO block");auto*addPlanet=new QPushButton("Add planetary SER block");auto*start=new QPushButton("Start plan");auto*stop=new QPushButton("Stop");
-    connect(addDso,&QPushButton::clicked,this,[this](){ObservationBlock b;b.name=targetName_->text();b.coordinate={targetRa_->value(),targetDec_->value(),EquatorialFrame::J2000};b.mode=ObservationMode::DsoFits;b.dso.exposure.exposureSec=targetExposure_->value();b.dso.exposure.saveRaw=true;b.dso.frameCount=targetRepeats_->value();b.dso.recenter.beforeFirstFrame=targetRecenterBefore_->isChecked();b.dso.recenter.everyNFrames=targetRecenterEvery_->value();b.dso.recenter.toleranceArcmin=targetRecenterTolerance_->value();b.dso.autofocus.beforeFirstFrame=targetAutofocusBefore_->isChecked();b.dso.autofocus.everyNFrames=targetAutofocusEvery_->value();targets_.push_back(b);targetList_->addItem(QString("DSO %1  RA %2 DEC %3  %4s × %5  recenter:%6/%7  AF:%8/%9").arg(b.name).arg(b.coordinate.raDeg).arg(b.coordinate.decDeg).arg(b.dso.exposure.exposureSec).arg(b.dso.frameCount).arg(b.dso.recenter.beforeFirstFrame?"start":"off").arg(b.dso.recenter.everyNFrames).arg(b.dso.autofocus.beforeFirstFrame?"start":"off").arg(b.dso.autofocus.everyNFrames));});
-    connect(addPlanet,&QPushButton::clicked,this,[this](){ObservationBlock b;b.name=targetName_->text();b.coordinate={targetRa_->value(),targetDec_->value(),EquatorialFrame::J2000};b.mode=ObservationMode::PlanetarySer;b.planetary.stream.exposureSec=planetExposure_->value();b.planetary.stream.gain=planetGain_->value();b.planetary.stream.targetFps=planetFps_->value();b.planetary.serRuns=planetRuns_->value();b.planetary.durationSec=planetDuration_->value();b.planetary.roiWidth=planetRoiW_->value();b.planetary.roiHeight=planetRoiH_->value();b.planetary.autofocus.beforeFirstRun=planetAutofocusBefore_->isChecked();b.planetary.autofocus.everyNRuns=planetAutofocusEvery_->value();b.planetary.autofocus.request.mode=AutofocusMode::Planet;b.planetary.autofocus.request.exposureSec=planetExposure_->value();b.planetary.autofocus.request.gain=planetGain_->value();b.planetary.tracking.allowRoiShift=planetRoiTracking_->isChecked();b.planetary.tracking.mountCorrections=planetMountCorrections_->isChecked();b.planetary.trackingRate=trackingRateFromString(planetTrackingRate_->currentText());targets_.push_back(b);targetList_->addItem(QString("SER %1  RA %2 DEC %3  %4s @ %5 fps × %6  ROI %7x%8  AF:%9/%10  ROI-track:%11 mount:%12").arg(b.name).arg(b.coordinate.raDeg).arg(b.coordinate.decDeg).arg(b.planetary.durationSec).arg(b.planetary.stream.targetFps).arg(b.planetary.serRuns).arg(b.planetary.roiWidth).arg(b.planetary.roiHeight).arg(b.planetary.autofocus.beforeFirstRun?"start":"off").arg(b.planetary.autofocus.everyNRuns).arg(b.planetary.tracking.allowRoiShift?"on":"off").arg(b.planetary.tracking.mountCorrections?"on":"off"));});
-    connect(start,&QPushButton::clicked,this,[this](){ObservationPlan p;p.name="GUI observing plan";p.blocks=targets_;QString e;if(!c_->setObservationPlan(p,&e)||!c_->startSession(&e))showError(e.isEmpty()?"Add at least one observation block":e);});connect(stop,&QPushButton::clicked,this,[this](){c_->stopSession();});
-    l->addWidget(addDso);l->addWidget(addPlanet);l->addWidget(start);l->addWidget(stop);return w;
+
+    auto formatBlock=[](const ObservationBlock&b){
+        if(b.mode==ObservationMode::DsoFits)return QString("DSO %1  RA %2 DEC %3  %4s × %5  recenter:%6/%7  AF:%8/%9").arg(b.name).arg(b.coordinate.raDeg).arg(b.coordinate.decDeg).arg(b.dso.exposure.exposureSec).arg(b.dso.frameCount).arg(b.dso.recenter.beforeFirstFrame?"start":"off").arg(b.dso.recenter.everyNFrames).arg(b.dso.autofocus.beforeFirstFrame?"start":"off").arg(b.dso.autofocus.everyNFrames);
+        return QString("SER %1  RA %2 DEC %3  %4s @ %5 fps × %6  ROI %7x%8  AF:%9/%10  ROI-track:%11 mount:%12").arg(b.name).arg(b.coordinate.raDeg).arg(b.coordinate.decDeg).arg(b.planetary.durationSec).arg(b.planetary.stream.targetFps).arg(b.planetary.serRuns).arg(b.planetary.roiWidth).arg(b.planetary.roiHeight).arg(b.planetary.autofocus.beforeFirstRun?"start":"off").arg(b.planetary.autofocus.everyNRuns).arg(b.planetary.tracking.allowRoiShift?"on":"off").arg(b.planetary.tracking.mountCorrections?"on":"off");
+    };
+    auto refreshList=[this,formatBlock](){const int row=targetList_->currentRow();targetList_->clear();for(const auto&b:targets_)targetList_->addItem(formatBlock(b));if(!targets_.empty())targetList_->setCurrentRow(std::clamp(row,0,int(targets_.size())-1));};
+    auto makeDso=[this](){ObservationBlock b;b.name=targetName_->text();b.coordinate={targetRa_->value(),targetDec_->value(),EquatorialFrame::J2000};b.mode=ObservationMode::DsoFits;b.dso.exposure.exposureSec=targetExposure_->value();b.dso.exposure.saveRaw=true;b.dso.frameCount=targetRepeats_->value();b.dso.recenter.beforeFirstFrame=targetRecenterBefore_->isChecked();b.dso.recenter.everyNFrames=targetRecenterEvery_->value();b.dso.recenter.toleranceArcmin=targetRecenterTolerance_->value();b.dso.autofocus.beforeFirstFrame=targetAutofocusBefore_->isChecked();b.dso.autofocus.everyNFrames=targetAutofocusEvery_->value();return b;};
+    auto makePlanet=[this](){ObservationBlock b;b.name=targetName_->text();b.coordinate={targetRa_->value(),targetDec_->value(),EquatorialFrame::J2000};b.mode=ObservationMode::PlanetarySer;b.planetary.stream.exposureSec=planetExposure_->value();b.planetary.stream.gain=planetGain_->value();b.planetary.stream.targetFps=planetFps_->value();b.planetary.serRuns=planetRuns_->value();b.planetary.durationSec=planetDuration_->value();b.planetary.roiWidth=planetRoiW_->value();b.planetary.roiHeight=planetRoiH_->value();b.planetary.autofocus.beforeFirstRun=planetAutofocusBefore_->isChecked();b.planetary.autofocus.everyNRuns=planetAutofocusEvery_->value();b.planetary.autofocus.request.mode=AutofocusMode::Planet;b.planetary.autofocus.request.exposureSec=planetExposure_->value();b.planetary.autofocus.request.gain=planetGain_->value();b.planetary.tracking.allowRoiShift=planetRoiTracking_->isChecked();b.planetary.tracking.mountCorrections=planetMountCorrections_->isChecked();b.planetary.trackingRate=trackingRateFromString(planetTrackingRate_->currentText());return b;};
+    auto loadBlock=[this](const ObservationBlock&b){targetName_->setText(b.name);targetRa_->setValue(b.coordinate.raDeg);targetDec_->setValue(b.coordinate.decDeg);if(b.mode==ObservationMode::DsoFits){targetExposure_->setValue(b.dso.exposure.exposureSec);targetRepeats_->setValue(b.dso.frameCount);targetRecenterBefore_->setChecked(b.dso.recenter.beforeFirstFrame);targetRecenterEvery_->setValue(b.dso.recenter.everyNFrames);targetRecenterTolerance_->setValue(b.dso.recenter.toleranceArcmin);targetAutofocusBefore_->setChecked(b.dso.autofocus.beforeFirstFrame);targetAutofocusEvery_->setValue(b.dso.autofocus.everyNFrames);}else{planetExposure_->setValue(b.planetary.stream.exposureSec);planetGain_->setValue(b.planetary.stream.gain);planetFps_->setValue(b.planetary.stream.targetFps);planetDuration_->setValue(b.planetary.durationSec);planetRuns_->setValue(b.planetary.serRuns);planetRoiW_->setValue(b.planetary.roiWidth);planetRoiH_->setValue(b.planetary.roiHeight);planetAutofocusBefore_->setChecked(b.planetary.autofocus.beforeFirstRun);planetAutofocusEvery_->setValue(b.planetary.autofocus.everyNRuns);planetRoiTracking_->setChecked(b.planetary.tracking.allowRoiShift);planetMountCorrections_->setChecked(b.planetary.tracking.mountCorrections);planetTrackingRate_->setCurrentText(trackingRateName(b.planetary.trackingRate));}};
+    connect(targetList_,&QListWidget::currentRowChanged,this,[this,loadBlock](int row){if(row>=0&&row<int(targets_.size()))loadBlock(targets_[size_t(row)]);});
+    connect(useCurrent,&QPushButton::clicked,this,[this](){MountStatus st;QString e;if(!c_->mountStatus(st,&e)||!st.coordinateValid){showError(e.isEmpty()?"Mount does not currently report a valid sky coordinate":e);return;}const auto j=convertEquatorialFrame(st.coordinate,EquatorialFrame::J2000);targetRa_->setValue(j.raDeg);targetDec_->setValue(j.decDeg);appendLog(QString("Scheduler target set from current mount pointing: RA=%1 DEC=%2 J2000").arg(j.raDeg,0,'f',6).arg(j.decDeg,0,'f',6));});
+
+    auto*buttons=new QGridLayout;auto*addDso=new QPushButton("Add DSO block");auto*addPlanet=new QPushButton("Add planetary SER block");auto*update=new QPushButton("Update selected");auto*del=new QPushButton("Delete selected");auto*clear=new QPushButton("Clear plan");auto*up=new QPushButton("Move up");auto*down=new QPushButton("Move down");auto*startPlan=new QPushButton("Start plan");auto*stop=new QPushButton("Stop");
+    buttons->addWidget(addDso,0,0);buttons->addWidget(addPlanet,0,1);buttons->addWidget(update,1,0);buttons->addWidget(del,1,1);buttons->addWidget(clear,1,2);buttons->addWidget(up,2,0);buttons->addWidget(down,2,1);buttons->addWidget(startPlan,3,0,1,2);buttons->addWidget(stop,3,2);l->addLayout(buttons);
+    connect(addDso,&QPushButton::clicked,this,[this,makeDso,refreshList](){targets_.push_back(makeDso());refreshList();targetList_->setCurrentRow(int(targets_.size())-1);});
+    connect(addPlanet,&QPushButton::clicked,this,[this,makePlanet,refreshList](){targets_.push_back(makePlanet());refreshList();targetList_->setCurrentRow(int(targets_.size())-1);});
+    connect(update,&QPushButton::clicked,this,[this,makeDso,makePlanet,refreshList](){const int row=targetList_->currentRow();if(row<0||row>=int(targets_.size())){showError("Select a scheduler block to update");return;}const auto mode=targets_[size_t(row)].mode;ObservationBlock b=mode==ObservationMode::DsoFits?makeDso():makePlanet();b.id=targets_[size_t(row)].id;targets_[size_t(row)]=b;refreshList();targetList_->setCurrentRow(row);});
+    connect(del,&QPushButton::clicked,this,[this,refreshList](){const int row=targetList_->currentRow();if(row<0||row>=int(targets_.size()))return;targets_.erase(targets_.begin()+row);refreshList();});
+    connect(clear,&QPushButton::clicked,this,[this,refreshList](){targets_.clear();refreshList();});
+    connect(up,&QPushButton::clicked,this,[this,refreshList](){const int row=targetList_->currentRow();if(row<=0||row>=int(targets_.size()))return;std::swap(targets_[size_t(row)],targets_[size_t(row-1)]);refreshList();targetList_->setCurrentRow(row-1);});
+    connect(down,&QPushButton::clicked,this,[this,refreshList](){const int row=targetList_->currentRow();if(row<0||row+1>=int(targets_.size()))return;std::swap(targets_[size_t(row)],targets_[size_t(row+1)]);refreshList();targetList_->setCurrentRow(row+1);});
+    connect(startPlan,&QPushButton::clicked,this,[this](){ObservationPlan p;p.name="GUI observing plan";p.blocks=targets_;if(sessionStartMode_&&sessionStartMode_->currentIndex()==1)p.startAtUtc=sessionStartAt_->dateTime().toUTC();QString e;if(!c_->setObservationPlan(p,&e)||!c_->startSession(&e))showError(e.isEmpty()?"Add at least one observation block":e);else if(p.startAtUtc.isValid())appendLog(QString("Observation plan scheduled for %1 UTC").arg(p.startAtUtc.toString(Qt::ISODateWithMs)));});
+    connect(stop,&QPushButton::clicked,this,[this](){c_->stopSession();});
+    return w;
 }
 QWidget *MainWindow::buildOperationsTab(){auto*w=new QWidget;auto*l=new QVBoxLayout(w);operationsList_=new QListWidget;l->addWidget(operationsList_);auto*refresh=new QPushButton("Refresh operations");cancelOperationButton_=new QPushButton("Cancel selected operation");connect(refresh,&QPushButton::clicked,this,[this](){for(const auto&v:c_->operations(false))updateOperation(v.toObject());});connect(cancelOperationButton_,&QPushButton::clicked,this,[this](){auto*item=operationsList_?operationsList_->currentItem():nullptr;if(!item)return;QString e;const QString id=item->data(Qt::UserRole).toString();if(!c_->cancelOperation(id,&e))showError(e);});l->addWidget(refresh);l->addWidget(cancelOperationButton_);l->addStretch();return w;}
 QWidget *MainWindow::buildServerTab(){auto*w=new QWidget;auto*l=new QVBoxLayout(w);

@@ -5,7 +5,7 @@ root=Path(__file__).resolve().parents[1]
 read=lambda p:(root/p).read_text(encoding='utf-8')
 cmake=read('CMakeLists.txt'); astro=read('src/core/astro_types.h'); app=read('src/core/application_controller.cpp'); remote=read('src/core/remote_observatory_controller.cpp'); server=read('src/oal/oal_server.cpp'); gui=read('src/gui/main_window.cpp'); gh=read('src/gui/main_window.h'); af=read('src/algorithms/autofocus_engine.cpp'); eqh=read('src/core/equatorial_frames.h'); eqc=read('src/core/equatorial_frames.cpp'); qhy=read('drivers/qhy/oal_driver_qhy.cpp'); zwo=read('drivers/zwo_asi/oal_driver_zwo_asi.cpp'); native=read('src/backends/oal_native_devices.cpp'); openapi=read('docs/openapi.yaml')
 checks={
- 'release version': 'VERSION 0.2.10.47' in cmake,
+ 'release version': 'VERSION 0.2.10.48' in cmake,
  'generic Bayer enum': all(x in astro for x in ('BayerPattern','RGGB','BGGR','GRBG','GBRG')),
  'optional debayer request': 'bool debayer{false}' in astro and 'bayerPattern{BayerPattern::Auto}' in astro,
  'remote debayer transport': '"debayer",r.debayer' in remote and '"bayerPattern",bayerPatternName' in remote,
@@ -24,9 +24,9 @@ checks={
  'saturation quality only': 'Valid camera frame — exposure-quality warning' in gui and 'NOT a camera or transport error' in gui,
  'AF operational preview': 'publishOperationalPreview(f,"af")' in app and '%1-preview-%2' in app,
  'manual focus jog': 'Manual focus jog' in gui and 'Manual focuser STOP' in gui and 'focusJogStep_' in gh,
- 'scene native-scale metric': 'sceneFocusScore' in af and 'gray.convertTo(f,CV_32F,1.0/65535.0)' in af,
- 'scene flat curve guard': 'Scene focus curve is too flat' in af,
- 'scene fine cannot replace stronger coarse': 'candidate->score>chosen.score*1.005' in af and 'candidate->score>best->score*0.25' not in af,
+ 'scene native-scale metric': 'sceneFocusScore' in af and 'gray.convertTo(f, CV_32F, 1.0 / 65535.0)' in af,
+ 'scene flat curve guard': 'Scene focus peak was not bracketed' in af and 'starting focus position %1 restored' in af,
+ 'scene fine cannot replace stronger coarse': 'candidate->score > chosen.score * 1.005' in af and 'candidate->score>best->score*0.25' not in af,
  'horizontal conversion API': all(x in eqh for x in ('HorizontalCoord','equatorialToHorizontal','horizontalToEquatorial','localSiderealTimeDeg')),
  'galactic conversion API': all(x in eqh for x in ('GalacticCoord','equatorialToGalactic','galacticToEquatorial')),
  'coordinate transforms implemented': all(x in eqc for x in ('equatorialToHorizontal','horizontalToEquatorial','equatorialToGalactic','galacticToEquatorial')),

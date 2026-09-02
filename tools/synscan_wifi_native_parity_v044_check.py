@@ -6,7 +6,7 @@ root=Path(__file__).resolve().parents[1]
 def text(rel):
     return (root/rel).read_text(encoding='utf-8',errors='ignore')
 
-assert 'VERSION 0.2.10.47' in text('CMakeLists.txt')
+assert 'VERSION 0.2.10.48' in text('CMakeLists.txt')
 proto=text('drivers/skywatcher/motor_controller_protocol.h')
 native=text('drivers/eqdrive/oal_driver_eqdrive.cpp')
 wifi=text('src/backends/synscan_network_mount.cpp')

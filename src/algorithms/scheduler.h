@@ -22,6 +22,7 @@ public:
     std::optional<ObservationBlock> currentBlock() const;
 
     bool start();
+    bool beginScheduled();
     void stop(const QString &reason = {});
     void fail(const QString &message);
     void setStep(const QString &step, const QString &operationId = {});
