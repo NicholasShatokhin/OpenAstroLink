@@ -8,7 +8,7 @@ protocol endpoints.
 
 ### EQDrive Wi-Fi transport polarity
 
-OpenAstroLink keeps Motor Controller **transport polarity** separate from the mount sky geometry. Generic Sky-Watcher UDP/11880 follows the protocol default `Axis1=+1`, `Axis2=+1`. The HIL-qualified EQDrive Wi-Fi profile reporting `9216000` counts/rev on both axes and timer frequency `53694` uses `Axis1=+1`, `Axis2=-1`; this corrects the physical DEC direction while preserving the same v6 sky transform and the same startup Home/Park reference.
+OpenAstroLink keeps Motor Controller **transport polarity** separate from the mount sky geometry. Generic Sky-Watcher UDP/11880 follows the protocol default `Axis1=+1`, `Axis2=+1`. The HIL-qualified EQDrive Wi-Fi profile reporting `9216000` counts/rev on both axes and timer frequency `53694` uses `Axis1=+1`, `Axis2=-1`; this corrects the physical DEC/polar-distance direction while preserving the v7+ EQMOD GEM sky transform and the same startup Home/Park reference.
 
 For unusual adapters the transport signs can be forced before launching the node:
 

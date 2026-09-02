@@ -1,5 +1,11 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.47 build-fix 3 — direct-MC DEC/polar-distance mirror correction
+
+- Follow-up HIL on 2026-09-02 showed an exact east/west sky mirror even after the Axis1 hypothesis in build-fix 2. Recomputing the recorded target from raw encoder deltas under all four axis-sign mappings proves that Axis1 inversion cannot create that mirror; the DEC/polar-distance mapping can.
+- Coordinate model v9 keeps the v7 EQMOD HA/Dec branch equations and uses the HIL-qualified direct-MC physical mapping `Axis1=+1`, `Axis2=-1`. For the recorded target, the required raw move is approximately `Axis1=-11.116°`, `Axis2=+67.847°`; the superseded v8 command `+11.116°,-67.847°` corresponds to the observed mirrored east-side pointing.
+- Serial EQDrive and UDP/11880 SynScan Wi-Fi remain transport peers. Existing v7/v8 profiles migrate automatically without discarding valid Home/Park values; profiles older than v7 still receive the legacy one-time Home/Park reset.
+
 ## v0.2.10.47 — mixed DSO + autonomous planetary SER executor
 
 - `ObservationPlan` now executes both `dso-fits` and `planetary-ser` blocks in one node-side plan.
@@ -9,7 +15,7 @@
 - QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
 - Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
 
-**Current package: v0.2.10.47 — mixed DSO / planetary scheduler executor**
+**Current package: v0.2.10.47 build-fix 3 — mixed DSO / planetary scheduler executor + direct-MC v9 mapping**
 
 ## v0.2.10.46 — ObservationPlan and supervised DSO executor
 

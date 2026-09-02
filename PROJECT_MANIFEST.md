@@ -2,7 +2,7 @@
 
 ## v0.2.10.47
 
-- Package: `0.2.10.47-planetary-ser-executor`
+- Package: `0.2.10.47-planetary-ser-executor-buildfix3`
 - Core version: `0.2.10.47`
 - Extends `ObservationPlan` with a real mixed-mode planetary executor: GOTO, full-frame planet acquisition, planetary autofocus, fixed-size hardware ROI and finite SER runs.
 - Adds compact bright-object `PlanetDetector` acquisition/tracking foundation.
@@ -10,6 +10,7 @@
 - Adds `<SER basename>.roi.jsonl` provenance so moved ROI sensor regions are reproducible for calibration frames.
 - Fast loop shifts hardware ROI when the planet drifts. Optional slow loop self-calibrates a 2×2 RA/DEC→pixel response and performs bounded coordinate micro-slew recentering; disabled by default pending HIL.
 - DSO and planetary blocks may be mixed in one plan. Scheduler remains non-durable across restart; safety/weather/meridian and thermal in-exposure focus are OAL 1.0 work.
+- Build-fix 3 upgrades direct EQDrive/SynScan-WiFi Core geometry profiles to coordinate model v9. A full recomputation of the follow-up 2026-09-02 HIL across all four physical sign mappings identifies the exact east/west mirror as an Axis2/DEC-polar-distance polarity issue: `Axis1Sign=+1`, `Axis2Sign=-1`. v7 EQMOD branch geometry and valid v7/v8 Home/Park values are preserved.
 
 ## v0.2.10.46
 

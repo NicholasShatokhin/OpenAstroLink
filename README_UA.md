@@ -1,5 +1,11 @@
 # OpenAstroSuite / OpenAstroLink
 
+## v0.2.10.47 build-fix 3 — виправлення дзеркальності DEC/polar-distance direct-MC
+
+- Повторний HIL 2026-09-02 показав точне дзеркало схід↔захід навіть після гіпотези build-fix 2 про Axis1. Перерахунок записаної цілі за raw encoder deltas для всіх чотирьох комбінацій знаків показує: інверсія Axis1 не може створити таке дзеркало, а DEC/polar-distance mapping — може.
+- Coordinate model v9 зберігає v7 EQMOD HA/Dec branch formulas і використовує HIL-qualified physical mapping direct-MC `Axis1=+1`, `Axis2=-1`. Для записаної цілі потрібен raw рух приблизно `Axis1=-11.116°`, `Axis2=+67.847°`; спростована v8-команда `+11.116°,-67.847°` відповідає спостережуваному дзеркальному наведенню на схід.
+- Serial EQDrive і UDP/11880 SynScan Wi-Fi лишаються transport peers. Існуючі v7/v8 profiles мігрують автоматично без втрати валідних Home/Park; профілі старші за v7 і далі проходять legacy one-time Home/Park reset.
+
 ## v0.2.10.47 — змішаний DSO + автономний planetary SER executor
 
 - `ObservationPlan` тепер виконує в одному node-side плані і `dso-fits`, і `planetary-ser` blocks.
@@ -9,7 +15,7 @@
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.47 — mixed DSO / planetary scheduler executor**
+**Поточний пакет: v0.2.10.47 build-fix 3 — mixed DSO / planetary scheduler executor + direct-MC v9 mapping**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

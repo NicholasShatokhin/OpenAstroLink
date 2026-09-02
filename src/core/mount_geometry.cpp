@@ -53,7 +53,7 @@ EquatorialCoord skyFromPolarAlignedAxes(const MechanicalAxes&a,const ObserverLoc
 
 
 
-// Direct Sky-Watcher/EQDrive GEM model v7 (OpenAstroLink 0.2.10.45).
+// Direct Sky-Watcher/EQDrive GEM model v7-v9 (OpenAstroLink 0.2.10.45).
 //
 // The raw motor-controller axes are mechanical hour-angle/declination axes,
 // not an arbitrary spherical telescope frame.  EQMOD's conventional northern

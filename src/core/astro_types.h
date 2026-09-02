@@ -42,9 +42,9 @@ inline TrackingRate trackingRateFromString(const QString &text, TrackingRate fal
 struct MountGeometryConfig {
     MountGeometryType type{MountGeometryType::GermanEquatorial};
     // Mechanical axis orientation. +1 means increasing canonical axis angle
-    // increases the controller-reported axis coordinate. These defaults match
-    // the HIL-qualified EQDrive installation used during v0.2.10.25 tests:
-    // RA+ => decreasing hour-axis coordinate; DEC+ => increasing DEC axis.
+    // increases the controller-reported axis coordinate. Direct Motor
+    // Controller profiles migrate this installation-dependent mapping to the
+    // HIL-qualified v9 values Axis1=+1, Axis2=-1; generic backends retain +1/+1.
     int axis1Sign{1};
     int axis2Sign{1};
     QString preferredPierSide{"east"};
@@ -63,11 +63,13 @@ struct MountGeometryConfig {
     bool customPark{false};
     bool allowAutomaticPierFlip{false};
     // Coordinate-model ABI for direct Sky-Watcher/EQDrive Motor Controller mounts.
-    // v7 (OpenAstroLink 0.2.10.45) uses EQMOD-style mechanical GEM coordinates.
-    // The repeatable counterweight-down polar Home is Axis1=0°, Axis2=0° and,
-    // in the northern hemisphere, corresponds to HA=-6h, Dec=+90° on the west
-    // pointing branch.  Target branch/side-of-pier is determined by hour angle;
-    // native serial EQDrive and direct UDP/11880 share this exact Core model.
+    // v7 introduced EQMOD-style mechanical GEM HA/Dec pointing-state geometry.
+    // v8 tested the hour-axis polarity hypothesis. v9 (OpenAstroLink 0.2.10.47 build-fix 3)
+    // replaces it after an all-sign HIL recomputation: Axis1=+1, Axis2=-1. The
+    // east/west mirror is caused by the DEC/polar-distance mapping, not Axis1.
+    // Counterweight-down polar Home remains Axis1=0°, Axis2=0° and, in the
+    // northern hemisphere, means HA=-6h, Dec=+90° on the west pointing branch.
+    // Native serial EQDrive and direct UDP/11880 still share the same Core model.
     int nativeCoordinateModelVersion{1};
     // When an ASCOM backend exposes a valid observatory site, prefer that site
     // as the authoritative source for OAL coordinate conversions. This avoids

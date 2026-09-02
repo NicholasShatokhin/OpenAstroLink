@@ -1,5 +1,11 @@
 # OpenAstroSuite / OpenAstroLink status — v0.2.10.47
 
+## v0.2.10.47 build-fix 3 — direct-MC east/west mirror recomputation
+
+- 2026-09-02 follow-up HIL confirmed an exact east/west sky mirror while the v7/v8 branch selection remained consistent with Classic EQMOD ASCOM. Recomputing the recorded target under all four axis-sign mappings shows that Axis1 inversion cannot create the observed mirror; reversing the DEC/polar-distance mapping does.
+- Coordinate model v9 therefore retains the v7 EQMOD HA/Dec branch equations and uses the HIL-qualified direct-MC mapping `Axis1Sign=+1`, `Axis2Sign=-1`.
+- Native EQDrive serial and direct SynScan Wi-Fi remain raw Motor Controller transport peers; no Wi-Fi-only polarity or 90-degree offset is reintroduced.
+
 ## v0.2.10.47 mixed scheduler execution
 
 - ✅ DSO FITS/RAW block executor retained.

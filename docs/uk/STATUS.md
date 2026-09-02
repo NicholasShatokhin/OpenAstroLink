@@ -1,5 +1,11 @@
 # Стан OpenAstroSuite / OpenAstroLink — v0.2.10.47
 
+## v0.2.10.47 build-fix 3 — перерахунок direct-MC дзеркальності схід/захід
+
+- Повторний HIL 2026-09-02 підтвердив точне дзеркало схід↔захід при правильному виборі GEM branch відносно Classic EQMOD ASCOM. Перерахунок записаної цілі для всіх чотирьох комбінацій знаків показує, що інверсія Axis1 не може дати спостережуване дзеркало; його створює DEC/polar-distance mapping.
+- Coordinate model v9 тому зберігає всі v7 EQMOD HA/Dec branch formulas і використовує HIL-qualified direct-MC mapping `Axis1Sign=+1`, `Axis2Sign=-1`.
+- Native EQDrive serial і direct SynScan Wi-Fi лишаються однаковими raw Motor Controller transports; Wi-Fi-only polarity або штучний 90° offset не повертаються.
+
 ## v0.2.10.47 mixed scheduler execution
 
 - ✅ DSO FITS/RAW executor збережено.

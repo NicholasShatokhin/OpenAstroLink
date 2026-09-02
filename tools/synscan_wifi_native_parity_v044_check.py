@@ -31,8 +31,8 @@ assert 'udp-11880-wire-identical-to-native-eqdrive' in wifi
 assert 'double(qint64(p2)-qint64(sessionHomeCounts2_))*360.0' in wifi
 assert 'double(counts)-double(mcHomeZeroCounts(d,axis))' in native
 
-# v7 Moon HIL: once Core chooses the correct EQMOD west branch, both
-# transports must command the same +77.299641-degree DEC movement.
+# v8 keeps raw serial/UDP parity. The Core physical Axis1 sign correction is
+# above both transports; both still command the same +77.299641-degree DEC movement.
 delta=77.299641
 cpr=9216000.0
 counts=max(1,round(abs(delta)*cpr/360.0))

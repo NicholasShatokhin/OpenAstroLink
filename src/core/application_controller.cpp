@@ -483,25 +483,32 @@ bool ApplicationController::connectMount(const QString&b,const QString&e,QString
     if(b=="ascom-classic"&&resolvedEndpoint.isEmpty())resolvedEndpoint="EQMOD.Telescope";
     bool migratedDirectMcModel=false;
     auto migrateDirectMotorControllerModel=[this,&migratedDirectMcModel](){
-        if(profile_.mount.nativeCoordinateModelVersion>=7)return;
-        // v7 keeps one public mechanical-axis convention: the controller
-        // counts present at the standard counterweight-down polar Home are
-        // Axis1=0°, Axis2=0°.  Sky mapping now follows EQMOD-style mechanical
-        // HA/DEC pointing states: northern Home is HA=-6h, Dec=+90° on the
-        // west branch.  v6 incorrectly treated the GEM as a freely branchable
-        // spherical telescope frame.  Clear legacy custom poses one time because
-        // older coordinate models may have encoded incompatible offsets.
+        if(profile_.mount.nativeCoordinateModelVersion>=9)return;
+        // v9 retains the v7 EQMOD-style GEM HA/DEC pointing-state geometry,
+        // but corrects the direct Motor Controller installation mapping after
+        // a second 2026-09-02 HIL that measured an exact east/west sky mirror.
+        // Recomputing all four sign combinations from the observed controller
+        // deltas shows that the mirror is produced by the DEC/polar-distance
+        // axis, not by the hour axis: Axis1=+1, Axis2=-1.
+        //
+        // The controller counts captured at counterweight-down polar Home stay
+        // Axis1=0°, Axis2=0° and the v7 branch equations stay unchanged.
+        const int previousVersion=profile_.mount.nativeCoordinateModelVersion;
         const bool hadLegacyCustomPose=profile_.mount.customHome||profile_.mount.customPark;
-        profile_.mount.nativeCoordinateModelVersion=7;
-        profile_.mount.axis1Sign=1;profile_.mount.axis2Sign=1;profile_.mount.preferredPierSide="west";
-        profile_.mount.customHome=false;profile_.mount.customPark=false;
-        profile_.mount.homeAxis1Deg=0.0;profile_.mount.homeAxis2Deg=0.0;
-        profile_.mount.parkAxis1Deg=0.0;profile_.mount.parkAxis2Deg=0.0;
+        profile_.mount.nativeCoordinateModelVersion=9;
+        profile_.mount.axis1Sign=1;profile_.mount.axis2Sign=-1;profile_.mount.preferredPierSide="west";
+        if(previousVersion<7){
+            // v6 and earlier may have encoded incompatible custom coordinate
+            // offsets, so keep the one-time v7 reset for those legacy profiles.
+            profile_.mount.customHome=false;profile_.mount.customPark=false;
+            profile_.mount.homeAxis1Deg=0.0;profile_.mount.homeAxis2Deg=0.0;
+            profile_.mount.parkAxis1Deg=0.0;profile_.mount.parkAxis2Deg=0.0;
+        }
         profile_.mount.autoHomeSync=true;
         settings_.saveProfile(profile_);emit profileChanged();migratedDirectMcModel=true;
-        emit logMessage(hadLegacyCustomPose
-            ? "Native direct-MC coordinate model migrated to v7: startup controller counts define the physical Home/Park as 0°,0°; legacy custom Home/Park cleared; sky mapping now follows EQMOD mechanical HA/DEC pointing-state geometry."
-            : "Native direct-MC coordinate model migrated to v7: startup controller counts define Axis1=0°, Axis2=0°; northern Home is HA=-6h/Dec=+90° on the EQMOD west branch; axis signs reset to +1/+1.");
+        emit logMessage(previousVersion<7&&hadLegacyCustomPose
+            ? "Native direct-MC coordinate model migrated to v9: legacy custom Home/Park cleared; EQMOD GEM pointing-state geometry retained with HIL-qualified physical axis signs Axis1=+1, Axis2=-1."
+            : "Native direct-MC coordinate model migrated to v9: v7 EQMOD GEM branch geometry retained; 2026-09-02 encoder/sky recomputation selects direct-MC Axis1=+1, Axis2=-1 (DEC/polar-distance mirror fix).");
     };
     if(parseNativeBackendKey(b,driverId,deviceId)){
         if(driverId=="oal.eqdrive")migrateDirectMotorControllerModel();

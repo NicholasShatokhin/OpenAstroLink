@@ -2,7 +2,7 @@
 
 ## v0.2.10.47
 
-- Пакет: `0.2.10.47-planetary-ser-executor`
+- Пакет: `0.2.10.47-planetary-ser-executor-buildfix3`
 - Версія Core: `0.2.10.47`
 - `ObservationPlan` отримав реальний mixed-mode planetary executor: GOTO, full-frame пошук планети, planetary autofocus, hardware ROI незмінного розміру та finite SER runs.
 - Додано `PlanetDetector` для acquisition/tracking яскравих компактних об’єктів.
@@ -10,6 +10,7 @@
 - Додано `<SER basename>.roi.jsonl` provenance для точного відтворення регіону сенсора під dark/flat.
 - Fast loop рухає ROI; опційний slow loop калібрує 2×2 RA/DEC→pixel response та робить обмежені coordinate micro-slew corrections. Slow loop за замовчуванням вимкнений до HIL.
 - DSO і planetary blocks можна змішувати в одному плані. Durable restart, safety/weather/meridian та thermal focus під час експозиції лишаються роботою до OAL 1.0.
+- Build-fix 3 оновлює direct EQDrive/SynScan-WiFi Core geometry profiles до coordinate model v9. Повний перерахунок повторного HIL 2026-09-02 для всіх чотирьох фізичних mappings визначає точне дзеркало схід↔захід як polarity-проблему Axis2/DEC-polar-distance: `Axis1Sign=+1`, `Axis2Sign=-1`. v7 EQMOD branch geometry та валідні Home/Park v7/v8 зберігаються.
 
 ## v0.2.10.46
 
