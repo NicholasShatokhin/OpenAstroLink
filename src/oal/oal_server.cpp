@@ -15,7 +15,22 @@ QJsonObject profileJson(const TelescopeProfile&p){return{{"name",p.name},{"optic
 QJsonObject solveDetailed(const SolveResult&s){auto j=solveToJson(s);QJsonArray stars;for(const auto&x:s.imageStars)stars.append(QJsonObject{{"x",x.positionPx.x},{"y",x.positionPx.y},{"flux",x.flux},{"peak",x.peak},{"hfrPx",x.hfrPx}});j["imageStars"]=stars;return j;}
 }
 OalServer::OalServer(ApplicationController*c,QObject*p):QObject(p),controller_(c),http_(this),tcp_(this){registerRoutes();}
-bool OalServer::start(quint16 p,QString*e){if(tcp_.isListening())tcp_.close();if(!tcp_.listen(QHostAddress::Any,p)){if(e)*e=tcp_.errorString();return false;}if(!bound_){if(!http_.bind(&tcp_)){if(e)*e="QHttpServer bind failed";tcp_.close();return false;}bound_=true;}return true;}
+bool OalServer::start(quint16 p,QString*e){
+    if(tcp_.isListening())tcp_.close();
+    if(!tcp_.listen(QHostAddress::Any,p)){if(e)*e=tcp_.errorString();return false;}
+    if(!bound_){
+        // QAbstractHttpServer::bind(QTcpServer*) returned void in Qt 6.4-6.7
+        // and returns bool in Qt 6.8+.  The TCP server is already known to be
+        // listening here, so keep one source path compatible with both APIs.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+        if(!http_.bind(&tcp_)){if(e)*e="QHttpServer bind failed";tcp_.close();return false;}
+#else
+        http_.bind(&tcp_);
+#endif
+        bound_=true;
+    }
+    return true;
+}
 void OalServer::stop(){tcp_.close();}
 void OalServer::registerRoutes(){
     http_.route("/api/v1/node/info",QHttpServerRequest::Method::Get,[this](){return ok(controller_->nodeInfoJson());});

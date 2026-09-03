@@ -32,6 +32,11 @@ option(OAS_BUILD_GUI "Build the OpenAstroSuite Qt GUI client" ON)
 option(OAS_BUILD_NODE "Build the headless openastrolink-node service" ON)
 option(OAS_BUILD_HARDWARE_PROBE "Build oal-hardware-probe diagnostics utility" ON)
 option(OAS_REQUIRE_MSVC "Fail configuration on Windows unless the MSVC toolchain is active" OFF)
+set(OAS_QT_HOST_PATH "" CACHE PATH "Host Qt installation used for runnable moc/rcc/uic during cross-compilation")
+if(CMAKE_CROSSCOMPILING AND OAS_QT_HOST_PATH)
+    set(QT_HOST_PATH "${OAS_QT_HOST_PATH}" CACHE PATH "Qt host tools path" FORCE)
+    message(STATUS "OAL cross Qt host tools: ${QT_HOST_PATH}")
+endif()
 
 if(WIN32 AND OAS_REQUIRE_MSVC AND NOT MSVC)
     message(FATAL_ERROR
@@ -39,6 +44,94 @@ if(WIN32 AND OAS_REQUIRE_MSVC AND NOT MSVC)
         "with compiler '${CMAKE_CXX_COMPILER}'. Do not mix MinGW/Strawberry GCC with "
         "Qt MSVC2022 or vendor .lib files. Delete the build directory and configure with "
         "a Ninja preset from an x64 MSVC developer environment (or use scripts/build_windows.ps1).")
+endif()
+
+set(OAS_EXPECT_TARGET_ARCH "" CACHE STRING "Expected target architecture guard: arm64, armhf, x86_64, or empty")
+if(OAS_EXPECT_TARGET_ARCH)
+    string(TOLOWER "${OAS_EXPECT_TARGET_ARCH}" _oas_expected_arch)
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _oas_target_processor)
+    set(_oas_arch_ok FALSE)
+    if(_oas_expected_arch STREQUAL "arm64" AND _oas_target_processor MATCHES "^(aarch64|arm64)$")
+        set(_oas_arch_ok TRUE)
+    elseif(_oas_expected_arch STREQUAL "armhf" AND _oas_target_processor MATCHES "^(arm|armv6.*|armv7.*|armv8l)$")
+        set(_oas_arch_ok TRUE)
+    elseif(_oas_expected_arch STREQUAL "x86_64" AND _oas_target_processor MATCHES "^(x86_64|amd64)$")
+        set(_oas_arch_ok TRUE)
+    endif()
+    if(NOT _oas_arch_ok)
+        message(FATAL_ERROR
+            "Preset expects target architecture '${OAS_EXPECT_TARGET_ARCH}', but CMake reports "
+            "CMAKE_SYSTEM_PROCESSOR='${CMAKE_SYSTEM_PROCESSOR}'. Use a native preset on the matching "
+            "host or select the appropriate RPi cross-compilation preset/toolchain.")
+    endif()
+endif()
+
+message(STATUS
+    "OAL build target: host=${CMAKE_HOST_SYSTEM_NAME}/${CMAKE_HOST_SYSTEM_PROCESSOR}; "
+    "target=${CMAKE_SYSTEM_NAME}/${CMAKE_SYSTEM_PROCESSOR}; cross=${CMAKE_CROSSCOMPILING}")
+
+# GNU ld does not automatically search a foreign sysroot for transitive
+# DT_NEEDED libraries of shared objects.  Debian/OpenCV pulls BLAS/LAPACK,
+# Armadillo, ARPACK, SuperLU and libc through that transitive chain; without an
+# explicit -rpath-link the WSL host linker can fall back to /usr/<triple> from
+# the host cross toolchain, producing both missing BLAS symbols and glibc
+# version mismatches.  Keep this link-time-only: no target runtime RPATH is
+# embedded in the produced executables.
+if(CMAKE_CROSSCOMPILING AND OAS_CROSS_SYSROOT)
+    set(_oas_cross_link_dirs
+        "${OAS_CROSS_SYSROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}"
+        "${OAS_CROSS_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}"
+        # Debian's reference BLAS/LAPACK runtime SONAMEs live below these
+        # alternatives-managed subdirectories.  The top-level multiarch
+        # symlinks may be absolute and therefore unsafe in a foreign sysroot.
+        "${OAS_CROSS_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/blas"
+        "${OAS_CROSS_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/lapack"
+        "${OAS_CROSS_SYSROOT}/lib"
+        "${OAS_CROSS_SYSROOT}/usr/lib")
+    set(_oas_cross_link_dirs_existing "")
+    foreach(_oas_cross_link_dir IN LISTS _oas_cross_link_dirs)
+        if(IS_DIRECTORY "${_oas_cross_link_dir}")
+            list(APPEND _oas_cross_link_dirs_existing "${_oas_cross_link_dir}")
+            add_link_options(
+                "LINKER:-rpath-link,${_oas_cross_link_dir}"
+                "-L${_oas_cross_link_dir}")
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _oas_cross_link_dirs_existing)
+    message(STATUS "OAL target link search: ${_oas_cross_link_dirs_existing}")
+endif()
+
+if(CMAKE_CROSSCOMPILING AND OAS_CROSS_SYSROOT)
+    message(STATUS "OAL target sysroot: ${CMAKE_SYSROOT}")
+    message(STATUS "OAL target multiarch: ${CMAKE_LIBRARY_ARCHITECTURE}")
+    if(Qt6_DIR)
+        message(STATUS "OAL target Qt package: ${Qt6_DIR}")
+    endif()
+    if(OpenCV_DIR)
+        message(STATUS "OAL target OpenCV package: ${OpenCV_DIR}")
+    endif()
+
+    if(NOT Qt6_DIR OR NOT EXISTS "${Qt6_DIR}/Qt6Config.cmake")
+        message(FATAL_ERROR
+            "Qt6Config.cmake was not found inside OAS_CROSS_SYSROOT='${OAS_CROSS_SYSROOT}'. "
+            "Run scripts/bootstrap_rpi_cross.sh for this architecture, or point Qt6_DIR at "
+            "the target (ARM) Qt6 CMake package directory. Do not point Qt6_DIR at host Qt; "
+            "OAS_QT_HOST_PATH/QT_HOST_PATH is only for runnable host moc/rcc/uic tools.")
+    endif()
+endif()
+
+# Qt 6.4 is the minimum Linux/Windows baseline because the node REST API
+# uses the Qt HttpServer module, which is not available in Ubuntu 22.04's
+# system Qt 6.2. Detect that common case explicitly so configure fails with
+# an actionable message instead of a generic version mismatch.
+find_package(Qt6 QUIET COMPONENTS Core)
+if(Qt6_FOUND AND DEFINED Qt6_VERSION AND Qt6_VERSION VERSION_LESS 6.4)
+    message(FATAL_ERROR
+        "OpenAstroLink requires Qt >= 6.4 (detected Qt ${Qt6_VERSION}). "
+        "The node REST API uses Qt6::HttpServer. Ubuntu 22.04/Jammy ships "
+        "Qt 6.2.4 and no qt6-httpserver-dev package; use Ubuntu 24.04+ / "
+        "Debian 12+ / Raspberry Pi OS Bookworm+, or provide a custom Qt >= 6.4 "
+        "through CMAKE_PREFIX_PATH/Qt6_DIR.")
 endif()
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network SerialPort WebSockets HttpServer Concurrent)
@@ -105,7 +198,7 @@ set(OAS_CANON_TRANSPORT_RESOLVED "")
 if(OAS_ENABLE_NATIVE_CANON)
     string(TOUPPER "${OAS_CANON_TRANSPORT}" OAS_CANON_TRANSPORT_RESOLVED)
     if(OAS_CANON_TRANSPORT_RESOLVED STREQUAL "AUTO")
-        if(WIN32)
+        if(WIN32 OR APPLE)
             set(OAS_CANON_TRANSPORT_RESOLVED "EDSDK")
         else()
             set(OAS_CANON_TRANSPORT_RESOLVED "GPHOTO2")
@@ -152,6 +245,46 @@ target_link_libraries(oas_core PUBLIC
     Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort Qt6::WebSockets Qt6::HttpServer Qt6::Concurrent
     ${OpenCV_LIBS}
 )
+
+# Debian's OpenCV build carries a numerical dependency chain through
+# Armadillo/ARPACK/SuperLU to LAPACK and BLAS.  Native builds let the dynamic
+# linker discover that chain, but a cross GNU ld does not reliably follow the
+# alternatives-managed SONAME links inside a foreign sysroot.  Link the two
+# leaf runtime libraries explicitly, from the *target* sysroot, after OpenCV.
+# Their SONAMEs remain liblapack.so.3/libblas.so.3, so no build-host path is
+# embedded in the resulting ARM executable.
+if(CMAKE_CROSSCOMPILING AND OAS_CROSS_SYSROOT)
+    set(_oas_target_lapack_candidates
+        "${OAS_CROSS_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/lapack/liblapack.so.3"
+        "${OAS_CROSS_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/liblapack.so.3")
+    set(_oas_target_blas_candidates
+        "${OAS_CROSS_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/blas/libblas.so.3"
+        "${OAS_CROSS_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/libblas.so.3")
+
+    foreach(_oas_candidate IN LISTS _oas_target_lapack_candidates)
+        if(EXISTS "${_oas_candidate}")
+            set(_oas_target_lapack "${_oas_candidate}")
+            break()
+        endif()
+    endforeach()
+    foreach(_oas_candidate IN LISTS _oas_target_blas_candidates)
+        if(EXISTS "${_oas_candidate}")
+            set(_oas_target_blas "${_oas_candidate}")
+            break()
+        endif()
+    endforeach()
+
+    if(NOT _oas_target_lapack OR NOT _oas_target_blas)
+        message(FATAL_ERROR
+            "Target BLAS/LAPACK runtime libraries are incomplete in OAS_CROSS_SYSROOT='${OAS_CROSS_SYSROOT}'. "
+            "Run scripts/bootstrap_rpi_cross.sh again; expected liblapack.so.3 and libblas.so.3 under "
+            "usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/{lapack,blas}.")
+    endif()
+
+    target_link_libraries(oas_core PUBLIC "${_oas_target_lapack}" "${_oas_target_blas}")
+    message(STATUS "OAL target LAPACK: ${_oas_target_lapack}")
+    message(STATUS "OAL target BLAS: ${_oas_target_blas}")
+endif()
 
 if(OAS_ENABLE_GPHOTO2)
     target_include_directories(oas_core PRIVATE ${GPHOTO2_INCLUDE_DIRS})
@@ -272,6 +405,37 @@ if(OAS_BUILD_NATIVE_REFERENCE_DRIVERS)
         DESTINATION lib/openastrolink/drivers)
 endif()
 
+# Architecture-aware vendor SDK search suffixes.  Keep host/target architecture
+# explicit so a multi-arch SDK tree cannot silently select an incompatible
+# library (for example mac_arm64 on an Intel Mac or x64 during an ARM cross-build).
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _oas_sdk_processor)
+set(_oas_zwo_asi_suffixes lib lib64)
+set(_oas_zwo_eaf_suffixes lib lib64)
+set(_oas_canon_library_suffixes Library lib Lib)
+if(APPLE)
+    if(CMAKE_OSX_ARCHITECTURES MATCHES "(^|;)arm64(;|$)" OR _oas_sdk_processor MATCHES "^(arm64|aarch64)$")
+        list(PREPEND _oas_zwo_asi_suffixes lib/mac_arm64 mac_arm64)
+        list(PREPEND _oas_zwo_eaf_suffixes lib/mac_arm64 mac_arm64)
+        list(PREPEND _oas_canon_library_suffixes Mac/EDSDK/Library/ARM64 EDSDK/Library/ARM64 Mac/EDSDK/Library EDSDK/Library)
+    else()
+        list(PREPEND _oas_zwo_asi_suffixes lib/mac_x64 mac_x64 lib/mac mac)
+        list(PREPEND _oas_zwo_eaf_suffixes lib/mac_x64 mac_x64 lib/mac mac)
+        list(PREPEND _oas_canon_library_suffixes Mac/EDSDK/Library/x86_64 EDSDK/Library/x86_64 Mac/EDSDK/Library EDSDK/Library)
+    endif()
+elseif(_oas_sdk_processor MATCHES "^(aarch64|arm64)$")
+    list(PREPEND _oas_zwo_asi_suffixes lib/armv8 armv8)
+    list(PREPEND _oas_zwo_eaf_suffixes lib/armv8 armv8)
+    list(PREPEND _oas_canon_library_suffixes Linux/EDSDK/Library/ARM64 EDSDK/Library/ARM64)
+elseif(_oas_sdk_processor MATCHES "^(arm|armv6.*|armv7.*|armv8l)$")
+    list(PREPEND _oas_zwo_asi_suffixes lib/armv7 armv7 lib/armv6 armv6)
+    list(PREPEND _oas_zwo_eaf_suffixes lib/armv7 armv7 lib/armv6 armv6)
+    list(PREPEND _oas_canon_library_suffixes Linux/EDSDK/Library/ARM32 EDSDK/Library/ARM32)
+else()
+    list(PREPEND _oas_zwo_asi_suffixes lib/x64 x64)
+    list(PREPEND _oas_zwo_eaf_suffixes lib/x64 x64)
+    list(PREPEND _oas_canon_library_suffixes Linux/EDSDK/Library/x86_64 EDSDK/Library/x86_64 x64)
+endif()
+
 if(OAS_ENABLE_QHY)
     set(QHYCCD_ROOT "" CACHE PATH "QHYCCD SDK root")
     set(QHYCCD_INCLUDE_DIR "" CACHE PATH "Directory containing qhyccd.h")
@@ -313,6 +477,12 @@ if(OAS_ENABLE_QHY)
         target_compile_definitions(oal_driver_qhy PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     endif()
     target_link_libraries(oal_driver_qhy PRIVATE ${QHYCCD_LIBRARY})
+    if(UNIX AND NOT APPLE AND QHYCCD_LIBRARY MATCHES "\\.a$")
+        find_package(Threads REQUIRED)
+        find_library(OAL_QHY_USB_LIBRARY NAMES usb-1.0 REQUIRED)
+        target_link_libraries(oal_driver_qhy PRIVATE ${OAL_QHY_USB_LIBRARY} Threads::Threads ${CMAKE_DL_LIBS})
+        message(STATUS "OAL QHY static SDK: ${QHYCCD_LIBRARY}")
+    endif()
     oal_set_driver_output(oal_driver_qhy)
     configure_file(drivers/qhy/oal_driver_qhy.manifest.json
                    ${OAL_DRIVER_BUILD_DIR}/oal_driver_qhy.manifest.json COPYONLY)
@@ -334,7 +504,8 @@ if(OAS_ENABLE_NATIVE_ZWO_ASI)
         find_path(ZWO_ASI_INCLUDE_DIR ASICamera2.h HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT ENV ZWO_ASI_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
     if(NOT ZWO_ASI_LIBRARY)
-        find_library(ZWO_ASI_LIBRARY NAMES ASICamera2 ASICamera2.bin HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT PATH_SUFFIXES lib lib64 armv8 x64 REQUIRED)
+        find_library(ZWO_ASI_LIBRARY NAMES ASICamera2 ASICamera2.bin HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT
+            PATH_SUFFIXES ${_oas_zwo_asi_suffixes} REQUIRED)
     endif()
     add_library(oal_driver_zwo_asi SHARED drivers/zwo_asi/oal_driver_zwo_asi.cpp)
     target_include_directories(oal_driver_zwo_asi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${ZWO_ASI_INCLUDE_DIR})
@@ -355,7 +526,8 @@ if(OAS_ENABLE_NATIVE_ZWO_EAF)
         find_path(ZWO_EAF_INCLUDE_DIR EAF_focuser.h HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT ENV ZWO_EAF_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
     if(NOT ZWO_EAF_LIBRARY)
-        find_library(ZWO_EAF_LIBRARY NAMES EAFFocuser EAFFocuser.bin HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT PATH_SUFFIXES lib lib64 armv8 x64 REQUIRED)
+        find_library(ZWO_EAF_LIBRARY NAMES EAFFocuser EAFFocuser.bin HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT
+            PATH_SUFFIXES ${_oas_zwo_eaf_suffixes} REQUIRED)
     endif()
     add_library(oal_driver_zwo_eaf SHARED drivers/zwo_eaf/oal_driver_zwo_eaf.cpp)
     target_include_directories(oal_driver_zwo_eaf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${ZWO_EAF_INCLUDE_DIR})
@@ -373,12 +545,13 @@ if(OAS_ENABLE_NATIVE_CANON)
         if(NOT CANON_EDSDK_INCLUDE_DIR)
             find_path(CANON_EDSDK_INCLUDE_DIR EDSDK.h
                 HINTS ${CANON_EDSDK_ROOT} ENV CANON_EDSDK_ROOT ENV CANON_EDSDK_INCLUDE_DIR
-                PATH_SUFFIXES Header include Include EDSDK/Header REQUIRED)
+                PATH_SUFFIXES Header include Include EDSDK/Header
+                              Linux/EDSDK/Header Mac/EDSDK/Header Windows/EDSDK/Header REQUIRED)
         endif()
         if(NOT CANON_EDSDK_LIBRARY)
             find_library(CANON_EDSDK_LIBRARY NAMES EDSDK edsdk
                 HINTS ${CANON_EDSDK_ROOT} ENV CANON_EDSDK_ROOT
-                PATH_SUFFIXES Library lib Lib x64 REQUIRED)
+                PATH_SUFFIXES ${_oas_canon_library_suffixes} REQUIRED)
         endif()
         add_library(oal_driver_canon SHARED drivers/canon/oal_driver_canon_edsdk.cpp)
         target_include_directories(oal_driver_canon PRIVATE

@@ -404,6 +404,18 @@ cmake --build --preset my-windows-observatory --parallel
 
 ---
 
+# macOS (Apple Silicon або Intel)
+
+build-fix3 додає host-native presets для macOS на Apple Clang. Для Canon на macOS основний transport — EDSDK; пошук ZWO ASI/EAF підтримує vendor-layout `mac_arm64`, `mac_x64` та `mac`. QHY на macOS опційний, доки не підключено сумісну macOS SDK library.
+
+```bash
+brew install cmake qt opencv
+cp CMakeUserPresets.example.json CMakeUserPresets.json
+./scripts/build_macos.sh my-macos-arm64-observatory
+```
+
+Для Intel Mac використовуйте `my-macos-x86_64-observatory`. Реальна build/HIL-кваліфікація та signed/notarized packaging ще попереду.
+
 # Native Linux (x86_64 або ARM64/RPi)
 
 Той самий node і GUI можуть напряму володіти обладнанням на desktop Linux, mini-PC або Raspberry Pi.
@@ -415,9 +427,9 @@ WSL зручний для compile/test, але для реальної обсе�
 ```bash
 sudo apt update
 sudo apt install -y \
-  build-essential cmake ninja-build pkg-config \
+  build-essential cmake pkg-config \
   qt6-base-dev qt6-serialport-dev qt6-websockets-dev qt6-httpserver-dev \
-  libopencv-dev libgphoto2-dev libjpeg-dev
+  qt6-positioning-dev libopencv-dev libgphoto2-dev libjpeg-dev
 ```
 
 Назви пакетів можуть трохи відрізнятися між дистрибутивами.
@@ -647,3 +659,54 @@ REST: `POST /api/v1/solve/adaptive`. Результат operation містить
 - Причина: у v0.2.10.28 hard-reload викликав `EdsInitializeSDK()` з короткоживучого discovery `QThread`. Доставка callback/event у Canon EDSDK залежить від потоку; після завершення worker transfer callback більше не приходив.
 - Тепер hard restart Canon DLL/EDSDK синхронно виконується на довгоживучому Qt event-loop потоці `ApplicationController`, тобто так само, як у вже робочому cold-start path. Саме enumeration залишається асинхронним.
 - Логіка QHY та serial-драйверів не змінена.
+
+
+> **Linux baseline:** системний Qt повинен бути **6.4 або новішим**. Ubuntu 22.04/Jammy постачає Qt 6.2.4 і не має `qt6-httpserver-dev`, тому не є підтримуваним system-Qt build host. Використовуйте Ubuntu 24.04+ або Debian/Raspberry Pi OS 12 Bookworm+, або задайте власний Qt >= 6.4 через `CMAKE_PREFIX_PATH`/`Qt6_DIR`.
+
+### build-fix4: автоматичний cross bootstrap
+
+Linux/WSL cross-build для Raspberry Pi тепер може явно підготувати target environment командою `./scripts/bootstrap_rpi_cross.sh arm64`. Скрипт або локально створює Debian 12/Bookworm ARM sysroot, або дзеркалить реальний Pi через `--from-pi`, готує matching host Qt tools і staging сумісного QHY ARM SDK із sibling checkout `QHYCCD_Linux_New` після перевірки ELF-архітектури.
+
+### build-fix5: надійний foreign-architecture bootstrap у WSL
+
+Локальний Bookworm bootstrap тепер явно монтує `binfmt_misc`, реєструє та перевіряє handler `qemu-aarch64`/`qemu-arm`, а перед другим етапом debootstrap реально запускає `/bin/true` усередині ARM sysroot. Це виправляє WSL-середовища, де одного встановлення `qemu-user-static` недостатньо і ARM-бінарники завершуються `Exec format error`. Перерваний build-fix4 sysroot можна безпечно продовжити; для повного очищення лишається `--recreate`. Також bootstrap встановлює `debian-archive-keyring` і додає Qt Positioning до target development packages.
+
+### build-fix6: перевірені signing keys Bookworm
+
+Ubuntu 22.04/Jammy має застарілий `debian-archive-keyring`, який уже не може перевірити поточний `InRelease` Debian 12/Bookworm. Bootstrap не вимикає GPG-перевірку: він завантажує офіційні archive/release/security public keys Debian 12 через HTTPS, звіряє зафіксовані fingerprints, формує кешований локальний binary keyring OAL і явно передає його в `debootstrap --keyring`. У target sysroot також явно додаються main, updates і security repositories перед установленням Qt/OpenCV development dependencies.
+
+### build-fix7: Bash `set -u` у verified-key bootstrap
+
+Helper завантаження Debian 12 signing keys більше не оголошує `name` і залежний від нього `out` в одному `local` command. Це усуває `name: unbound variable` у WSL/Jammy при запуску `bootstrap_rpi_cross.sh`.
+
+
+### build-fix8: discovery target Qt/OpenCV у ARM cross sysroot
+
+ARM64/ARMHF toolchain тепер явно фіксує Debian multiarch package locations і підставляє target `Qt6_DIR` та `OpenCV_DIR` з уже підготовленого sysroot. `OAS_QT_HOST_PATH` лишається тільки host-tools шляхом для виконуваних `moc`/`rcc`/`uic`. Bootstrap env зберігає обидва target package directories.
+
+
+### build-fix9: контракт QHY staging для cross-build
+
+Перший реальний build після build-fix8 підтвердив ARM64 Bookworm sysroot, target Qt/OpenCV discovery та host Qt tools, але виявив помилку контракту bootstrap: збій QHY staging міг бути знижений до warning, а фінальний summary все одно показував неіснуючий каталог `qhy-arm64`. build-fix9 робить QHY staging фатальним, якщо він запитаний, перевіряє саме `include/qhyccd.h` і `lib/libqhy.so`, які використовує CMake, безпечно розіменовує vendor symlinks і передає staged paths з `.oal/rpi-cross-*.env` у build helper. Для свідомо QHY-free збірки залишається `--no-qhy`.
+
+### build-fix10: виправлення QHY `armv8` ABI
+
+Legacy archive `qhyccd-lzr/QHYCCD_Linux_New` з назвою `...armv8.tar.gz` не є AArch64 SDK: фізична перевірка `file(1)` показує `ELF 32-bit ... ARM, EABI5`. Cross staging тепер вибирає QHY library за реальною ELF-архітектурою, а не за назвою файла. ARM64 bootstrap у default `auto` mode може продовжити роботу з QHY OFF; `--require-qhy` слід використовувати лише зі справжнім актуальним QHY `Arm_64`/`AARCH64` SDK. Legacy archive придатний для ARMHF build.
+
+
+### build-fix12: перші source portability fixes для реальної ARM64 збірки
+
+Bookworm/AArch64 cross-build уже проходить configure і компілює реальний source tree. build-fix12 додає локальний Linux compatibility shim для Canon EDSDK 13.20.x (`__int64`/`WCHAR`) і робить bind Qt HttpServer сумісним як з Qt 6.4-6.7, так і з Qt 6.8+.
+
+
+### build-fix13: транзитивне ARM64 link closure у sysroot
+
+Реальна WSL -> AArch64 збірка вже компілює всі увімкнені OAL targets і доходить до фінального link executable на 98-100%. Залишкова помилка була не у source OAL: GNU ld бачив OpenCV у Bookworm sysroot, але не шукав у foreign sysroot його транзитивні `DT_NEEDED` бібліотеки (`libblas.so.3`, `liblapack.so.3`, Armadillo/ARPACK/SuperLU і відповідний Bookworm libc). build-fix13 додає лише link-time `-rpath-link` та `-L` для target multiarch/runtime directories, явно включає BLAS/LAPACK у bootstrap dependencies та перевіряє їх SONAME до оголошення sysroot готовим. Runtime RPATH у binaries не вбудовується, mount v9 не змінюється.
+
+### build-fix14: автоматичний bootstrap офіційного QHY 26.x ARM64 SDK
+
+RPi cross-toolchain тепер може напряму завантажити й staged-нути офіційний QHYCCD Linux ARM64 SDK. `scripts/fetch_qhy_sdk.sh arm64 26.06.04` використовує нову схему пакування QHY після 26.06.04 — `sdk_linux_arm64_26.06.04.tar.gz`, кешує vendor archive і передає його architecture-validated stager. Stager тепер підтримує як shared QHY library, так і офіційний static `libqhyccd.a`; якщо доступні обидві, shared має пріоритет, а static archive перевіряється через реальний ELF object усередині `.a`. `bootstrap_rpi_cross.sh --qhy-version 26.06.04 --require-qhy` дає відтворюваний повний ARM64 vendor build без старого помилково названого 32-bit `armv8` archive. Mount v9 не змінювався.
+
+### build-fix15: closure Debian BLAS/LAPACK alternatives для ARM cross-link
+
+Перший фізичний build з офіційним QHYCCD 26.06.04 ARM64 SDK підтвердив сам QHY path: vendor archive успішно завантажився, staged як справжній AArch64 `libqhy.so`, а `oal_driver_qhy.so` скомпілювався й злінився. Єдиний залишковий failure — фінальний link `openastrolink-node` / `oal-hardware-probe`. Debian Bookworm розміщує reference BLAS/LAPACK SONAME у `usr/lib/<multiarch>/blas` та `usr/lib/<multiarch>/lapack`, а вище використовує alternatives-managed links. build-fix14 шукав лише parent multiarch directory, а post-APT `symlinks -cr` запускався без root privileges на root-owned sysroot, тому друкував `Permission denied` і не виправив абсолютні alternatives links. build-fix15 запускає нормалізацію symlink через `sudo`, додає BLAS/LAPACK subdirectories у link-time-only `-rpath-link`/`-L`, перевіряє, що обидві leaf libraries є ELF потрібної target-архітектури, і явно лінкує target `liblapack.so.3` / `libblas.so.3` після OpenCV. Runtime sysroot RPATH у binaries не вбудовується. Mount v9 не змінювався.

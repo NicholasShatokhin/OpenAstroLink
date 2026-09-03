@@ -223,7 +223,7 @@ OpenAstroLink (OAL) is a local-first observatory control stack. The reference pa
 Native OAL driver code exists for:
 
 - QHY cameras (`oal.qhy`, QHYCCD SDK);
-- Canon EOS (`oal.canon`: Canon EDSDK on Windows, libgphoto2/PTP on Linux);
+- Canon EOS (`oal.canon`: Canon EDSDK on Windows/macOS; selectable EDSDK or libgphoto2/PTP on Linux);
 - ZWO ASI cameras (`oal.zwo.asi`, ASI SDK);
 - ZWO EAF focusers (`oal.zwo.eaf`, EAF SDK);
 - Gemini EAF (`oal.gemini`, direct serial protocol);
@@ -441,7 +441,21 @@ Add the Canon EDSDK runtime directory to `VendorRuntimeDirs` when Canon is enabl
 
 ---
 
+# macOS build (Apple Silicon or Intel)
+
+Build-fix3 adds host-native macOS presets using Apple Clang. Canon EDSDK is the preferred native Canon transport on macOS; ZWO ASI/EAF SDK discovery understands `mac_arm64`, `mac_x64` and `mac` vendor layouts. QHY is optional until a matching macOS QHY SDK library is supplied.
+
+```bash
+brew install cmake qt opencv
+cp CMakeUserPresets.example.json CMakeUserPresets.json
+./scripts/build_macos.sh my-macos-arm64-observatory
+```
+
+Use `my-macos-x86_64-observatory` on Intel Macs. Physical Mac build/HIL qualification and signed/notarized app packaging are still pending.
+
 # Native Linux build (x86_64 or ARM64/RPi)
+
+> **Linux baseline:** the system Qt must be **6.4 or newer**. Ubuntu 22.04/Jammy ships Qt 6.2.4 and has no `qt6-httpserver-dev`, so it is not a supported system-Qt build host. Use Ubuntu 24.04+ or Debian/Raspberry Pi OS 12 Bookworm+, or provide a custom Qt >= 6.4 through `CMAKE_PREFIX_PATH`/`Qt6_DIR`.
 
 The same node and GUI can own hardware directly on a normal Linux workstation, mini-PC or Raspberry Pi.
 
@@ -454,9 +468,9 @@ Package names vary slightly by distribution/release. Typical dependencies are:
 ```bash
 sudo apt update
 sudo apt install -y \
-  build-essential cmake ninja-build pkg-config \
+  build-essential cmake pkg-config \
   qt6-base-dev qt6-serialport-dev qt6-websockets-dev qt6-httpserver-dev \
-  libopencv-dev libgphoto2-dev libjpeg-dev
+  qt6-positioning-dev libopencv-dev libgphoto2-dev libjpeg-dev
 ```
 
 If your distribution splits additional Qt modules, install the corresponding Qt 6 development package. GUI builds also require Qt Widgets (normally included by `qt6-base-dev`).
@@ -723,3 +737,51 @@ EOS 550D now has HIL-confirmed 1–30 s non-AF exposure and original-file transf
 - Root cause: the v0.2.10.28 hard-reload fallback called `EdsInitializeSDK()` from the short-lived asynchronous discovery `QThread`. Canon EDSDK event/callback delivery is thread-affine; once that worker exited, transfer callbacks were no longer delivered.
 - Canon DLL/EDSDK hard restart is now marshalled synchronously to the long-lived `ApplicationController` Qt event-loop thread, matching the already-working cold-start path. Enumeration remains asynchronous.
 - QHY and serial-driver discovery/recovery behavior is unchanged.
+
+### build-fix4 cross bootstrap
+
+Linux/WSL Raspberry Pi cross builds can now prepare their target environment explicitly with `./scripts/bootstrap_rpi_cross.sh arm64`. The script can create a Debian 12/Bookworm ARM sysroot locally or mirror a real Pi with `--from-pi`, prepares matching host Qt tools, and stages a compatible QHY ARM SDK from a sibling `QHYCCD_Linux_New` checkout after ELF-architecture validation.
+
+### build-fix5 WSL foreign-architecture bootstrap hardening
+
+The local Bookworm bootstrap now explicitly mounts `binfmt_misc`, registers and verifies the `qemu-aarch64`/`qemu-arm` handler, and executes `/bin/true` inside the foreign sysroot before debootstrap stage two. This fixes WSL hosts where installing `qemu-user-static` alone leaves ARM binaries failing with `Exec format error`. An interrupted build-fix4 sysroot is resumed safely; `--recreate` remains available for a clean restart. The bootstrap also installs `debian-archive-keyring` and includes Qt Positioning in the target development package set.
+
+### build-fix6 Bookworm signing-key bootstrap
+
+Ubuntu 22.04/Jammy ships a `debian-archive-keyring` too old to validate current Debian 12/Bookworm `InRelease` signatures. The cross bootstrap no longer falls back to `--no-check-gpg`: it fetches the official Bookworm archive, release and security public keys from Debian over HTTPS, verifies pinned fingerprints, writes a cached OAL-local binary keyring, and passes it explicitly to `debootstrap --keyring`. The generated target also enables Bookworm main, updates and security repositories before installing Qt/OpenCV development dependencies.
+
+### build-fix7 verified-key bootstrap under Bash `set -u`
+
+The Debian 12 signing-key fetch helper no longer declares `name` and the dependent `out` initializer in one `local` command. This removes the `name: unbound variable` failure seen in WSL/Jammy when running `bootstrap_rpi_cross.sh`.
+
+
+### build-fix8 target package discovery in ARM cross sysroots
+
+The ARM64/ARMHF toolchains now pin Debian multiarch package locations and seed the target `Qt6_DIR` and `OpenCV_DIR` from the already-bootstrapped sysroot. `OAS_QT_HOST_PATH` remains host-tools-only for runnable `moc`/`rcc`/`uic`. The bootstrap env record persists both target package directories and the build helper passes them back to CMake.
+
+
+### build-fix9 QHY cross-staging contract
+
+The first physical build after build-fix8 proved that the ARM64 Bookworm sysroot, target Qt/OpenCV discovery and host Qt tools are valid, but also exposed a bootstrap contract bug: QHY staging failure could be downgraded to a warning while the final environment summary still advertised a non-existent `qhy-arm64` directory. build-fix9 makes QHY staging fatal whenever it is requested, validates the exact `include/qhyccd.h` and `lib/libqhy.so` paths consumed by CMake, follows package symlinks safely, and passes the staged paths from `.oal/rpi-cross-*.env` into the build helper. `--no-qhy` remains available for a deliberately QHY-free base build.
+
+### build-fix10: QHY `armv8` ABI correction
+
+The legacy `qhyccd-lzr/QHYCCD_Linux_New` archive named `...armv8.tar.gz` is not an AArch64 SDK: physical `file(1)` inspection reports `ELF 32-bit ... ARM, EABI5`. Cross staging now selects QHY libraries by actual ELF architecture rather than filename. ARM64 bootstrap may continue with QHY disabled in the default `auto` mode; use `--require-qhy` only when a genuine current QHY `Arm_64`/`AARCH64` SDK is available. The legacy archive is usable by the ARMHF build.
+
+
+### build-fix12: first physical ARM64 source portability fixes
+
+The Bookworm/AArch64 cross build now gets past configure and into the real source tree. build-fix12 adds a local Linux compatibility shim for Canon EDSDK 13.20.x (`__int64`/`WCHAR`) and makes the Qt HttpServer bind path compatible with Qt 6.4-6.7 as well as Qt 6.8+.
+
+
+### build-fix13: ARM64 sysroot transitive-link closure
+
+The physical WSL -> AArch64 build now compiles every enabled OAL target and reaches the final 98-100% executable link. The remaining failure was not an OAL source error: GNU ld could see OpenCV in the Bookworm sysroot but did not search that foreign sysroot for transitive `DT_NEEDED` libraries (`libblas.so.3`, `liblapack.so.3`, Armadillo/ARPACK/SuperLU and the matching Bookworm libc). build-fix13 adds link-time-only `-rpath-link` and `-L` search directories for the target sysroot multiarch/runtime directories. It also makes BLAS/LAPACK explicit bootstrap dependencies and validates their SONAMEs before declaring the sysroot ready. No runtime RPATH is embedded, and mount v9 is unchanged.
+
+### build-fix14: official QHY 26.x ARM64 SDK bootstrap
+
+The RPi cross toolchain can now fetch and stage the official QHYCCD Linux ARM64 SDK directly. `scripts/fetch_qhy_sdk.sh arm64 26.06.04` maps the post-26.06.04 QHY packaging scheme to `sdk_linux_arm64_26.06.04.tar.gz`, caches the vendor archive, then delegates to architecture-validated staging. The stager now accepts both QHY shared libraries and the official static `libqhyccd.a`, preferring shared libraries when both are present and validating static archives by inspecting an actual ELF object member. `bootstrap_rpi_cross.sh --qhy-version 26.06.04 --require-qhy` enables a reproducible full ARM64 vendor build without relying on the legacy mislabeled 32-bit `armv8` archive. Mount v9 is unchanged.
+
+### build-fix15: Debian BLAS/LAPACK alternatives closure for ARM cross-link
+
+The first physical build with the official QHYCCD 26.06.04 ARM64 SDK proved the QHY path itself: the vendor archive downloaded, staged as a real AArch64 `libqhy.so`, and `oal_driver_qhy.so` compiled and linked successfully. The only remaining failure is the final `openastrolink-node` / `oal-hardware-probe` link. Debian Bookworm installs the reference BLAS/LAPACK SONAMEs under `usr/lib/<multiarch>/blas` and `usr/lib/<multiarch>/lapack`, with alternatives-managed links above them. build-fix14 searched only the parent multiarch directory, and its post-APT `symlinks -cr` ran without root privileges against a root-owned sysroot, producing `Permission denied` and leaving absolute alternatives links unrepaired. build-fix15 normalizes sysroot symlinks with `sudo`, adds the BLAS/LAPACK subdirectories to link-time-only `-rpath-link`/`-L`, validates that both leaf libraries are target-architecture ELF files, and links target `liblapack.so.3` / `libblas.so.3` explicitly after OpenCV. No runtime sysroot RPATH is embedded. Mount v9 is unchanged.

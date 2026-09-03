@@ -1,4 +1,4 @@
-# Raspberry Pi 4 observatory node
+# Raspberry Pi 4/5 observatory node — v0.2.10.49 build-fix7
 
 Version 0.2.10 keeps the v0.2.2 process boundary and makes the Raspberry Pi hardware stack **native-OAL-first**: QHY, Canon EOS, Gemini EAF and Sky-Watcher are available as ABI-v2 native OAL plugins; INDI remains an optional compatibility path for additional equipment.
 
@@ -128,3 +128,57 @@ Native Canon EOS is provided by `oal.canon`. On Raspberry Pi it links directly t
 ## v0.2.10 node integrations
 
 The node can own two cameras simultaneously (`main` and `guide`) and persists both bindings. The Stellarium bridge can be enabled with `--stellarium-port 10000` or through OAL settings/API. ZWO ASI/EAF native drivers may be loaded alongside QHY/Canon/Gemini/Sky-Watcher and optional INDI compatibility devices.
+
+## Build/cross presets — v0.2.10.49 build-fix7
+> build-fix7: the Bookworm signing-key fetch helper is now safe under `set -u`; the `name: unbound variable` failure is fixed.
+
+
+For a native 64-bit Raspberry Pi 4/5 node:
+
+```bash
+cmake --preset rpi4-node-release
+cmake --build --preset rpi4-node-release -j"$(nproc)"
+```
+
+For cross-compilation from Linux/WSL, build-fix6 can bootstrap the sysroot automatically. On Jammy it also compensates for the stale host Debian keyring by fetching and fingerprint-verifying the official Bookworm signing keys before `debootstrap`:
+
+```bash
+./scripts/bootstrap_rpi_cross.sh arm64
+./scripts/build_rpi_cross.sh arm64
+```
+
+The default bootstrap creates a Debian 12/Bookworm ARM64 root using `debootstrap`/`qemu-user-static`, installs Qt 6.4.2 + HttpServer/WebSockets/SerialPort, OpenCV, libusb and JPEG development files, and prepares matching x86_64 Qt host tools. To mirror a physical Pi instead, use:
+
+```bash
+./scripts/bootstrap_rpi_cross.sh arm64 --from-pi pi@openastrolink.local
+```
+
+If `../QHYCCD_Linux_New` is present, the bootstrap stages a matching QHY ARM SDK under `~/.local/share/openastrolink/sdk/` after verifying its ELF architecture. ZWO and Canon remain supplied from their vendor multi-architecture SDK trees through local presets.
+
+For cross-compilation from Windows with the existing Arm GNU Toolchain installation:
+
+```powershell
+.\scripts\build_rpi_cross.ps1 -Arch arm64 -Sysroot C:\path\to\rpi-arm64-sysroot
+```
+
+Cross presets build the headless node first and keep QHY/ZWO/Canon/INDI disabled until matching ARM target libraries are explicitly supplied. This is deliberate: a cross compiler cannot safely consume the x86_64 Linux SDK libraries used by a WSL workstation build.
+
+
+### v0.2.10.49 build-fix8 — target Qt/OpenCV discovery in cross sysroots
+
+The ARM cross toolchains now pin the Debian multiarch (`aarch64-linux-gnu` / `arm-linux-gnueabihf`) and automatically seed `Qt6_DIR` and `OpenCV_DIR` from target configs inside `OAS_CROSS_SYSROOT`. Host Qt (`OAS_QT_HOST_PATH`) remains host-tools-only (`moc/rcc/uic`); host and target Qt are never mixed. The bootstrap environment record also persists target package paths for repeatable builds.
+
+
+<!-- build-fix8-target-package-discovery -->
+### build-fix8: target package discovery
+
+After the ARM sysroot bootstrap, CMake uses target `Qt6Config.cmake` and `OpenCVConfig.cmake` from the Debian multiarch directory, while `OAS_QT_HOST_PATH` is used only for host `moc/rcc/uic`. For ARM64 the standard paths are `usr/lib/aarch64-linux-gnu/cmake/Qt6` and `usr/lib/aarch64-linux-gnu/cmake/opencv4` inside the sysroot.
+
+
+### v0.2.10.49 build-fix9 — QHY stage is part of readiness
+
+For the full ARM64 vendor preset, QHY staging is no longer best-effort. The bootstrap exits on a missing/invalid QHY stage and only records `OAS_QHY_SDK` after `qhyccd.h`, `libqhy.so`, and target ELF architecture have been verified. A base ARM build can still opt out with `--no-qhy`.
+
+### v0.2.10.49 build-fix10 — QHY ARM64 vs ARMHF
+
+The legacy `QHYCCD_Linux_New` `armv8` SDK is physically a 32-bit ARM/EABI build. Use it with the ARMHF node only. A 64-bit Raspberry Pi node must use a genuine QHY `Arm_64`/`AARCH64` SDK; until that SDK is staged, build the ARM64 node with QHY disabled (`my-rpi4-cross-arm64`).

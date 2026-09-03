@@ -157,11 +157,26 @@ Capabilities/discovery — 🟡; async operations — 🟡; resource locks — �
 
 ## Cross-platform build
 
-| Target | Стан |
-|---|---|
-| Windows x64 MSVC + Ninja | 🟡 повний vendor SDK build ще кваліфікується |
-| Linux x86_64 | 🟡 presets/docs готові, HIL pending |
-| Linux ARM64/RPi | 🟡 HIL pending |
+### v0.2.10.49 build-fix9 — build matrix
+
+- ✅ Windows observatory `--clean-first` збірка підтверджена на реальному MSVC 2022 host.
+- ✅ Linux presets більше не вимагають Ninja: використовують Unix Makefiles, Windows лишається MSVC + Ninja.
+- ✅ Native RPi ARM64/ARMHF presets тепер перевіряють реальну target architecture.
+- ✅ Є cross node presets ARM64/ARMHF як із Linux/WSL, так і з установлених Windows Arm GNU Toolchains.
+- ✅ build-fix4 додав автоматичне створення Bookworm ARM64/ARMHF sysroot, matching host Qt tools і staging QHY ARM SDK із `QHYCCD_Linux_New`.
+- ✅ build-fix5 явно монтує/реєструє `binfmt_misc`, перевіряє QEMU виконання перед debootstrap stage two, уміє продовжити перерваний sysroot, додає Debian archive keyring та Qt Positioning.
+- ✅ build-fix6 виправляє Jammy stale-keyring failure (`F8D2585B8783D481`): Bookworm signing keys завантажуються з Debian, fingerprints перевіряються, а verified keyring передається в `debootstrap --keyring`; GPG verification не вимикається.
+- ✅ build-fix7 виправляє `name: unbound variable` у verified-key helper під `set -u` шляхом розділення `local` declarations та assignments.
+- ✅ build-fix8 підтвердив discovery target Qt 6.4.2/OpenCV 4.6 у Bookworm ARM64 sysroot.
+- ✅ build-fix9 робить QHY ARM staging перевіреним і фатальним, якщо його запитано: до readiness мають реально існувати `include/qhyccd.h` і `lib/libqhy.so` правильної ELF-архітектури; build helper бере ці шляхи з env record.
+- 🟡 Повна ARM64 cross-build/HIL-кваліфікація ще триває; Canon EDSDK ARM64 і ZWO `armv8` уже підтверджені. Для QHY ARM64 потрібен справжній AArch64 SDK; legacy `QHYCCD_Linux_New` `armv8` archive фактично містить 32-bit ARM.
+
+
+| Target | Стан | Примітки |
+|---|---|---|
+| Windows x64 MSVC + Ninja | ✅ clean build | v0.2.10.49 build-fix1 успішно пройшов повну observatory збірку `--clean-first` на реальному Windows/MSVC/Qt/vendor-SDK host 2026-09-03. |
+| Linux x86_64 | 🟡 build qualification | build-fix3 прибирає випадкову обов’язковість Ninja: Linux presets використовують Unix Makefiles; далі треба кваліфікувати Qt6/OpenCV/vendor runtime. |
+| Linux ARM64/RPi | 🟡 build qualification | Bookworm ARM64 sysroot, matching host Qt tools, target Qt 6.4.2 та OpenCV 4.6 уже фізично підтверджені у WSL. Перший full configure виявив неіснуючий QHY staging path; build-fix9 тепер не дозволяє оголосити environment ready без валідного QHY SDK. |
 | WSL compile/test | 🟡 hardware лише через окремий passthrough |
 
 ### Нове у v0.2.10.5
@@ -181,3 +196,41 @@ v0.2.10.25 — supervised HIL qualification release, а не unattended observat
 
 - J2000 є канонічною екваторіальною системою OAL; JNow/of-date підтримується через прецесію.
 - Після server-first startup виконується один vendor-neutral native scan; надалі hardware сканується лише явною кнопкою **Refresh native device discovery** / API. Періодичного QHY або іншого vendor polling немає.
+
+- Linux build baseline clarified: Qt >= 6.4 is required because the node REST API uses Qt HttpServer; Ubuntu 22.04/Jammy system Qt 6.2.4 is unsupported, while Ubuntu 24.04+ and Debian/Raspberry Pi OS Bookworm+ are valid system-Qt baselines.
+
+- 🟡 macOS ARM64/x86_64: додані presets Apple Clang, пошук Canon EDSDK і ZWO macOS SDK; фізична build/HIL-кваліфікація на Mac ще попереду.
+
+
+### v0.2.10.49 build-fix8 — target Qt/OpenCV у cross sysroot
+
+ARM cross toolchains явно фіксують Debian multiarch (`aarch64-linux-gnu` / `arm-linux-gnueabihf`) та автоматично задають `Qt6_DIR` і `OpenCV_DIR` на target-конфіги всередині `OAS_CROSS_SYSROOT`. Host Qt (`OAS_QT_HOST_PATH`) використовується тільки для виконуваних `moc/rcc/uic`. Bootstrap ARM64 sysroot + host Qt + QHY staging уже підтверджено реальним запуском у WSL 2026-09-03; повна cross-компіляція ще триває.
+
+
+### v0.2.10.49 build-fix9 — валідований QHY staging
+
+Реальний `my-rpi4-cross-arm64-full` успішно знайшов target Qt/OpenCV і зупинився лише тому, що bootstrap записав QHY SDK path, якого фізично не було. Тепер QHY staging є частиною success contract: збій не ковтається як warning, exact header/library paths та ELF architecture перевіряються, а `build_rpi_cross.sh` явно передає staged QHY SDK у CMake.
+
+### v0.2.10.49 build-fix10 — виправлення QHY ARM ABI
+
+- ✅ Фізична перевірка `qhyccdsdk-v2.0.11-Linux-Debian-Ubuntu-armv8.tar.gz` показала, що `libqhyccd.so` є **ELF 32-bit ARM EABI5**, попри назву `armv8`. Її не можна лінкувати в ARM64/AArch64 OAL node.
+- ✅ QHY staging тепер вважає назву archive лише підказкою, а остаточно вибирає SDK за реальною ELF-архітектурою через `file(1)`.
+- ✅ Legacy `QHYCCD_Linux_New` `armv8` archive приймається для ARMHF, але не ARM64.
+- ✅ `bootstrap_rpi_cross.sh` за замовчуванням працює в QHY `auto` mode: відсутній/несумісний QHY SDK не блокує валідний ARM64 sysroot; `--require-qhy` залишає strict full-vendor gate.
+- ✅ `stage_qhy_cross_sdk.sh` приймає як каталог vendor archives, так і прямий шлях до актуального QHY SDK archive.
+- 🟡 ARM64 build-кваліфікацію продовжуємо спочатку з Canon EDSDK ARM64 + ZWO ASI/EAF `armv8` і QHY OFF. Повний QHY ARM64 gate чекає на справжній актуальний QHY **Arm_64/AARCH64** SDK.
+
+
+### v0.2.10.49 build-fix12 — перші реальні ARM64 portability blockers у source
+
+Реальна WSL -> AArch64 збірка вже успішно конфігурується проти Bookworm ARM64 sysroot (Qt 6.4.2 + OpenCV 4.6) і компілює simulated, EQDrive, Gemini, SkyWatcher та ZWO native drivers. Перші source-portability помилки локалізовано в Linux headers Canon EDSDK та переході API Qt HttpServer.
+
+- ✅ Для Canon EDSDK 13.20.x Linux додано локальний GCC compatibility shim: MSVC-спелінг `__int64` та відсутній alias `WCHAR` мапляться без редагування vendor SDK.
+- ✅ `OalServer::start()` тепер сумісний і з Qt 6.4-6.7 (`QAbstractHttpServer::bind()` повертає `void`), і з Qt 6.8+ (`bind()` повертає `bool`).
+- ✅ Геометрія/runtime mount v9 не змінювались.
+- 🟡 ARM64 compile/link qualification продовжується з наступної реальної compiler/linker помилки.
+
+
+### v0.2.10.49 build-fix13 — dependency closure фінального ARM64 link
+
+Реальна WSL -> AArch64 збірка тепер доходить до 100% компіляції source. Canon EDSDK ARM64, ZWO ASI/EAF ARM64, Gemini, SkyWatcher, EQDrive та `oas_core` успішно компілюються/лінкуються; падали лише фінальні executable `openastrolink-node` і `oal-hardware-probe`. Причина — search path cross-linker, а не source OAL: GNU ld не резолвив транзитивні BLAS/LAPACK/Armadillo/ARPACK/SuperLU залежності OpenCV з Bookworm sysroot і міг перейти до Jammy cross-runtime libc. build-fix13 додає target-sysroot `-rpath-link`/`-L` closure та явну bootstrap-перевірку BLAS/LAPACK. QHY для ARM64 лишається OFF до справжнього AArch64 SDK. Mount v9 не змінювався.

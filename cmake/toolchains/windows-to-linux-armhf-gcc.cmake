@@ -1,0 +1,19 @@
+# Cross-compile Linux/ARMHF from native Windows using Arm GNU Toolchain.
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR arm)
+
+set(OAS_CROSS_TOOLCHAIN_ROOT "C:/toolchains/gcc-arm-10.3-2021.07-mingw-w64-i686-arm-none-linux-gnueabihf" CACHE PATH "Arm GNU Toolchain root")
+set(OAS_CROSS_TRIPLE "arm-none-linux-gnueabihf" CACHE STRING "GNU target triple")
+set(CMAKE_C_COMPILER "${OAS_CROSS_TOOLCHAIN_ROOT}/bin/${OAS_CROSS_TRIPLE}-gcc.exe" CACHE FILEPATH "")
+set(CMAKE_CXX_COMPILER "${OAS_CROSS_TOOLCHAIN_ROOT}/bin/${OAS_CROSS_TRIPLE}-g++.exe" CACHE FILEPATH "")
+
+set(OAS_CROSS_SYSROOT "" CACHE PATH "Target Raspberry Pi sysroot containing ARMHF development files")
+if(OAS_CROSS_SYSROOT)
+    set(CMAKE_SYSROOT "${OAS_CROSS_SYSROOT}")
+    list(PREPEND CMAKE_FIND_ROOT_PATH "${OAS_CROSS_SYSROOT}")
+endif()
+
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)

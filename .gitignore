@@ -2,6 +2,7 @@
 /build/
 /build-*/
 CMakeUserPresets.json
+.oal/
 
 # IDE/editor state
 .vscode/

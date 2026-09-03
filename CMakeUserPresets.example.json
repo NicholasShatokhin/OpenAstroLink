@@ -8,19 +8,15 @@
       "cacheVariables": {
         "CMAKE_PREFIX_PATH": "C:/Qt/6.10.0/msvc2022_64",
         "OpenCV_DIR": "C:/opencv/opencv/build/x64/vc16/lib",
-
         "QHYCCD_INCLUDE_DIR": "C:/Program Files/QHYCCD/AllInOne/sdk/include",
         "QHYCCD_LIBRARY": "C:/Program Files/QHYCCD/AllInOne/sdk/x64/qhyccd.lib",
         "QHYCCD_RUNTIME_DIR": "C:/Program Files/QHYCCD/AllInOne/sdk/x64",
-
         "ZWO_ASI_INCLUDE_DIR": "C:/SDK/ZWO/ASI SDK/include",
         "ZWO_ASI_LIBRARY": "C:/SDK/ZWO/ASI SDK/lib/x64/ASICamera2.lib",
         "ZWO_ASI_RUNTIME_DIR": "C:/SDK/ZWO/ASI SDK/lib/x64",
-
         "ZWO_EAF_INCLUDE_DIR": "C:/SDK/ZWO/EAF/include",
         "ZWO_EAF_LIBRARY": "C:/SDK/ZWO/EAF/lib/Windows/x64/Release/EAF_focuser.lib",
         "ZWO_EAF_RUNTIME_DIR": "C:/SDK/ZWO/EAF/lib/Windows/x64/Release",
-
         "OAS_ENABLE_NATIVE_CANON": "OFF"
       }
     },
@@ -48,11 +44,102 @@
         "ZWO_EAF_INCLUDE_DIR": "/opt/openastrolink-sdk/zwo/eaf/include",
         "ZWO_EAF_LIBRARY": "/opt/openastrolink-sdk/zwo/eaf/lib/libEAFFocuser.so"
       }
+    },
+    {
+      "name": "my-rpi4-cross-arm64",
+      "displayName": "My RPi ARM64 cross node (Linux/WSL host)",
+      "inherits": "rpi4-cross-arm64-node-release",
+      "cacheVariables": {
+        "OAS_CROSS_SYSROOT": "$env{HOME}/.local/share/openastrolink/sysroots/rpi4-arm64",
+        "OAS_QT_HOST_PATH": "$env{HOME}/.local/share/openastrolink/host-qt/6.4.2"
+      }
+    },
+    {
+      "name": "my-rpi-cross-armhf",
+      "displayName": "My RPi ARMHF cross node (Linux/WSL host)",
+      "inherits": "rpi-cross-armhf-node-release",
+      "cacheVariables": {
+        "OAS_CROSS_SYSROOT": "$env{HOME}/.local/share/openastrolink/sysroots/rpi-armhf",
+        "OAS_QT_HOST_PATH": "$env{HOME}/.local/share/openastrolink/host-qt/6.4.2"
+      }
+    },
+    {
+      "name": "my-rpi4-cross-arm64-windows",
+      "displayName": "My RPi ARM64 cross node (Windows host)",
+      "inherits": "rpi4-cross-arm64-node-windows-release",
+      "cacheVariables": {
+        "OAS_CROSS_SYSROOT": "C:/toolchains/sysroots/rpi4-arm64"
+      }
+    },
+    {
+      "name": "my-rpi-cross-armhf-windows",
+      "displayName": "My RPi ARMHF cross node (Windows host)",
+      "inherits": "rpi-cross-armhf-node-windows-release",
+      "cacheVariables": {
+        "OAS_CROSS_SYSROOT": "C:/toolchains/sysroots/rpi-armhf"
+      }
+    },
+    {
+      "name": "my-macos-arm64-observatory",
+      "displayName": "My macOS Apple Silicon observatory SDK paths",
+      "inherits": "macos-arm64-observatory-release",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/qt;/opt/homebrew/opt/opencv",
+        "ZWO_ASI_ROOT": "${sourceDir}/../zwo/asi",
+        "ZWO_EAF_ROOT": "${sourceDir}/../zwo/eaf",
+        "CANON_EDSDK_ROOT": "${sourceDir}/../edsdk/EDSDKv132021M",
+        "OAS_ENABLE_QHY": "OFF"
+      }
+    },
+    {
+      "name": "my-macos-x86_64-observatory",
+      "displayName": "My macOS Intel observatory SDK paths",
+      "inherits": "macos-x86_64-observatory-release",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/usr/local/opt/qt;/usr/local/opt/opencv",
+        "ZWO_ASI_ROOT": "${sourceDir}/../zwo/asi",
+        "ZWO_EAF_ROOT": "${sourceDir}/../zwo/eaf",
+        "CANON_EDSDK_ROOT": "${sourceDir}/../edsdk/EDSDKv132021M",
+        "OAS_ENABLE_QHY": "OFF"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "my-windows-observatory", "configurePreset": "my-windows-observatory" },
-    { "name": "my-windows-observatory-edsdk", "configurePreset": "my-windows-observatory-edsdk" },
-    { "name": "my-linux-observatory", "configurePreset": "my-linux-observatory" }
+    {
+      "name": "my-windows-observatory",
+      "configurePreset": "my-windows-observatory"
+    },
+    {
+      "name": "my-windows-observatory-edsdk",
+      "configurePreset": "my-windows-observatory-edsdk"
+    },
+    {
+      "name": "my-linux-observatory",
+      "configurePreset": "my-linux-observatory"
+    },
+    {
+      "name": "my-rpi4-cross-arm64",
+      "configurePreset": "my-rpi4-cross-arm64"
+    },
+    {
+      "name": "my-rpi-cross-armhf",
+      "configurePreset": "my-rpi-cross-armhf"
+    },
+    {
+      "name": "my-rpi4-cross-arm64-windows",
+      "configurePreset": "my-rpi4-cross-arm64-windows"
+    },
+    {
+      "name": "my-rpi-cross-armhf-windows",
+      "configurePreset": "my-rpi-cross-armhf-windows"
+    },
+    {
+      "name": "my-macos-arm64-observatory",
+      "configurePreset": "my-macos-arm64-observatory"
+    },
+    {
+      "name": "my-macos-x86_64-observatory",
+      "configurePreset": "my-macos-x86_64-observatory"
+    }
   ]
 }

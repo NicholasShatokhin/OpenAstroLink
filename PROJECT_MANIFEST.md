@@ -11,6 +11,18 @@
 - Polar Alignment RA-offset motion can be constrained to a persisted horizontal Az/Alt safe region; the complete slew path is sampled and rejected if it leaves the allowed region.
 - Mount v9 remains HIL-qualified across native EQDrive, direct SynScan/EQDrive Wi-Fi and Classic ASCOM/EQMOD.
 
+### Build infrastructure follow-up — build-fix9
+
+- Added explicit automatic Raspberry Pi cross-sysroot bootstrap for Debian/Ubuntu/WSL hosts: reproducible Debian 12/Bookworm target root or exact `--from-pi` mirror.
+- Added matching host-Qt bootstrap for cross-build `moc`/`rcc` tools and `OAS_QT_HOST_PATH` support.
+- Added architecture-verified QHY ARM SDK staging from a sibling `QHYCCD_Linux_New` checkout; ARM vendor files are never installed into the x86_64 host.
+- Hardened WSL foreign-root setup: explicitly mount/register `binfmt_misc`, verify ARM execution before debootstrap stage two, resume interrupted roots, install `debian-archive-keyring`, and include Qt Positioning in target dependencies.
+- build-fix6 handles Ubuntu 22.04's stale Debian keyring without disabling signature verification: the bootstrap fetches the official Debian 12 archive/release/security keys over HTTPS, verifies pinned fingerprints, builds an OAL-local keyring, and passes it to `debootstrap --keyring`.
+- build-fix7 fixes a `set -u` Bash ordering bug in the Bookworm-key fetch helper (`name: unbound variable`) by separating local declarations from assignments; the bootstrap can now reach the verified-key download/import stage on Jammy/WSL.
+- build-fix8 explicitly seeds target Qt/OpenCV CMake package directories from the Debian multiarch sysroot (`aarch64-linux-gnu` / `arm-linux-gnueabihf`) and persists them in the bootstrap env; host Qt remains host-tools-only for `moc/rcc/uic`.
+- build-fix9 makes requested QHY ARM staging a validated success requirement, verifies the staged header/library architecture, and forwards the staged SDK from the bootstrap env record into the cross-build helper.
+- Mount coordinate model v9 and all HIL-qualified geometry remain unchanged.
+
 ## v0.2.10.48
 
 - Package: `0.2.10.48-safe-af-exposure-scheduler-lifecycle`
@@ -215,7 +227,7 @@ English is the canonical documentation language. `PROJECT_MANIFEST_UA.md` is the
 ## Native OAL drivers
 
 - `oal.qhy` — QHY cameras through QHYCCD SDK; Windows vendor-header isolation included.
-- `oal.canon` — Canon EOS through Canon EDSDK on Windows or USB/PTP/libgphoto2 on Linux.
+- `oal.canon` — Canon EOS through Canon EDSDK on Windows/macOS or selectable EDSDK/USB-PTP-libgphoto2 on Linux.
 - `oal.zwo.asi` — ZWO ASI cameras through ZWO ASI SDK.
 - `oal.zwo.eaf` — ZWO EAF focusers through ZWO EAF SDK.
 - `oal.gemini` — Gemini EAF native serial path.
@@ -238,7 +250,7 @@ Classic ASCOM (Windows helper/Chooser), SynScan App network, SynScan serial-prot
 - Main + guide camera roles and optical profiles.
 - Native OAL ABI-v2 registry/capabilities/events/cancellation/frame publication.
 - Stellarium mount position/GOTO TCP bridge.
-- Cross-platform presets/scripts for Windows/Linux/RPi.
+- Cross-platform presets/scripts for Windows/Linux/RPi/macOS.
 
 ## v0.2.10.21 mount geometry and QHY explicit recovery
 
@@ -337,3 +349,44 @@ Canon hard-recovery must initialize EDSDK on the long-lived application Qt event
 - Native long GOTO: removed the temporary 15-degree HIL envelope. Raw/native GOTO uses a 180-degree shortest-axis envelope; automatic meridian flip remains disabled and long slews remain supervised HIL work.
 - Manual mount control: OAL/REST/remote-controller two-axis manual-slew contract with hand-controller rate levels 1..9; GUI press-and-hold 3x3 pad; native EQDrive, native SynScan, direct SynScan/EQDrive Wi-Fi and Classic ASCOM MoveAxis implementations.
 - Stellarium: immediate position packet on client connection plus 500 ms live J2000 position stream. Raw EQDrive requires one Sync before sky coordinates are valid.
+
+### Build infrastructure follow-up — build-fix10
+
+- Corrected the QHY ARM ABI assumption after physical inspection showed the legacy `QHYCCD_Linux_New` `armv8` SDK is 32-bit ARM/EABI, not AArch64.
+- QHY cross staging now selects by actual ELF architecture, supports direct SDK archive paths, permits ARM64 bootstrap without QHY by default, and offers `--require-qhy` for a strict full-vendor gate.
+- The legacy QHY `armv8` archive is now intentionally supported by the ARMHF staging path.
+
+
+### Build infrastructure follow-up — build-fix12
+
+- Physical AArch64 compilation reached real OAL sources after the cross sysroot/bootstrap fixes.
+- Canon EDSDK Linux header compatibility added locally for GCC (`__int64`, `WCHAR`) without patching vendor files.
+- Qt HttpServer bind compatibility added for Qt 6.4-6.7 (`void`) and Qt 6.8+ (`bool`).
+- Added `tests/linux_arm_portability_smoke.py`.
+- Mount v9 geometry is unchanged.
+
+
+### Build infrastructure follow-up — build-fix13
+
+- Physical WSL -> AArch64 compilation reaches 100% source compilation; only final executable link remained.
+- The linker failure is isolated to foreign-sysroot transitive dependency discovery: OpenCV/Armadillo/ARPACK/SuperLU require BLAS/LAPACK and the Bookworm libc, but GNU ld was not searching the target multiarch/runtime directories for `DT_NEEDED` closure.
+- Cross builds now add link-time-only target-sysroot `-rpath-link` and `-L` directories for `/lib/<multiarch>`, `/usr/lib/<multiarch>`, `/lib`, and `/usr/lib`. No install/runtime RPATH is added.
+- Raspberry Pi bootstrap explicitly installs and validates `libblas.so.3` and `liblapack.so.3`.
+- Added `tests/cross_linker_sysroot_smoke.py`.
+- Mount v9 geometry/runtime behavior is unchanged.
+
+### Build infrastructure follow-up — build-fix14
+- Added official QHYCCD 26.x Linux ARM64 fetch/cache/staging (`scripts/fetch_qhy_sdk.sh`).
+- New packaging (`sdk_linux_arm64_<version>.tar.gz`) is supported from 26.06.04 onward.
+- QHY staging validates real ELF architecture and supports shared or static `libqhyccd.a` payloads.
+- `bootstrap_rpi_cross.sh --qhy-version 26.06.04 --require-qhy` enables the full ARM64 QHY path.
+- Mount v9 geometry/runtime is unchanged.
+
+### Build infrastructure follow-up — build-fix15
+
+- Physical WSL -> AArch64 trial confirms official QHYCCD SDK 26.06.04 downloads/stages as a real ARM64 shared library and `oal_driver_qhy.so` builds successfully.
+- Remaining failure is isolated to Debian Bookworm BLAS/LAPACK alternatives resolution at the final executable link.
+- Sysroot symlink normalization now runs as root so absolute alternatives links are actually rewritten instead of emitting permission errors.
+- Cross link search includes `usr/lib/<multiarch>/blas` and `usr/lib/<multiarch>/lapack`.
+- Target `liblapack.so.3` and `libblas.so.3` are validated by ELF architecture and linked explicitly after OpenCV to close Armadillo/ARPACK/SuperLU/OpenCV numerical dependencies.
+- No runtime sysroot RPATH is embedded; mount v9 remains frozen and unchanged.

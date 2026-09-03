@@ -1,5 +1,27 @@
 #include "oal/driver_api.h"
+
+// Canon EDSDK 13.20.x ships Linux headers that still use the MSVC-only
+// `__int64` spelling and the Windows `WCHAR` alias even when linking the
+// vendor-provided ELF ARM/x86_64 libraries.  Provide translation-unit-local
+// compatibility shims instead of modifying the vendor SDK in-place.
+#if defined(__linux__) && !defined(_WIN32)
+#include <cwchar>
+#ifndef __int64
+#define __int64 long long
+#define OAL_CANON_EDSDK_UNDEF_INT64_AFTER_INCLUDE 1
+#endif
+#ifndef WCHAR
+using WCHAR = wchar_t;
+#endif
+#endif
+
 #include <EDSDK.h>
+
+#ifdef OAL_CANON_EDSDK_UNDEF_INT64_AFTER_INCLUDE
+#undef __int64
+#undef OAL_CANON_EDSDK_UNDEF_INT64_AFTER_INCLUDE
+#endif
+
 #include <QImage>
 #include <QByteArray>
 

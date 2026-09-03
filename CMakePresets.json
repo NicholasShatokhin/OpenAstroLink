@@ -4,7 +4,6 @@
     {
       "name": "base-release",
       "hidden": true,
-      "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "OAS_BUILD_GUI": "ON",
@@ -18,9 +17,21 @@
       }
     },
     {
+      "name": "ninja-release",
+      "hidden": true,
+      "inherits": "base-release",
+      "generator": "Ninja"
+    },
+    {
+      "name": "unix-makefiles-release",
+      "hidden": true,
+      "inherits": "base-release",
+      "generator": "Unix Makefiles"
+    },
+    {
       "name": "windows-core-release",
       "displayName": "Windows x64 core (MSVC + Ninja; no vendor camera SDKs)",
-      "inherits": "base-release",
+      "inherits": "ninja-release",
       "binaryDir": "${sourceDir}/build/windows-core",
       "cacheVariables": {
         "OAS_ENABLE_QHY": "OFF",
@@ -34,7 +45,7 @@
     {
       "name": "windows-native-release",
       "displayName": "Windows x64 native observatory (MSVC + Ninja; vendor SDKs; no INDI)",
-      "inherits": "base-release",
+      "inherits": "ninja-release",
       "binaryDir": "${sourceDir}/build/windows-native",
       "cacheVariables": {
         "OAS_ENABLE_QHY": "ON",
@@ -57,8 +68,8 @@
     },
     {
       "name": "linux-native-release",
-      "displayName": "Linux native observatory (x86_64 or ARM64)",
-      "inherits": "base-release",
+      "displayName": "Linux native observatory (host architecture)",
+      "inherits": "unix-makefiles-release",
       "binaryDir": "${sourceDir}/build/linux-native",
       "cacheVariables": {
         "OAS_ENABLE_QHY": "ON",
@@ -90,20 +101,179 @@
     },
     {
       "name": "rpi4-native-release",
-      "displayName": "Raspberry Pi 4 / ARM64 native observatory",
+      "displayName": "Raspberry Pi 4/5 ARM64 native observatory",
       "inherits": "linux-native-release",
-      "binaryDir": "${sourceDir}/build/rpi4-native"
+      "binaryDir": "${sourceDir}/build/rpi4-native",
+      "cacheVariables": {
+        "OAS_EXPECT_TARGET_ARCH": "arm64"
+      }
     },
     {
       "name": "rpi4-observatory-release",
-      "displayName": "Raspberry Pi 4 / ARM64 observatory (native + INDI compatibility)",
+      "displayName": "Raspberry Pi 4/5 ARM64 observatory (native + INDI compatibility)",
       "inherits": "linux-observatory-release",
-      "binaryDir": "${sourceDir}/build/rpi4-observatory"
+      "binaryDir": "${sourceDir}/build/rpi4-observatory",
+      "cacheVariables": {
+        "OAS_EXPECT_TARGET_ARCH": "arm64"
+      }
+    },
+    {
+      "name": "rpi4-node-release",
+      "displayName": "Raspberry Pi 4/5 ARM64 headless node (native build on Pi)",
+      "inherits": "rpi4-observatory-release",
+      "binaryDir": "${sourceDir}/build/rpi4-node",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF"
+      }
+    },
+    {
+      "name": "rpi-armhf-node-release",
+      "displayName": "Raspberry Pi ARMHF headless node (native build on 32-bit Pi OS)",
+      "inherits": "linux-node-release",
+      "binaryDir": "${sourceDir}/build/rpi-armhf-node",
+      "cacheVariables": {
+        "OAS_EXPECT_TARGET_ARCH": "armhf"
+      }
+    },
+    {
+      "name": "rpi4-cross-arm64-node-release",
+      "displayName": "RPi ARM64 cross-build node (Linux/WSL host)",
+      "inherits": "unix-makefiles-release",
+      "binaryDir": "${sourceDir}/build/rpi4-cross-arm64",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF",
+        "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_NATIVE_CANON": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
+        "OAS_ENABLE_INDI": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr/local",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-aarch64-gcc.cmake",
+        "OAS_EXPECT_TARGET_ARCH": "arm64"
+      }
+    },
+    {
+      "name": "rpi-cross-armhf-node-release",
+      "displayName": "RPi ARMHF cross-build node (Linux/WSL host)",
+      "inherits": "unix-makefiles-release",
+      "binaryDir": "${sourceDir}/build/rpi-cross-armhf",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF",
+        "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_NATIVE_CANON": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
+        "OAS_ENABLE_INDI": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr/local",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-armhf-gcc.cmake",
+        "OAS_EXPECT_TARGET_ARCH": "armhf"
+      }
+    },
+    {
+      "name": "rpi4-cross-arm64-node-windows-release",
+      "displayName": "RPi ARM64 cross-build node (Windows host + GNU cross compiler)",
+      "inherits": "ninja-release",
+      "binaryDir": "${sourceDir}/build/rpi4-cross-arm64-windows",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF",
+        "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_NATIVE_CANON": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
+        "OAS_ENABLE_INDI": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr/local",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/windows-to-linux-aarch64-gcc.cmake",
+        "OAS_EXPECT_TARGET_ARCH": "arm64"
+      }
+    },
+    {
+      "name": "rpi-cross-armhf-node-windows-release",
+      "displayName": "RPi ARMHF cross-build node (Windows host + GNU cross compiler)",
+      "inherits": "ninja-release",
+      "binaryDir": "${sourceDir}/build/rpi-cross-armhf-windows",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF",
+        "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_NATIVE_CANON": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
+        "OAS_ENABLE_INDI": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr/local",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/windows-to-linux-armhf-gcc.cmake",
+        "OAS_EXPECT_TARGET_ARCH": "armhf"
+      }
+    },
+    {
+      "name": "macos-core-release",
+      "displayName": "macOS host-native core (Clang; no vendor camera SDKs)",
+      "inherits": "unix-makefiles-release",
+      "binaryDir": "${sourceDir}/build/macos-core",
+      "cacheVariables": {
+        "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_NATIVE_CANON": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "OFF",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "OFF",
+        "OAS_ENABLE_INDI": "OFF",
+        "OAS_ENABLE_ASCOM_CLASSIC": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr/local"
+      }
+    },
+    {
+      "name": "macos-native-release",
+      "displayName": "macOS host-native observatory (Canon EDSDK + ZWO; QHY optional)",
+      "inherits": "unix-makefiles-release",
+      "binaryDir": "${sourceDir}/build/macos-native",
+      "cacheVariables": {
+        "OAS_ENABLE_QHY": "OFF",
+        "OAS_ENABLE_NATIVE_CANON": "ON",
+        "OAS_CANON_TRANSPORT": "EDSDK",
+        "OAS_ENABLE_NATIVE_ZWO_ASI": "ON",
+        "OAS_ENABLE_NATIVE_ZWO_EAF": "ON",
+        "OAS_ENABLE_INDI": "OFF",
+        "OAS_ENABLE_ASCOM_CLASSIC": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr/local"
+      }
+    },
+    {
+      "name": "macos-observatory-release",
+      "displayName": "macOS host-native observatory (native + INDI compatibility)",
+      "inherits": "macos-native-release",
+      "binaryDir": "${sourceDir}/build/macos-observatory",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
+      }
+    },
+    {
+      "name": "macos-node-release",
+      "displayName": "macOS host-native headless node",
+      "inherits": "macos-observatory-release",
+      "binaryDir": "${sourceDir}/build/macos-node",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "OFF"
+      }
+    },
+    {
+      "name": "macos-arm64-observatory-release",
+      "displayName": "macOS Apple Silicon ARM64 observatory",
+      "inherits": "macos-observatory-release",
+      "binaryDir": "${sourceDir}/build/macos-arm64-observatory",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "macos-x86_64-observatory-release",
+      "displayName": "macOS Intel x86_64 observatory",
+      "inherits": "macos-observatory-release",
+      "binaryDir": "${sourceDir}/build/macos-x86_64-observatory",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "x86_64"
+      }
     },
     {
       "name": "node-sim-release",
       "displayName": "Headless simulator node",
-      "inherits": "base-release",
+      "inherits": "ninja-release",
       "binaryDir": "${sourceDir}/build/node-sim",
       "cacheVariables": {
         "OAS_BUILD_GUI": "OFF",
@@ -118,14 +288,89 @@
     }
   ],
   "buildPresets": [
-    { "name": "windows-core-release", "configurePreset": "windows-core-release" },
-    { "name": "windows-native-release", "configurePreset": "windows-native-release" },
-    { "name": "windows-observatory-release", "configurePreset": "windows-observatory-release" },
-    { "name": "linux-native-release", "configurePreset": "linux-native-release" },
-    { "name": "linux-observatory-release", "configurePreset": "linux-observatory-release" },
-    { "name": "linux-node-release", "configurePreset": "linux-node-release" },
-    { "name": "rpi4-native-release", "configurePreset": "rpi4-native-release" },
-    { "name": "rpi4-observatory-release", "configurePreset": "rpi4-observatory-release" },
-    { "name": "node-sim-release", "configurePreset": "node-sim-release" }
+    {
+      "name": "windows-core-release",
+      "configurePreset": "windows-core-release"
+    },
+    {
+      "name": "windows-native-release",
+      "configurePreset": "windows-native-release"
+    },
+    {
+      "name": "windows-observatory-release",
+      "configurePreset": "windows-observatory-release"
+    },
+    {
+      "name": "linux-native-release",
+      "configurePreset": "linux-native-release"
+    },
+    {
+      "name": "linux-observatory-release",
+      "configurePreset": "linux-observatory-release"
+    },
+    {
+      "name": "linux-node-release",
+      "configurePreset": "linux-node-release"
+    },
+    {
+      "name": "rpi4-native-release",
+      "configurePreset": "rpi4-native-release"
+    },
+    {
+      "name": "rpi4-observatory-release",
+      "configurePreset": "rpi4-observatory-release"
+    },
+    {
+      "name": "rpi4-node-release",
+      "configurePreset": "rpi4-node-release"
+    },
+    {
+      "name": "rpi-armhf-node-release",
+      "configurePreset": "rpi-armhf-node-release"
+    },
+    {
+      "name": "rpi4-cross-arm64-node-release",
+      "configurePreset": "rpi4-cross-arm64-node-release"
+    },
+    {
+      "name": "rpi-cross-armhf-node-release",
+      "configurePreset": "rpi-cross-armhf-node-release"
+    },
+    {
+      "name": "rpi4-cross-arm64-node-windows-release",
+      "configurePreset": "rpi4-cross-arm64-node-windows-release"
+    },
+    {
+      "name": "rpi-cross-armhf-node-windows-release",
+      "configurePreset": "rpi-cross-armhf-node-windows-release"
+    },
+    {
+      "name": "macos-core-release",
+      "configurePreset": "macos-core-release"
+    },
+    {
+      "name": "macos-native-release",
+      "configurePreset": "macos-native-release"
+    },
+    {
+      "name": "macos-observatory-release",
+      "configurePreset": "macos-observatory-release"
+    },
+    {
+      "name": "macos-node-release",
+      "configurePreset": "macos-node-release"
+    },
+    {
+      "name": "macos-arm64-observatory-release",
+      "configurePreset": "macos-arm64-observatory-release"
+    },
+    {
+      "name": "macos-x86_64-observatory-release",
+      "configurePreset": "macos-x86_64-observatory-release"
+    },
+    {
+      "name": "node-sim-release",
+      "configurePreset": "node-sim-release"
+    }
   ]
 }

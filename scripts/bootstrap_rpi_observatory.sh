@@ -14,11 +14,43 @@ for a in "$@"; do
 done
 
 export DEBIAN_FRONTEND=noninteractive
+
+if [[ -r /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  . /etc/os-release
+fi
+case "${ID:-}" in
+  ubuntu)
+    if [[ "${VERSION_ID:-0}" != "24.04" && "${VERSION_ID:-0}" != "24.10" && "${VERSION_ID:-0}" != "25.04" && "${VERSION_ID:-0}" != "25.10" && "${VERSION_ID:-0}" != "26.04" ]]; then
+      echo "ERROR: Ubuntu ${VERSION_ID:-unknown} system Qt is not a supported OAL baseline." >&2
+      echo "       Use Ubuntu 24.04+ (Qt >= 6.4 with Qt HttpServer)." >&2
+      exit 4
+    fi
+    ;;
+  debian|raspbian)
+    major="${VERSION_ID%%.*}"
+    if [[ -n "${major:-}" ]] && (( major < 12 )); then
+      echo "ERROR: Debian/Raspberry Pi OS ${VERSION_ID:-unknown} is too old for the OAL Qt >= 6.4 baseline." >&2
+      echo "       Use Bookworm (12) or newer." >&2
+      exit 4
+    fi
+    ;;
+esac
+
 apt-get update
-apt-get install -y \
-  build-essential cmake ninja-build pkg-config git curl ca-certificates file \
-  qt6-base-dev qt6-serialport-dev qt6-websockets-dev qt6-httpserver-dev \
-  libopencv-dev libgphoto2-dev libjpeg62-turbo-dev
+required_packages=(
+  build-essential cmake pkg-config git curl ca-certificates file
+  qt6-base-dev qt6-serialport-dev qt6-websockets-dev qt6-httpserver-dev
+  libopencv-dev libgphoto2-dev libjpeg-dev
+)
+for pkg in "${required_packages[@]}"; do
+  if ! apt-cache show "$pkg" >/dev/null 2>&1; then
+    echo "ERROR: required package '$pkg' is unavailable in the configured repositories." >&2
+    echo "       OAL's system-Qt baseline is Ubuntu 24.04+ or Debian/Raspberry Pi OS 12+ (Bookworm)." >&2
+    exit 5
+  fi
+done
+apt-get install -y "${required_packages[@]}"
 
 if [[ $WITH_INDI -eq 1 ]]; then
   apt-get install -y indi-bin
