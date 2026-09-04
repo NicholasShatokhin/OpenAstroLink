@@ -17,7 +17,10 @@
         "ZWO_EAF_INCLUDE_DIR": "C:/SDK/ZWO/EAF/include",
         "ZWO_EAF_LIBRARY": "C:/SDK/ZWO/EAF/lib/Windows/x64/Release/EAF_focuser.lib",
         "ZWO_EAF_RUNTIME_DIR": "C:/SDK/ZWO/EAF/lib/Windows/x64/Release",
-        "OAS_ENABLE_NATIVE_CANON": "OFF"
+        "OAS_ENABLE_NATIVE_CANON": "OFF",
+        "OAS_VENDOR_SDK_ROOT": "$env{LOCALAPPDATA}/OpenAstroLink/sdk/native/windows-x64",
+        "QHYCCD_ROOT": "$env{LOCALAPPDATA}/OpenAstroLink/sdk/native/windows-x64/qhy",
+        "OAS_ENABLE_INDI": "OFF"
       }
     },
     {
@@ -34,21 +37,30 @@
     },
     {
       "name": "my-linux-observatory",
-      "displayName": "My Linux observatory SDK paths",
+      "displayName": "My Linux observatory (managed dependency roots; native OAL drivers)",
       "inherits": "linux-observatory-release",
       "cacheVariables": {
-        "QHYCCD_INCLUDE_DIR": "/opt/openastrolink-sdk/qhy/include",
-        "QHYCCD_LIBRARY": "/opt/openastrolink-sdk/qhy/lib/libqhy.so",
-        "ZWO_ASI_INCLUDE_DIR": "/opt/openastrolink-sdk/zwo/asi/include",
-        "ZWO_ASI_LIBRARY": "/opt/openastrolink-sdk/zwo/asi/lib/libASICamera2.so",
-        "ZWO_EAF_INCLUDE_DIR": "/opt/openastrolink-sdk/zwo/eaf/include",
-        "ZWO_EAF_LIBRARY": "/opt/openastrolink-sdk/zwo/eaf/lib/libEAFFocuser.so"
+        "OAS_VENDOR_SDK_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/linux-x86_64",
+        "QHYCCD_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/linux-x86_64/qhy",
+        "ZWO_ASI_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/linux-x86_64/zwo/asi",
+        "ZWO_EAF_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/linux-x86_64/zwo/eaf",
+        "OAS_ENABLE_INDI": "OFF",
+        "CANON_EDSDK_ROOT": "${sourceDir}/../edsdk"
       }
     },
     {
       "name": "my-rpi4-cross-arm64",
       "displayName": "My RPi ARM64 cross node (Linux/WSL host)",
       "inherits": "rpi4-cross-arm64-node-release",
+      "cacheVariables": {
+        "OAS_CROSS_SYSROOT": "$env{HOME}/.local/share/openastrolink/sysroots/rpi4-arm64",
+        "OAS_QT_HOST_PATH": "$env{HOME}/.local/share/openastrolink/host-qt/6.4.2"
+      }
+    },
+    {
+      "name": "my-rpi4-cross-arm64-observatory",
+      "displayName": "My RPi ARM64 cross observatory GUI + node (Linux/WSL host)",
+      "inherits": "rpi4-cross-arm64-observatory-release",
       "cacheVariables": {
         "OAS_CROSS_SYSROOT": "$env{HOME}/.local/share/openastrolink/sysroots/rpi4-arm64",
         "OAS_QT_HOST_PATH": "$env{HOME}/.local/share/openastrolink/host-qt/6.4.2"
@@ -84,11 +96,15 @@
       "displayName": "My macOS Apple Silicon observatory SDK paths",
       "inherits": "macos-arm64-observatory-release",
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/qt;/opt/homebrew/opt/opencv",
-        "ZWO_ASI_ROOT": "${sourceDir}/../zwo/asi",
-        "ZWO_EAF_ROOT": "${sourceDir}/../zwo/eaf",
+        "OAS_QT_ROOT": "$env{HOME}/.local/share/openastrolink/qt/6.8.3/macos",
+        "CMAKE_PREFIX_PATH": "$env{HOME}/.local/share/openastrolink/qt/6.8.3/macos;/opt/homebrew/opt/opencv",
+        "OAS_VENDOR_SDK_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-arm64",
+        "QHYCCD_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-arm64/qhy",
+        "ZWO_ASI_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-arm64/zwo/asi",
+        "ZWO_EAF_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-arm64/zwo/eaf",
         "CANON_EDSDK_ROOT": "${sourceDir}/../edsdk/EDSDKv132021M",
-        "OAS_ENABLE_QHY": "OFF"
+        "OAS_ENABLE_QHY": "ON",
+        "OAS_ENABLE_INDI": "OFF"
       }
     },
     {
@@ -96,11 +112,15 @@
       "displayName": "My macOS Intel observatory SDK paths",
       "inherits": "macos-x86_64-observatory-release",
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "/usr/local/opt/qt;/usr/local/opt/opencv",
-        "ZWO_ASI_ROOT": "${sourceDir}/../zwo/asi",
-        "ZWO_EAF_ROOT": "${sourceDir}/../zwo/eaf",
+        "OAS_QT_ROOT": "$env{HOME}/.local/share/openastrolink/qt/6.8.3/macos",
+        "CMAKE_PREFIX_PATH": "$env{HOME}/.local/share/openastrolink/qt/6.8.3/macos;/usr/local/opt/opencv",
+        "OAS_VENDOR_SDK_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-x86_64",
+        "QHYCCD_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-x86_64/qhy",
+        "ZWO_ASI_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-x86_64/zwo/asi",
+        "ZWO_EAF_ROOT": "$env{HOME}/.local/share/openastrolink/sdk/native/macos-x86_64/zwo/eaf",
         "CANON_EDSDK_ROOT": "${sourceDir}/../edsdk/EDSDKv132021M",
-        "OAS_ENABLE_QHY": "OFF"
+        "OAS_ENABLE_QHY": "ON",
+        "OAS_ENABLE_INDI": "OFF"
       }
     }
   ],
@@ -120,6 +140,10 @@
     {
       "name": "my-rpi4-cross-arm64",
       "configurePreset": "my-rpi4-cross-arm64"
+    },
+    {
+      "name": "my-rpi4-cross-arm64-observatory",
+      "configurePreset": "my-rpi4-cross-arm64-observatory"
     },
     {
       "name": "my-rpi-cross-armhf",

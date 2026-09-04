@@ -1,5 +1,8 @@
 # Raspberry Pi 4 first-hardware path — v0.2.10.5 native observatory pack
 
+
+> **Current release:** v0.2.10.50. Raspberry Pi 4 and Pi 5 are treated as the generic Linux `aarch64` target; the ARM64 node/probe/native-driver build is confirmed, while Pi 5 physical runtime/HIL remains pending.
+
 ## Target topology
 
 ```text
@@ -198,7 +201,7 @@ sudo ./scripts/enable_indi_compat.sh
 sudo ./scripts/install_indi_service.sh <driver1> [driver2 ...]
 ```
 
-Use `rpi4-observatory-release` or `-DOAS_ENABLE_INDI=ON`. Native telescope devices stay native; only the additional device travels through the INDI compatibility adapter.
+Use `rpi4-observatory-indi-release` or `-DOAS_ENABLE_INDI=ON`; the normal `rpi4-observatory-release` is native-only by default. Native telescope devices stay native; only the additional device travels through the INDI compatibility adapter.
 
 ## 11. Install the node
 

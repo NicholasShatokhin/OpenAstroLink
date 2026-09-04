@@ -1,4 +1,8 @@
-# Raspberry Pi observatory node — v0.2.10.49 build-fix7
+## v0.2.10.50 Raspberry Pi 4/5 ARM64 status
+
+OpenAstroLink розглядає 64-bit Raspberry Pi як generic Linux `aarch64` target. Тому Pi 4 і Pi 5 мають спільний OAL ABI та ARM64 vendor SDK matrix. Історичні назви `rpi4-*` preset/sysroot лишаються для backward compatibility і не означають Cortex-A72-only binary. Поточний WSL/Linux→ARM64 build доходить до 100% для `openastrolink-node`, `oal-hardware-probe` та native QHY/Canon/ZWO/Gemini/Sky-Watcher/EQDrive drivers. Physical Pi 5 runtime/HIL і ARM64 `OpenAstroSuite` GUI runtime ще pending.
+
+# Raspberry Pi 4/5 observatory node — v0.2.10.50
 
 Канонічний документ: `../RPI_NODE.md`.
 
@@ -6,7 +10,7 @@
 
 Stellarium bridge можна запускати з `--stellarium-port 10000` або settings/API. INDI compatibility можна додати без зміни native OAL конфігурації.
 
-## Build presets у v0.2.10.49 build-fix7
+## Build presets у v0.2.10.50
 
 Native 64-bit Raspberry Pi 4/5 node:
 
@@ -56,3 +60,8 @@ Cross presets спочатку збирають headless node і навмисн�
 ### v0.2.10.49 build-fix10 — QHY ARM64 проти ARMHF
 
 Legacy `QHYCCD_Linux_New` `armv8` SDK фізично є 32-bit ARM/EABI build. Його слід використовувати лише з ARMHF node. Для 64-bit Raspberry Pi node потрібен справжній QHY `Arm_64`/`AARCH64` SDK; доки його не staged, ARM64 node треба збирати з QHY OFF (`my-rpi4-cross-arm64`).
+
+## Поточний native-first hardware path
+
+Для Raspberry Pi default runtime тепер native-first: QHY/Canon/ZWO ASI cameras, Gemini/ZWO EAF focusers та EQDrive/Sky-Watcher mount paths використовуються напряму через OAL. INDI/LX200 вмикаються лише явно для compatibility hardware. Planetary SER, persistent DSO/planetary/mosaic scheduler і guided Polar Alignment foundations уже реалізовані; найближча Beta зосереджена на HIL autofocus, auto-exposure, scheduler, mosaic і Polar Alignment.
+

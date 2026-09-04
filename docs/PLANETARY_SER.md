@@ -1,5 +1,8 @@
 # Planetary SER recording and autonomous blocks — v0.2.10.47
 
+
+> **Current release:** v0.2.10.50. Planetary SER remains implemented; real-hardware workflow hardening continues under the Beta HIL plan.
+
 `planetary-ser` is now executable inside an `ObservationPlan`, not only a manual Live View recorder. The supervised block flow is `GOTO → full-frame planet detection → optional planetary autofocus → reacquire → hardware ROI → finite SER`. QHY and ZWO ASI native streaming accept the ROI. During a run, a fast loop may shift the same-size ROI to follow the target; every change is written to `<basename>.roi.jsonl` with the first affected frame number. An optional slow mount loop can calibrate the local RA/DEC-to-image response with small slews and perform bounded recenter corrections. Slow mount correction defaults OFF until HIL-qualified; ROI-only tracking remains the safe default.
 
 OpenAstroLink v0.2.10.47 can record Live View directly to uncompressed SER for lunar, planetary and lucky-imaging workflows.

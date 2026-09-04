@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.49 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.50 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,7 +20,7 @@ set(CANON_EDSDK_LIBRARY "" CACHE FILEPATH "Canon EDSDK import/shared library")
 set(CANON_EDSDK_RUNTIME_DIR "" CACHE PATH "Directory containing EDSDK runtime DLLs (Windows build-tree staging + packaging)")
 option(OAS_ENABLE_NATIVE_ZWO_ASI "Build native OAL ZWO ASI camera driver (requires ZWO ASI SDK)" OFF)
 option(OAS_ENABLE_NATIVE_ZWO_EAF "Build native OAL ZWO EAF focuser driver (requires ZWO EAF SDK)" OFF)
-option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends" ON)
+option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends (optional; native OAL drivers are the default)" OFF)
 option(OAS_ENABLE_NATIVE_GEMINI "Build native OAL Gemini EAF driver" ON)
 option(OAS_ENABLE_NATIVE_SKYWATCHER "Build native OAL Sky-Watcher/SynScan mount driver" ON)
 option(OAS_ENABLE_NATIVE_EQDRIVE "Build native OAL EQDrive ASTEP mount driver" ON)
@@ -32,6 +32,8 @@ option(OAS_BUILD_GUI "Build the OpenAstroSuite Qt GUI client" ON)
 option(OAS_BUILD_NODE "Build the headless openastrolink-node service" ON)
 option(OAS_BUILD_HARDWARE_PROBE "Build oal-hardware-probe diagnostics utility" ON)
 option(OAS_REQUIRE_MSVC "Fail configuration on Windows unless the MSVC toolchain is active" OFF)
+set(OAS_QT_ROOT "" CACHE PATH "Host-native Qt prefix (auto-discovered from OAL cache when empty)")
+set(OAS_VENDOR_SDK_ROOT "" CACHE PATH "Host-native vendor SDK staging root (QHY/ZWO; auto-discovered when empty)")
 set(OAS_QT_HOST_PATH "" CACHE PATH "Host Qt installation used for runnable moc/rcc/uic during cross-compilation")
 if(CMAKE_CROSSCOMPILING AND OAS_QT_HOST_PATH)
     set(QT_HOST_PATH "${OAS_QT_HOST_PATH}" CACHE PATH "Qt host tools path" FORCE)
@@ -42,8 +44,9 @@ if(WIN32 AND OAS_REQUIRE_MSVC AND NOT MSVC)
     message(FATAL_ERROR
         "This Windows preset requires the MSVC ABI, but CMake selected '${CMAKE_CXX_COMPILER_ID}' "
         "with compiler '${CMAKE_CXX_COMPILER}'. Do not mix MinGW/Strawberry GCC with "
-        "Qt MSVC2022 or vendor .lib files. Delete the build directory and configure with "
-        "a Ninja preset from an x64 MSVC developer environment (or use scripts/build_windows.ps1).")
+        "Qt MSVC2022 or vendor .lib files. Configure from an x64 MSVC developer environment "
+        "or use scripts/build_windows.ps1, which loads vcvars64 automatically. Native Windows "
+        "presets use Ninja with CMAKE_CXX_COMPILER=cl.exe and a dedicated *-msvc-ninja cache.")
 endif()
 
 set(OAS_EXPECT_TARGET_ARCH "" CACHE STRING "Expected target architecture guard: arm64, armhf, x86_64, or empty")
@@ -69,6 +72,75 @@ endif()
 message(STATUS
     "OAL build target: host=${CMAKE_HOST_SYSTEM_NAME}/${CMAKE_HOST_SYSTEM_PROCESSOR}; "
     "target=${CMAKE_SYSTEM_NAME}/${CMAKE_SYSTEM_PROCESSOR}; cross=${CMAKE_CROSSCOMPILING}")
+
+# For native builds, prefer dependencies staged by scripts/bootstrap_native_dependencies.*
+# before falling back to system packages. This keeps raw `cmake --preset ...`
+# useful after a one-time bootstrap and prevents an older distro Qt (for example
+# Jammy 6.2.4) from winning over the OAL-managed Qt >= 6.4 cache.
+if(NOT CMAKE_CROSSCOMPILING)
+    set(_oas_native_arch "${CMAKE_SYSTEM_PROCESSOR}")
+    string(TOLOWER "${_oas_native_arch}" _oas_native_arch)
+    if(_oas_native_arch MATCHES "^(amd64|x86_64)$")
+        set(_oas_native_arch "x86_64")
+    elseif(_oas_native_arch MATCHES "^(aarch64|arm64)$")
+        set(_oas_native_arch "arm64")
+    endif()
+
+    # A user preset may point at a managed Qt version that has not been
+    # bootstrapped yet (or was removed). Do not let that stale path suppress
+    # discovery of another valid OAL-managed/user Qt installation.
+    if(OAS_QT_ROOT AND NOT EXISTS "${OAS_QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake")
+        message(STATUS "OAL configured Qt prefix is not present; searching alternatives: ${OAS_QT_ROOT}")
+        set(OAS_QT_ROOT "" CACHE PATH "Host-native Qt prefix" FORCE)
+    endif()
+
+    if(NOT OAS_QT_ROOT)
+        set(_oas_qt_candidates "")
+        if(WIN32)
+            if(DEFINED ENV{LOCALAPPDATA})
+                file(GLOB _oas_qt_managed LIST_DIRECTORIES true "$ENV{LOCALAPPDATA}/OpenAstroLink/qt/*/msvc2022_64")
+                list(APPEND _oas_qt_candidates ${_oas_qt_managed})
+            endif()
+            file(GLOB _oas_qt_user LIST_DIRECTORIES true "C:/Qt/*/msvc2022_64")
+            list(APPEND _oas_qt_candidates ${_oas_qt_user})
+        elseif(APPLE)
+            file(GLOB _oas_qt_managed LIST_DIRECTORIES true "$ENV{HOME}/.local/share/openastrolink/qt/*/macos")
+            file(GLOB _oas_qt_user LIST_DIRECTORIES true "$ENV{HOME}/Qt/*/macos")
+            list(APPEND _oas_qt_candidates ${_oas_qt_managed} ${_oas_qt_user} "/opt/homebrew/opt/qt" "/usr/local/opt/qt")
+        else()
+            file(GLOB _oas_qt_managed LIST_DIRECTORIES true "$ENV{HOME}/.local/share/openastrolink/qt/*/gcc_64")
+            file(GLOB _oas_qt_user LIST_DIRECTORIES true "$ENV{HOME}/Qt/*/gcc_64")
+            list(APPEND _oas_qt_candidates ${_oas_qt_managed} ${_oas_qt_user})
+        endif()
+        list(SORT _oas_qt_candidates COMPARE NATURAL ORDER DESCENDING)
+        foreach(_oas_qt_candidate IN LISTS _oas_qt_candidates)
+            if(EXISTS "${_oas_qt_candidate}/lib/cmake/Qt6/Qt6Config.cmake" AND
+               EXISTS "${_oas_qt_candidate}/lib/cmake/Qt6HttpServer/Qt6HttpServerConfig.cmake" AND
+               EXISTS "${_oas_qt_candidate}/lib/cmake/Qt6WebSockets/Qt6WebSocketsConfig.cmake" AND
+               EXISTS "${_oas_qt_candidate}/lib/cmake/Qt6SerialPort/Qt6SerialPortConfig.cmake")
+                set(OAS_QT_ROOT "${_oas_qt_candidate}" CACHE PATH "Host-native Qt prefix" FORCE)
+                break()
+            endif()
+        endforeach()
+    endif()
+    if(OAS_QT_ROOT AND EXISTS "${OAS_QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake")
+        list(PREPEND CMAKE_PREFIX_PATH "${OAS_QT_ROOT}")
+        message(STATUS "OAL native Qt prefix: ${OAS_QT_ROOT}")
+    endif()
+
+    if(NOT OAS_VENDOR_SDK_ROOT)
+        if(WIN32 AND DEFINED ENV{LOCALAPPDATA})
+            set(OAS_VENDOR_SDK_ROOT "$ENV{LOCALAPPDATA}/OpenAstroLink/sdk/native/windows-x64" CACHE PATH "Host-native vendor SDK staging root" FORCE)
+        elseif(APPLE)
+            set(OAS_VENDOR_SDK_ROOT "$ENV{HOME}/.local/share/openastrolink/sdk/native/macos-${_oas_native_arch}" CACHE PATH "Host-native vendor SDK staging root" FORCE)
+        else()
+            set(OAS_VENDOR_SDK_ROOT "$ENV{HOME}/.local/share/openastrolink/sdk/native/linux-${_oas_native_arch}" CACHE PATH "Host-native vendor SDK staging root" FORCE)
+        endif()
+    endif()
+    if(OAS_VENDOR_SDK_ROOT)
+        message(STATUS "OAL native vendor SDK root: ${OAS_VENDOR_SDK_ROOT}")
+    endif()
+endif()
 
 # GNU ld does not automatically search a foreign sysroot for transitive
 # DT_NEEDED libraries of shared objects.  Debian/OpenCV pulls BLAS/LAPACK,
@@ -129,9 +201,13 @@ if(Qt6_FOUND AND DEFINED Qt6_VERSION AND Qt6_VERSION VERSION_LESS 6.4)
     message(FATAL_ERROR
         "OpenAstroLink requires Qt >= 6.4 (detected Qt ${Qt6_VERSION}). "
         "The node REST API uses Qt6::HttpServer. Ubuntu 22.04/Jammy ships "
-        "Qt 6.2.4 and no qt6-httpserver-dev package; use Ubuntu 24.04+ / "
-        "Debian 12+ / Raspberry Pi OS Bookworm+, or provide a custom Qt >= 6.4 "
-        "through CMAKE_PREFIX_PATH/Qt6_DIR.")
+        "Qt 6.2.4, so installing additional Jammy Qt6 *-dev packages cannot "
+        "satisfy this requirement. On Linux use the supported wrapper:\n"
+        "  ./scripts/build_linux.sh my-linux-observatory --bootstrap-deps\n"
+        "It installs a per-user Qt >= 6.4 through aqtinstall and leaves /usr "
+        "unchanged. Alternatively use Ubuntu 24.04+ / Debian 12+ / Raspberry "
+        "Pi OS Bookworm+, or point CMAKE_PREFIX_PATH/Qt6_DIR at an existing "
+        "custom Qt >= 6.4.")
 endif()
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network SerialPort WebSockets HttpServer Concurrent)
@@ -443,13 +519,13 @@ if(OAS_ENABLE_QHY)
     set(QHYCCD_RUNTIME_DIR "" CACHE PATH "QHYCCD runtime DLL/shared-library directory (Windows build-tree staging + packaging)")
     if(NOT QHYCCD_INCLUDE_DIR)
         find_path(QHYCCD_INCLUDE_DIR qhyccd.h
-            HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT ENV QHYCCD_INCLUDE_DIR
+            HINTS ${QHYCCD_ROOT} "${OAS_VENDOR_SDK_ROOT}/qhy" ENV QHYCCD_ROOT ENV QHYCCD_INCLUDE_DIR
             PATH_SUFFIXES include usr/local/include
             REQUIRED)
     endif()
     if(NOT QHYCCD_LIBRARY)
         find_library(QHYCCD_LIBRARY NAMES qhyccd qhy
-            HINTS ${QHYCCD_ROOT} ENV QHYCCD_ROOT
+            HINTS ${QHYCCD_ROOT} "${OAS_VENDOR_SDK_ROOT}/qhy" ENV QHYCCD_ROOT
             PATH_SUFFIXES lib lib64 usr/local/lib
             REQUIRED)
     endif()
@@ -501,10 +577,10 @@ if(OAS_ENABLE_NATIVE_ZWO_ASI)
     set(ZWO_ASI_LIBRARY "" CACHE FILEPATH "Exact ZWO ASI SDK library path")
     set(ZWO_ASI_RUNTIME_DIR "" CACHE PATH "ZWO ASI runtime DLL/shared-library directory (Windows build-tree staging + packaging)")
     if(NOT ZWO_ASI_INCLUDE_DIR)
-        find_path(ZWO_ASI_INCLUDE_DIR ASICamera2.h HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT ENV ZWO_ASI_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
+        find_path(ZWO_ASI_INCLUDE_DIR ASICamera2.h HINTS ${ZWO_ASI_ROOT} "${OAS_VENDOR_SDK_ROOT}/zwo/asi" ENV ZWO_ASI_ROOT ENV ZWO_ASI_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
     if(NOT ZWO_ASI_LIBRARY)
-        find_library(ZWO_ASI_LIBRARY NAMES ASICamera2 ASICamera2.bin HINTS ${ZWO_ASI_ROOT} ENV ZWO_ASI_ROOT
+        find_library(ZWO_ASI_LIBRARY NAMES ASICamera2 ASICamera2.bin HINTS ${ZWO_ASI_ROOT} "${OAS_VENDOR_SDK_ROOT}/zwo/asi" ENV ZWO_ASI_ROOT
             PATH_SUFFIXES ${_oas_zwo_asi_suffixes} REQUIRED)
     endif()
     add_library(oal_driver_zwo_asi SHARED drivers/zwo_asi/oal_driver_zwo_asi.cpp)
@@ -523,10 +599,10 @@ if(OAS_ENABLE_NATIVE_ZWO_EAF)
     set(ZWO_EAF_LIBRARY "" CACHE FILEPATH "Exact ZWO EAF SDK library path")
     set(ZWO_EAF_RUNTIME_DIR "" CACHE PATH "ZWO EAF runtime DLL/shared-library directory (Windows build-tree staging + packaging)")
     if(NOT ZWO_EAF_INCLUDE_DIR)
-        find_path(ZWO_EAF_INCLUDE_DIR EAF_focuser.h HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT ENV ZWO_EAF_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
+        find_path(ZWO_EAF_INCLUDE_DIR EAF_focuser.h HINTS ${ZWO_EAF_ROOT} "${OAS_VENDOR_SDK_ROOT}/zwo/eaf" ENV ZWO_EAF_ROOT ENV ZWO_EAF_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
     if(NOT ZWO_EAF_LIBRARY)
-        find_library(ZWO_EAF_LIBRARY NAMES EAFFocuser EAFFocuser.bin HINTS ${ZWO_EAF_ROOT} ENV ZWO_EAF_ROOT
+        find_library(ZWO_EAF_LIBRARY NAMES EAFFocuser EAFFocuser.bin HINTS ${ZWO_EAF_ROOT} "${OAS_VENDOR_SDK_ROOT}/zwo/eaf" ENV ZWO_EAF_ROOT
             PATH_SUFFIXES ${_oas_zwo_eaf_suffixes} REQUIRED)
     endif()
     add_library(oal_driver_zwo_eaf SHARED drivers/zwo_eaf/oal_driver_zwo_eaf.cpp)

@@ -1,4 +1,8 @@
-# Validation plan — v0.2.10.47
+## v0.2.10.50 validation focus
+
+Build qualification is confirmed for Windows x64, native Linux x86_64 and the Linux/WSL→ARM64 Raspberry Pi node/probe/native-driver target. Keep those builds as regression gates. The next release gate is HIL workflow behavior, starting with autofocus. For the HIL-qualified direct-MC mount, retain a small-motion sanity check after hardware changes, then exercise normal supervised full-range GOTO; there is no longer a hidden 15° driver qualification cap. Profile-level sky-safety may still be enabled by the operator.
+
+# Validation plan — v0.2.10.50
 
 This release is primarily a build/HIL qualification checkpoint.
 
@@ -23,6 +27,7 @@ python3 tools/qhy_header_isolation_check.py
 python3 tools/rpi_hardware_path_check.py
 python3 tools/cmake_presets_compat_check.py
 python3 tools/scheduler_dso_executor_v046_check.py
+python3 tools/mount_v9_unrestricted_goto_check.py
 ```
 
 Also verify:
@@ -51,17 +56,20 @@ PASS requires:
 
 ### Linux
 
+Recommended native gate:
+
 ```bash
-./scripts/check_build_environment.sh
+./scripts/build_linux.sh my-linux-observatory --bootstrap-deps --clean
 ```
 
 PASS requires:
 
-- CMake >=3.20;
-- Ninja available;
-- native compiler works;
-- vendor `.so` architecture matches `uname -m`;
-- required Qt/OpenCV/libgphoto2 development packages are visible.
+- CMake >=3.20 and a working native C++ compiler;
+- Qt >=6.4 including HttpServer/WebSockets/SerialPort/Positioning (system Qt or the per-user OAL bootstrap);
+- OpenCV and target-architecture vendor `.so` files;
+- full native observatory build success.
+
+Ubuntu 22.04/Jammy system Qt 6.2.4 is intentionally not sufficient; the wrapper can install a per-user Qt through `aqtinstall`. Linux presets do not require Ninja.
 
 ## C. Windows build gates
 
@@ -104,16 +112,18 @@ Run native-only first where practical, then re-run with compatibility enabled.
 
 ### Mount
 
-1. connect/discover;
-2. read RA/Dec/status;
-3. small safe GOTO;
-4. abort during GOTO;
-5. tracking off/on;
-6. sync;
-7. pier-side query if supported;
-8. short pulse guide;
-9. disconnect/reconnect;
-10. node restart/reconnect.
+1. connect/discover and confirm coordinate model v9 diagnostics;
+2. read RA/Dec/status and mechanical axes;
+3. after any hardware/configuration change, perform one small supervised sanity GOTO;
+4. perform normal supervised full-range GOTO across representative east/west targets — the driver no longer has the temporary 15° qualification gate;
+5. abort during GOTO and confirm both axes stop;
+6. tracking off/on;
+7. sync/plate-solve refinement;
+8. Park/Unpark using the calibrated physical Home/Park workflow;
+9. disconnect/reconnect and node restart/reconnect;
+10. keep automatic meridian-flip orchestration out of unattended PASS until separately HIL-qualified.
+
+If the profile-level `maxGotoSkyDeltaDeg` safety policy is enabled, set it deliberately for the test rather than confusing it with a transport-driver limitation.
 
 ### Focuser
 

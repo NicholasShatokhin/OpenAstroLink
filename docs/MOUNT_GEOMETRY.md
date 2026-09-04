@@ -25,7 +25,7 @@ This replaces the v6 polar-telescope-frame experiment. v6 correctly made native 
 
 Sky-Watcher Motor Controller position packets are decoded through the protocol's signed `0x800000` reference by the shared codec. At connect, OAL captures the resulting normalized counts as the session Home/Park reference; no additional quarter-turn/90° transport offset is invented. Native EQDrive serial and direct Wi-Fi use the same `skywatcher_mc::makeGotoPlan()` after Core geometry, so any remaining difference between them is transport I/O rather than astronomical kinematics.
 
-Profiles older than v7 still receive the one-time legacy Home/Park reset. Any direct-MC profile below v9 then migrates to `Axis1Sign=+1`, `Axis2Sign=-1`, keeps the standard `0°,0°` Home/Park convention, and enables auto-Home. A v7 profile keeps its already valid Home/Park values while only the physical Axis1 mapping changes. Automatic meridian-flip orchestration is still not considered HIL-qualified for unattended use.
+Profiles older than v7 still receive the one-time legacy Home/Park reset. Any direct-MC profile below v9 then migrates to `Axis1Sign=+1`, `Axis2Sign=-1`, keeps the standard `0°,0°` Home/Park convention, and enables auto-Home. A v7/v8 profile keeps its already valid Home/Park values while the qualified Axis2/DEC-polar-distance mapping is migrated to v9. Automatic meridian-flip orchestration is still not considered HIL-qualified for unattended use.
 
 High-level SynScan paths remain separate: native `oal.skywatcher` hand-controller mode and `synscan-app` exchange celestial RA/DEC with SynScan's own alignment model. Only direct Motor Controller Wi-Fi (`synscan-wifi`, UDP/11880) shares v9 with native EQDrive serial.
 
@@ -35,10 +35,14 @@ Home/Park is deliberately not stored as celestial RA/DEC for native raw-axis mou
 
 Use **Calibrate current physical pose as persistent Home / Park** at the desired physical pose. Native EQDrive stores the current mechanical axes as both OAL Home and Park. Classic ASCOM has no OAL mechanical-axis interface, so the same action calls the ASCOM driver's standard `SetPark` capability. To obtain identical native and ASCOM park behavior, calibrate each backend once at the same physical pose without moving the mount between backend switches.
 
-## Safety status
+## Safety status — v0.2.10.50
 
-From v0.2.10.38, the configurable native GOTO envelope is a **true angular sky separation**. This fixes the pole singularity: a target only a few degrees away on the celestial sphere can require a very large RA-axis rotation near Dec ±90°. The raw native transport therefore has a separate fixed 180° per-axis mechanical hard cap.
+Coordinate model v9 is HIL-qualified and frozen. The temporary 15°/`maxNativeGotoDeg` qualification gate that lived inside `oal.eqdrive` has therefore been removed. This change does **not** alter the v9 equations, axis signs, Home/Park convention or transport direction logic.
 
-The preferred API/profile name is `maxGotoSkyDeltaDeg`; `maxGotoAxisDeltaDeg` remains a backward-compatible alias. Automatic meridian-flip planning remains disabled by default, so large supervised slews should still be HIL-qualified before unattended use.
+The normal native GOTO safety policy remains in OAL Core/profile and is based on **true angular sky separation**. The preferred name is `maxGotoSkyDeltaDeg`; `maxGotoAxisDeltaDeg` remains a backward-compatible alias. This is operator controlled and can be kept conservative during supervised qualification or set to 180° for normal full-range GOTO.
+
+Raw mechanical `mount.gotoAxes` commands keep a separate explicit per-request `maxAxisDeltaDeg` guard (180° by default). This matters near the celestial pole, where a small sky displacement can legitimately require a much larger RA-axis rotation; normal sky GOTO must not be rejected by a second hidden transport-driver limit.
+
+Automatic meridian-flip orchestration remains disabled/unqualified for unattended use. Large slews should still be supervised until the relevant observatory safety stack is complete.
 
 Alt-azimuth coordinate conversion is present, but production two-axis sidereal tracking and field-derotator control are future work. Fork-equatorial and equatorial-platform profiles share the equatorial hour-angle foundation without GEM pier-flip geometry.

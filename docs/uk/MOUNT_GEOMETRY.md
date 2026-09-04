@@ -25,7 +25,7 @@ v9 зберігає введену у v7 conventional EQMOD-style механік
 
 Sky-Watcher Motor Controller position packets декодуються shared codec з протокольним signed reference `0x800000`. При connect OAL зберігає нормалізовані counts як session Home/Park; додаткового quarter-turn/90° transport offset немає. Native EQDrive serial і direct Wi-Fi після Core geometry використовують той самий `skywatcher_mc::makeGotoPlan()`.
 
-Профілі старші за v7 і далі проходять одноразове очищення legacy Home/Park. Будь-який direct-MC profile нижче v9 потім мігрує на `Axis1Sign=+1`, `Axis2Sign=-1`, зберігає стандартний Home/Park `0°,0°` та вмикає auto-Home. Для вже v7-профілю Home/Park не скидаються — змінюється лише physical Axis1 mapping. Automatic meridian flip поки не вважається HIL-qualified для unattended use.
+Профілі старші за v7 і далі проходять одноразове очищення legacy Home/Park. Будь-який direct-MC profile нижче v9 потім мігрує на `Axis1Sign=+1`, `Axis2Sign=-1`, зберігає стандартний Home/Park `0°,0°` та вмикає auto-Home. Для вже v7/v8-профілю Home/Park не скидаються — до v9 мігрує qualified Axis2/DEC-polar-distance mapping. Automatic meridian flip поки не вважається HIL-qualified для unattended use.
 
 High-level SynScan paths лишаються окремими: `oal.skywatcher` hand-controller та `synscan-app` працюють із celestial RA/DEC через модель SynScan. Лише direct Motor Controller Wi-Fi (`synscan-wifi`, UDP/11880) ділить v9 з native EQDrive serial.
 
@@ -35,10 +35,14 @@ High-level SynScan paths лишаються окремими: `oal.skywatcher` h
 
 Використовуй **Calibrate current physical pose as persistent Home / Park** у бажаній фізичній позі. Native EQDrive зберігає поточні механічні осі одночасно як OAL Home і Park. Classic ASCOM не має OAL mechanical-axis interface, тому та сама дія викликає стандартний ASCOM `SetPark`. Щоб native й ASCOM паркувались однаково, один раз відкалібруй кожен backend у тій самій позі, не рухаючи монтування між перемиканнями.
 
-## Безпека
+## Безпека — v0.2.10.50
 
-Починаючи з v0.2.10.38, налаштовуваний native GOTO envelope — це **реальна кутова відстань по небу**. Це прибирає сингулярність біля полюса: ціль лише за кілька градусів на небі може вимагати дуже великого повороту RA-мотора при Dec ≈ ±90°. Direct transport має окремий fixed mechanical hard cap 180° на вісь.
+Coordinate model v9 HIL-qualified і frozen. Тимчасовий 15°/`maxNativeGotoDeg` qualification gate усередині `oal.eqdrive` видалено. Це **не** змінює v9 equations, axis signs, Home/Park convention або transport direction logic.
 
-Бажана назва API/profile — `maxGotoSkyDeltaDeg`; `maxGotoAxisDeltaDeg` лишається backward-compatible alias. Automatic meridian flip поки вимкнений за замовчуванням, тому великі slew треба HIL-підтвердити перед unattended use.
+Normal native GOTO safety policy лишається в OAL Core/profile і використовує **реальну кутову відстань по небу**. Бажана назва — `maxGotoSkyDeltaDeg`; `maxGotoAxisDeltaDeg` лишається backward-compatible alias. Значення контролює оператор: його можна лишити консервативним для supervised qualification або підняти до 180° для normal full-range GOTO.
+
+Raw mechanical `mount.gotoAxes` команди мають окремий явний per-request `maxAxisDeltaDeg` guard (default 180°). Це важливо біля небесного полюса, де невеликий sky displacement може коректно вимагати значно більшого обертання RA-axis; normal sky GOTO не повинен блокуватися другим прихованим transport-driver limit.
+
+Automatic meridian-flip orchestration лишається disabled/unqualified для unattended use. Великі slews варто лишати supervised, доки observatory safety stack не завершений.
 
 Перетворення координат Alt-Az уже є, але production two-axis sidereal tracking та керування field derotator ще залишаються наступними задачами. Fork-equatorial та equatorial-platform використовують екваторіальний hour-angle foundation без GEM pier-flip геометрії.

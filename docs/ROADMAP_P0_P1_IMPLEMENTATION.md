@@ -1,4 +1,16 @@
-# OpenAstroLink roadmap — implementation status after v0.2.10.47
+## v0.2.10.50 execution order
+
+Cross-platform build qualification is no longer the primary blocker: Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node builds are confirmed. The nearest Beta work is now deliberately narrow:
+
+1. **HIL autofocus** — repeatability, backlash, cancel/failure rollback and verification frame.
+2. **HIL auto-exposure** — convergence/lock/reacquire across representative scenes.
+3. **Scheduler HIL** — mixed DSO/planetary execution, cancellation and restart boundaries.
+4. **Mosaic HIL** — tile geometry, solve/recenter and traversal.
+5. **Polar Alignment HIL** — guided sample motion and safe-region behavior.
+
+Smart Telescope UX, broader unattended-observatory automation and productized one-button workflows remain OAL 1.0 scope.
+
+# OpenAstroLink roadmap — implementation status after v0.2.10.50
 
 Legend: ✅ done; 🟡 partial/HIL pending; ⏳ not done.
 
@@ -68,13 +80,13 @@ Implement out-of-process driver host/crash isolation. Stabilize public C++ SDK f
 
 ## Immediate engineering sequence
 
-1. **Build qualification:** clean Windows MSVC+Ninja and native Linux builds with real vendor SDKs.
-2. **HIL qualification:** QHY/Canon/ZWO/Gemini/Sky-Watcher, native-only first, then native+INDI compatibility.
-3. **Real-sky qualification:** ASTAP → autofocus → closed-loop GOTO → polar alignment.
-4. **Imaging data plane:** durable FITS/RAW + QHY/ZWO planetary SER pipeline.
-5. **Production guider.**
-6. **Durable session engine.**
-7. Close the remaining P0 protocol hardening items in parallel.
+1. **HIL autofocus:** convergence, repeatability, backlash, rollback/cancel and final verification frame.
+2. **HIL auto-exposure:** convergence/lock/reacquire on representative real scenes.
+3. **Scheduler HIL:** mixed DSO/planetary blocks, cancellation and restart boundaries.
+4. **Mosaic HIL:** tile geometry, solve/recenter and traversal.
+5. **Polar Alignment HIL:** real-sky guided sampling and safe-region motion.
+6. Continue production guiding, durable session/data-plane and remaining P0 hardening in parallel after the Beta workflow gates.
+7. Keep Smart Telescope UX in the OAL 1.0 track.
 
 ## Release gates
 

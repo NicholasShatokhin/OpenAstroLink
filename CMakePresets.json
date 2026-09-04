@@ -13,7 +13,8 @@
         "OAS_BUILD_NATIVE_REFERENCE_DRIVERS": "ON",
         "OAS_ENABLE_NATIVE_GEMINI": "ON",
         "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
-        "OAS_ENABLE_GPHOTO2": "OFF"
+        "OAS_ENABLE_GPHOTO2": "OFF",
+        "OAS_ENABLE_INDI": "OFF"
       }
     },
     {
@@ -23,6 +24,16 @@
       "generator": "Ninja"
     },
     {
+      "name": "windows-msvc-release",
+      "hidden": true,
+      "inherits": "base-release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "OAS_REQUIRE_MSVC": "ON"
+      }
+    },
+    {
       "name": "unix-makefiles-release",
       "hidden": true,
       "inherits": "base-release",
@@ -30,9 +41,9 @@
     },
     {
       "name": "windows-core-release",
-      "displayName": "Windows x64 core (MSVC + Ninja; no vendor camera SDKs)",
-      "inherits": "ninja-release",
-      "binaryDir": "${sourceDir}/build/windows-core",
+      "displayName": "Windows x64 core (MSVC / Visual Studio 2022; no vendor camera SDKs)",
+      "inherits": "windows-msvc-release",
+      "binaryDir": "${sourceDir}/build/windows-core-msvc-ninja",
       "cacheVariables": {
         "OAS_ENABLE_QHY": "OFF",
         "OAS_ENABLE_NATIVE_CANON": "OFF",
@@ -44,9 +55,9 @@
     },
     {
       "name": "windows-native-release",
-      "displayName": "Windows x64 native observatory (MSVC + Ninja; vendor SDKs; no INDI)",
-      "inherits": "ninja-release",
-      "binaryDir": "${sourceDir}/build/windows-native",
+      "displayName": "Windows x64 native observatory (MSVC / Visual Studio 2022; vendor SDKs; no INDI)",
+      "inherits": "windows-msvc-release",
+      "binaryDir": "${sourceDir}/build/windows-native-msvc-ninja",
       "cacheVariables": {
         "OAS_ENABLE_QHY": "ON",
         "OAS_ENABLE_NATIVE_CANON": "ON",
@@ -59,9 +70,18 @@
     },
     {
       "name": "windows-observatory-release",
-      "displayName": "Windows x64 observatory (native + optional compatibility)",
+      "displayName": "Windows x64 observatory (native OAL drivers; INDI optional)",
       "inherits": "windows-native-release",
-      "binaryDir": "${sourceDir}/build/windows-observatory",
+      "binaryDir": "${sourceDir}/build/windows-observatory-msvc-ninja",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "OFF"
+      }
+    },
+    {
+      "name": "windows-observatory-indi-release",
+      "displayName": "Windows x64 observatory + INDI compatibility",
+      "inherits": "windows-observatory-release",
+      "binaryDir": "${sourceDir}/build/windows-observatory-indi-msvc-ninja",
       "cacheVariables": {
         "OAS_ENABLE_INDI": "ON"
       }
@@ -83,9 +103,18 @@
     },
     {
       "name": "linux-observatory-release",
-      "displayName": "Linux observatory (native + INDI compatibility)",
+      "displayName": "Linux observatory (native OAL drivers; INDI optional)",
       "inherits": "linux-native-release",
       "binaryDir": "${sourceDir}/build/linux-observatory",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "OFF"
+      }
+    },
+    {
+      "name": "linux-observatory-indi-release",
+      "displayName": "Linux observatory + INDI compatibility",
+      "inherits": "linux-observatory-release",
+      "binaryDir": "${sourceDir}/build/linux-observatory-indi",
       "cacheVariables": {
         "OAS_ENABLE_INDI": "ON"
       }
@@ -100,6 +129,15 @@
       }
     },
     {
+      "name": "linux-node-indi-release",
+      "displayName": "Linux headless node + INDI compatibility",
+      "inherits": "linux-node-release",
+      "binaryDir": "${sourceDir}/build/linux-node-indi",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
+      }
+    },
+    {
       "name": "rpi4-native-release",
       "displayName": "Raspberry Pi 4/5 ARM64 native observatory",
       "inherits": "linux-native-release",
@@ -110,11 +148,21 @@
     },
     {
       "name": "rpi4-observatory-release",
-      "displayName": "Raspberry Pi 4/5 ARM64 observatory (native + INDI compatibility)",
+      "displayName": "Raspberry Pi 4/5 ARM64 observatory (native OAL drivers; INDI optional)",
       "inherits": "linux-observatory-release",
       "binaryDir": "${sourceDir}/build/rpi4-observatory",
       "cacheVariables": {
-        "OAS_EXPECT_TARGET_ARCH": "arm64"
+        "OAS_EXPECT_TARGET_ARCH": "arm64",
+        "OAS_ENABLE_INDI": "OFF"
+      }
+    },
+    {
+      "name": "rpi4-observatory-indi-release",
+      "displayName": "Raspberry Pi 4/5 ARM64 observatory + INDI compatibility",
+      "inherits": "rpi4-observatory-release",
+      "binaryDir": "${sourceDir}/build/rpi4-observatory-indi",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
       }
     },
     {
@@ -124,6 +172,15 @@
       "binaryDir": "${sourceDir}/build/rpi4-node",
       "cacheVariables": {
         "OAS_BUILD_GUI": "OFF"
+      }
+    },
+    {
+      "name": "rpi4-node-indi-release",
+      "displayName": "Raspberry Pi 4/5 ARM64 headless node + INDI compatibility",
+      "inherits": "rpi4-node-release",
+      "binaryDir": "${sourceDir}/build/rpi4-node-indi",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
       }
     },
     {
@@ -150,6 +207,15 @@
         "CMAKE_INSTALL_PREFIX": "/usr/local",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-aarch64-gcc.cmake",
         "OAS_EXPECT_TARGET_ARCH": "arm64"
+      }
+    },
+    {
+      "name": "rpi4-cross-arm64-observatory-release",
+      "displayName": "RPi ARM64 cross-build observatory GUI + node (Linux/WSL host)",
+      "inherits": "rpi4-cross-arm64-node-release",
+      "binaryDir": "${sourceDir}/build/rpi4-cross-arm64-observatory",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "ON"
       }
     },
     {
@@ -184,6 +250,15 @@
         "CMAKE_INSTALL_PREFIX": "/usr/local",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/windows-to-linux-aarch64-gcc.cmake",
         "OAS_EXPECT_TARGET_ARCH": "arm64"
+      }
+    },
+    {
+      "name": "rpi4-cross-arm64-observatory-windows-release",
+      "displayName": "RPi ARM64 cross-build observatory GUI + node (Windows host)",
+      "inherits": "rpi4-cross-arm64-node-windows-release",
+      "binaryDir": "${sourceDir}/build/rpi4-cross-arm64-observatory-windows",
+      "cacheVariables": {
+        "OAS_BUILD_GUI": "ON"
       }
     },
     {
@@ -236,9 +311,18 @@
     },
     {
       "name": "macos-observatory-release",
-      "displayName": "macOS host-native observatory (native + INDI compatibility)",
+      "displayName": "macOS host-native observatory (native OAL drivers; INDI optional)",
       "inherits": "macos-native-release",
       "binaryDir": "${sourceDir}/build/macos-observatory",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "OFF"
+      }
+    },
+    {
+      "name": "macos-observatory-indi-release",
+      "displayName": "macOS host-native observatory + INDI compatibility",
+      "inherits": "macos-observatory-release",
+      "binaryDir": "${sourceDir}/build/macos-observatory-indi",
       "cacheVariables": {
         "OAS_ENABLE_INDI": "ON"
       }
@@ -250,6 +334,15 @@
       "binaryDir": "${sourceDir}/build/macos-node",
       "cacheVariables": {
         "OAS_BUILD_GUI": "OFF"
+      }
+    },
+    {
+      "name": "macos-node-indi-release",
+      "displayName": "macOS host-native headless node + INDI compatibility",
+      "inherits": "macos-node-release",
+      "binaryDir": "${sourceDir}/build/macos-node-indi",
+      "cacheVariables": {
+        "OAS_ENABLE_INDI": "ON"
       }
     },
     {
@@ -333,12 +426,20 @@
       "configurePreset": "rpi4-cross-arm64-node-release"
     },
     {
+      "name": "rpi4-cross-arm64-observatory-release",
+      "configurePreset": "rpi4-cross-arm64-observatory-release"
+    },
+    {
       "name": "rpi-cross-armhf-node-release",
       "configurePreset": "rpi-cross-armhf-node-release"
     },
     {
       "name": "rpi4-cross-arm64-node-windows-release",
       "configurePreset": "rpi4-cross-arm64-node-windows-release"
+    },
+    {
+      "name": "rpi4-cross-arm64-observatory-windows-release",
+      "configurePreset": "rpi4-cross-arm64-observatory-windows-release"
     },
     {
       "name": "rpi-cross-armhf-node-windows-release",
@@ -371,6 +472,34 @@
     {
       "name": "node-sim-release",
       "configurePreset": "node-sim-release"
+    },
+    {
+      "name": "windows-observatory-indi-release",
+      "configurePreset": "windows-observatory-indi-release"
+    },
+    {
+      "name": "linux-observatory-indi-release",
+      "configurePreset": "linux-observatory-indi-release"
+    },
+    {
+      "name": "linux-node-indi-release",
+      "configurePreset": "linux-node-indi-release"
+    },
+    {
+      "name": "rpi4-observatory-indi-release",
+      "configurePreset": "rpi4-observatory-indi-release"
+    },
+    {
+      "name": "rpi4-node-indi-release",
+      "configurePreset": "rpi4-node-indi-release"
+    },
+    {
+      "name": "macos-observatory-indi-release",
+      "configurePreset": "macos-observatory-indi-release"
+    },
+    {
+      "name": "macos-node-indi-release",
+      "configurePreset": "macos-node-indi-release"
     }
   ]
 }

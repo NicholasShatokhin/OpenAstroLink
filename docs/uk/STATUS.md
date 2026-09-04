@@ -1,4 +1,12 @@
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.49
+# Оновлення стану — v0.2.10.50
+
+**Build foundation:** Windows x64 ✅, Linux x86_64 ✅, Raspberry Pi/Linux ARM64 cross node+probe+native drivers ✅, macOS presets/bootstrap 🟡 physical build pending. Native OAL drivers — default; INDI — opt-in.
+
+**Mount:** direct-MC coordinate model v9 HIL-підтверджений і frozen. Тимчасовий driver-level 15°/`maxNativeGotoDeg` qualification gate видалений. Core/profile sky-safety лишається user-controlled; raw-axis motion має явний mechanical guard.
+
+**Наступна Beta-кваліфікація:** HIL autofocus → auto-exposure → scheduler → mosaic → Polar Alignment. Smart Telescope UX — OAL 1.0.
+
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.50
 
 ## v0.2.10.49 — persistent calendar / mosaic / Polar safety
 
@@ -234,3 +242,17 @@ ARM cross toolchains явно фіксують Debian multiarch (`aarch64-linux-
 ### v0.2.10.49 build-fix13 — dependency closure фінального ARM64 link
 
 Реальна WSL -> AArch64 збірка тепер доходить до 100% компіляції source. Canon EDSDK ARM64, ZWO ASI/EAF ARM64, Gemini, SkyWatcher, EQDrive та `oas_core` успішно компілюються/лінкуються; падали лише фінальні executable `openastrolink-node` і `oal-hardware-probe`. Причина — search path cross-linker, а не source OAL: GNU ld не резолвив транзитивні BLAS/LAPACK/Armadillo/ARPACK/SuperLU залежності OpenCV з Bookworm sysroot і міг перейти до Jammy cross-runtime libc. build-fix13 додає target-sysroot `-rpath-link`/`-L` closure та явну bootstrap-перевірку BLAS/LAPACK. QHY для ARM64 лишається OFF до справжнього AArch64 SDK. Mount v9 не змінювався.
+
+## Cross-platform build status — v0.2.10.50
+
+| Target | Статус | Evidence / boundary |
+|---|---|---|
+| Windows x64, MSVC 2022 + Ninja | ✅ confirmed | Clean/full observatory build успішний на physical Windows host; preset pin-ить `cl.exe`. |
+| Linux x86_64 | ✅ confirmed | Native observatory build успішний на Ubuntu 22.04 через OAL per-user Qt bootstrap, а не system Qt 6.2.4. |
+| Linux ARM64 / Raspberry Pi 4 | ✅ confirmed build | WSL/Linux→AArch64 build доходить до 100% для node/probe та native QHY 26.06.04, Canon EDSDK, ZWO ASI/EAF, Gemini, Sky-Watcher, EQDrive. |
+| Linux ARM64 / Raspberry Pi 5 | 🟡 ABI-supported | Той самий generic AArch64 target; physical Pi 5 runtime/HIL ще pending. |
+| OpenAstroSuite ARM64 GUI | 🟡 pending | Cross observatory GUI preset є; node/probe confirmed, display/runtime qualification ще потрібна. |
+| macOS ARM64 / x86_64 | 🟡 configured | Apple Clang presets/bootstrap є; physical Mac build/sign/runtime pending. |
+
+Native OAL drivers — default, INDI — явний opt-in compatibility. Temporary EQDrive `maxNativeGotoDeg` gate видалений після v9 HIL; Core/profile sky-safety та raw-axis explicit guard лишаються.
+

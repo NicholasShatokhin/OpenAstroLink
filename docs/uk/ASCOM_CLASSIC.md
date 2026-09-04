@@ -1,5 +1,8 @@
 # Сумісність із Classic ASCOM
 
+
+> **Поточний реліз:** v0.2.10.50. Classic ASCOM лишається опційним Windows compatibility backend; native OAL drivers — default.
+
 OpenAstroLink тепер має Windows-backend **Classic ASCOM** для mount на додачу до ASCOM Alpaca.
 
 Це compatibility path у стилі N.I.N.A.: OpenAstroLink вибирає зареєстрований ASCOM Telescope driver (наприклад EQMOD), а вже цей драйвер володіє фізичним COM-з'єднанням із монтуванням/контролером.

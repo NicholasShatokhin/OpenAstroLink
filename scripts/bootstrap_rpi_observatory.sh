@@ -78,9 +78,11 @@ INDI compatibility was: $([[ $WITH_INDI -eq 1 ]] && echo INSTALLED || echo NOT I
 It can be enabled later with:
   sudo ./scripts/enable_indi_compat.sh
 and compiled into OAL with either:
-  cmake --preset rpi4-observatory-release
+  cmake --preset rpi4-observatory-indi-release
 or:
   cmake ... -DOAS_ENABLE_INDI=ON
+
+The normal rpi4-observatory-release preset keeps INDI OFF and uses native OAL drivers by default.
 
 Still vendor-specific:
   - install/stage the correct QHYCCD ARM64 SDK and udev rules;

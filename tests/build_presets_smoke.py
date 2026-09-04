@@ -18,6 +18,13 @@ required = {
     "macos-node-release",
     "macos-arm64-observatory-release",
     "macos-x86_64-observatory-release",
+    "windows-observatory-indi-release",
+    "linux-observatory-indi-release",
+    "linux-node-indi-release",
+    "rpi4-observatory-indi-release",
+    "rpi4-node-indi-release",
+    "macos-observatory-indi-release",
+    "macos-node-indi-release",
 }
 missing = sorted(required - cp.keys())
 assert not missing, f"missing presets: {missing}"
@@ -35,6 +42,19 @@ for f in ("linux-aarch64-gcc.cmake", "linux-armhf-gcc.cmake", "windows-to-linux-
     assert (root / "cmake" / "toolchains" / f).is_file(), f
 
 cmake_text = (root / "CMakeLists.txt").read_text()
+
+# Native OAL is the default everywhere; INDI requires an explicit compatibility preset.
+for name in ("windows-observatory-release", "linux-observatory-release", "linux-node-release",
+             "rpi4-observatory-release", "rpi4-node-release",
+             "macos-observatory-release", "macos-node-release"):
+    cv = cp[name].get("cacheVariables", {})
+    # Some derived presets inherit the value; resolve one level through known base defaults.
+    assert cv.get("OAS_ENABLE_INDI", "OFF") == "OFF", (name, cv.get("OAS_ENABLE_INDI"))
+for name in ("windows-observatory-indi-release", "linux-observatory-indi-release", "linux-node-indi-release",
+             "rpi4-observatory-indi-release", "rpi4-node-indi-release",
+             "macos-observatory-indi-release", "macos-node-indi-release"):
+    assert cp[name]["cacheVariables"]["OAS_ENABLE_INDI"] == "ON", name
+assert 'option(OAS_ENABLE_INDI "Enable built-in INDI compatibility backends (optional; native OAL drivers are the default)" OFF)' in cmake_text
 assert "OpenAstroLink requires Qt >= 6.4" in cmake_text
 assert "if(WIN32 OR APPLE)" in cmake_text
 assert "mac_arm64" in cmake_text and "mac_x64" in cmake_text

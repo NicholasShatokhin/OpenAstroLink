@@ -11,7 +11,7 @@ def need(rel,*tokens):
         assert token in text, f'{rel}: missing {token!r}'
         checks.append((rel,token))
     return text
-need('CMakeLists.txt','VERSION 0.2.10.49')
+need('CMakeLists.txt','VERSION 0.2.10.50')
 need('src/core/application_controller.cpp','nativeCoordinateModelVersion>=9','migrated to v9','EQMOD GEM pointing-state geometry retained')
 geom=need('src/core/mount_geometry.cpp','Direct Sky-Watcher/EQDrive GEM model v7-v9','eqmodGemAxesForSky','skyFromEqmodGemAxes','ha<=0.0','westBranch?p:-p')
 need('src/core/astro_types.h','v9 (OpenAstroLink 0.2.10.47 build-fix 3)','HA=-6h, Dec=+90°','west')

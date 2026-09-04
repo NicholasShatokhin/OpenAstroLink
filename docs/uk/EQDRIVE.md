@@ -1,63 +1,59 @@
-# Native підтримка EQDrive
+# Native EQDrive support — v0.2.10.50
 
-`oal.eqdrive` — експериментальний native ABI-v2 драйвер для контролерів EQDrive.
-Він залишається окремим від наявного `oal.skywatcher` / EqMount.
+`oal.eqdrive` — native ABI-v2 driver для EQDrive. Він підтримує два low-level transport paths, але астрономічна геометрія лишається в OAL Core:
 
-## Канонічний serial protocol: ASTEP
+- direct Sky-Watcher/EQMOD Motor Controller через serial;
+- public EQDrive ASTEP mount protocol як fallback/alternate transport.
 
-Native serial driver використовує публічну специфікацію **EQDrive ASTEP
-(astronomical equipment protocol)**. Mount-секція прямо визначає read-only
-`St`, `Pos`, `Cg`, telemetry напруги та команди руху `Speed`, `Slew`, `Goto`,
-`Drv`. Позиції/зміщення осей передаються у градусах, швидкості — у градусах/год.
+Direct-MC coordinate model **v9 HIL-підтверджений** на реальному монтуванні. Геометрія, signs та Home/Park convention frozen, доки нові HIL-дані не доведуть протилежне.
 
-Канонічне джерело: <https://www.eqdrive.com.ua/en/support/eqdrive-protocol>.
+## Canonical serial protocol: ASTEP
 
-Discovery не рухає монтування і пробує mount-specific команди в такому порядку:
+ASTEP path використовує public EQDrive astronomical-equipment protocol. Для movement-free discovery/telemetry OAL використовує mount-specific `St`, `Pos`, `Cg`, а для руху — `Speed`, `Slew`, `Goto`, `Drv`. Axis position/displacement задаються у mechanical degrees, швидкість — degrees/hour.
 
-- `St\r` — стан, позиції/швидкості обох осей і біти GOTO/driver;
-- `Pos\r` — позиції двох осей;
-- `Cg\r` — конфігурація двигунів, включно з Direction/Reversed;
-- `FWx/FWs/FW` — лише додаткова identity-діагностика.
+Canonical reference: <https://www.eqdrive.com.ua/en/support/eqdrive-protocol>.
 
-Пристрій з'являється як mount тільки після валідної ASTEP-відповіді `St` або
-`Pos`.
-
-## Discovery
-
-CP210x/SILABS-порти мають пріоритет автоматично. Явний порт:
+Discovery навмисно не рухає mount. Device оголошується mount лише після валідної mount-specific відповіді. CP210x/SILABS ports мають пріоритет; port можна зафіксувати, наприклад:
 
 ```text
 openastrolink-node.exe --eqdrive-port COM5
 ```
 
-Focused discovery перебирає baud list і всі чотири DTR/RTS combinations. Якщо
-Windows повертає `Access is denied`, probe припиняється: EQMOD/Classic ASCOM,
-EQDrive Config і native driver не можуть одночасно володіти одним COM-портом.
-Після першого успішного discovery descriptor лишається у native-каталозі, поки
-фізичний COM існує, навіть якщо його тимчасово відкрив EQMOD.
+Якщо OS повідомляє busy/access-denied, OAL не бореться з EQMOD або іншим власником за той самий COM port.
 
-## Безпечна модель координат і руху
+## Direct Motor Controller coordinate model v9
 
-ASTEP віддає механічні градуси осей, а не небесні RA/DEC. OpenAstroLink
-використовує `sync-anchor-v2` і не вигадує home/pier model:
+Для direct Motor Controller counts, прочитані у підготовленій physical polar Home pose, стають session mechanical reference `Axis1=0°, Axis2=0°`. Raw controller counts — лише diagnostics; sky↔mechanical GEM geometry належить OAL Core.
 
-1. підключити native EQDrive;
-2. навести mount на відому небесну точку;
-3. один раз виконати Sync;
-4. після цього RA/DEC status/GOTO обчислюються від axis/sky anchor.
+HIL-qualified mapping:
 
-До Sync `coordinateValid=false`. Перший HIL-реліз обмежує один native GOTO
-параметром `maxNativeGotoDeg` (default 180 deg; фактично shortest-axis envelope). Ціль перетворюється в абсолютну
-ASTEP-команду `Goto <axis1> <axis2>`. Налаштування Direction/Reversed уже
-застосовує firmware EQDrive; OAL читає та показує їх, але не інвертує вдруге
-навмання.
+```text
+Axis1Sign = +1
+Axis2Sign = -1
+coordinate model = eqmod-gem-ha-dec-v9
+```
 
-Park/meridian flip поки вимкнені до HIL-кваліфікації pier model. Classic
-ASCOM/EQMOD залишається перевіреним fallback для великих slew.
+Native EQDrive serial і direct SynScan/EQDrive Wi-Fi використовують одну Core v9 geometry та shared Motor Controller GOTO planning. Відрізняється I/O transport, а не astronomical kinematics.
 
-## Direct Wi-Fi — окремий transport
+Frozen GEM equations та Home/Park convention описані в [MOUNT_GEOMETRY.md](MOUNT_GEOMETRY.md).
 
-`synscan-wifi` **не** використовує ASTEP. Він повторює прямий шлях SynScan Pro
-до SynScan-compatible Wi-Fi adapter: Sky-Watcher Motor Controller protocol через
-UDP 11880. Це окремо від serial `oal.eqdrive` ASTEP і окремо від `synscan-app`
-(API запущеного SynScan Pro). Див. [SYNSCAN_NETWORK.md](SYNSCAN_NETWORK.md).
+## GOTO safety після HIL qualification
+
+У v0.2.10.50 видалено **тимчасовий прихований driver-level `maxNativeGotoDeg` qualification envelope**. Він існував лише на час перевірки axis/pier direction і не повинен лишатися після успішного v9 HIL.
+
+Замість дубльованого прихованого ліміту є два явні safety layers:
+
+1. **Core/profile sky safety** — `maxGotoSkyDeltaDeg` (legacy alias `maxGotoAxisDeltaDeg`) задає operator-controlled реальну кутову відстань по небу. Для обережного supervised HIL її можна лишити малою, а для звичайного full-range GOTO підняти до 180°.
+2. **Raw-axis request guard** — `mount.gotoAxes` зберігає явний per-request `maxAxisDeltaDeg` mechanical ceiling, default 180° shortest-axis envelope. Це захищає raw mechanical команди без прихованого обмеження normal RA/DEC GOTO у transport driver.
+
+При видаленні temporary cap **жодна** v9 geometry/sign/Home/Park logic не змінювалася.
+
+## Park і meridian behavior
+
+Mechanical Home/Park persistence належить OAL Core/profile, а не окремій прихованій celestial model EQDrive. Automatic meridian-flip orchestration ще не входить до unattended-qualified scope; supervised GOTO більше не має штучного qualification gate у драйвері.
+
+## Direct Wi-Fi — transport peer, не ASTEP
+
+`synscan-wifi` напряму працює із SynScan-compatible Wi-Fi/EQDrive Motor Controller по UDP 11880. Це не ASTEP і не SynScan App/Pro API (`synscan-app`, UDP 11881). Direct serial та direct Wi-Fi все одно мають спільні coordinate model v9 і low-level GOTO-plan semantics.
+
+Див. [SYNSCAN_NETWORK.md](SYNSCAN_NETWORK.md).

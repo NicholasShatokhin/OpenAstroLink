@@ -35,17 +35,19 @@ def resolved(name):
     out.update(p.get('cacheVariables',{}))
     return out
 native=resolved('rpi4-native-release')
-compat=resolved('rpi4-observatory-release')
+observatory=resolved('rpi4-observatory-release')
+compat=resolved('rpi4-observatory-indi-release')
 checks += [
     (native.get('OAS_ENABLE_QHY')=='ON','RPi native preset QHY ON'),
     (native.get('OAS_ENABLE_NATIVE_CANON')=='ON','RPi native preset Canon ON'),
     (native.get('OAS_ENABLE_NATIVE_GEMINI')=='ON','RPi native preset Gemini ON'),
     (native.get('OAS_ENABLE_NATIVE_SKYWATCHER')=='ON','RPi native preset Sky-Watcher ON'),
     (native.get('OAS_ENABLE_INDI')=='OFF','RPi native preset INDI OFF'),
-    (compat.get('OAS_ENABLE_INDI')=='ON','RPi observatory preset INDI compatibility ON'),
-    (compat.get('OAS_BUILD_GUI')=='ON','RPi observatory preset GUI ON'),
-    (compat.get('OAS_BUILD_NODE')=='ON','RPi observatory preset node ON'),
-    (compat.get('OAS_BUILD_HARDWARE_PROBE')=='ON','RPi observatory preset probe ON'),
+    (observatory.get('OAS_ENABLE_INDI')=='OFF','RPi observatory preset keeps INDI opt-in'),
+    (compat.get('OAS_ENABLE_INDI')=='ON','RPi explicit INDI compatibility preset ON'),
+    (observatory.get('OAS_BUILD_GUI')=='ON','RPi observatory preset GUI ON'),
+    (observatory.get('OAS_BUILD_NODE')=='ON','RPi observatory preset node ON'),
+    (observatory.get('OAS_BUILD_HARDWARE_PROBE')=='ON','RPi observatory preset probe ON'),
 ]
 # Guard against old cross-thread persistent INDI socket design.
 h=(root/'src/backends/indi_devices.h').read_text()

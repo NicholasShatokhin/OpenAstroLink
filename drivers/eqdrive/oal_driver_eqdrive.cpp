@@ -77,7 +77,6 @@ int gOpenSettleMs{250};
 double gRaSkyPerAxis{-1.0};
 double gDecSkyPerAxis{1.0};
 double gGuideRateDegPerHour{kSiderealDegPerHour*0.5};
-double gMaxNativeGotoDeg{15.0};
 
 char *copyString(const QByteArray &bytes){auto*p=static_cast<char*>(gHost.allocate(gHost.hostContext,std::size_t(bytes.size()+1)));if(!p)return nullptr;std::memcpy(p,bytes.constData(),std::size_t(bytes.size()));p[bytes.size()]='\0';return p;}
 const char *json(const QJsonObject&o){return copyString(QJsonDocument(o).toJson(QJsonDocument::Compact));}
@@ -421,12 +420,12 @@ bool start(void*,const char*configJson){
     const auto o=QJsonDocument::fromJson(QByteArray(configJson?configJson:"{}")).object();gConfiguredPorts.clear();for(const auto&v:o.value("ports").toArray())if(v.isString())gConfiguredPorts<<v.toString();gConfiguredPorts.removeDuplicates();
     if(o.value("baudRates").isArray()){QList<int>x;for(const auto&v:o.value("baudRates").toArray()){int b=v.toInt();if(b>=1200&&b<=1000000&&!x.contains(b))x<<b;}if(!x.isEmpty())gBaudRates=x;}
     gProbeTimeoutMs=std::clamp(o.value("probeTimeoutMs").toInt(gProbeTimeoutMs),200,5000);gCommandTimeoutMs=std::clamp(o.value("commandTimeoutMs").toInt(gCommandTimeoutMs),250,10000);gOpenSettleMs=std::clamp(o.value("openSettleMs").toInt(gOpenSettleMs),0,3000);
-    gRaSkyPerAxis=o.value("raSkyPerAxis").toDouble(gRaSkyPerAxis);gDecSkyPerAxis=o.value("decSkyPerAxis").toDouble(gDecSkyPerAxis);gGuideRateDegPerHour=o.value("guideRateDegPerHour").toDouble(gGuideRateDegPerHour);gMaxNativeGotoDeg=std::clamp(o.value("maxNativeGotoDeg").toDouble(gMaxNativeGotoDeg),0.1,180.0);
-    logMessage(1,QString("config: EQMOD-compatible Motor Controller first, ASTEP fallback; baudRates=%1 openSettleMs=%2 raSkyPerAxis=%3 decSkyPerAxis=%4 maxNativeGotoDeg=%5").arg([&]{QStringList x;for(int b:gBaudRates)x<<QString::number(b);return x.join(',');}()).arg(gOpenSettleMs).arg(gRaSkyPerAxis).arg(gDecSkyPerAxis).arg(gMaxNativeGotoDeg));return true;
+    gRaSkyPerAxis=o.value("raSkyPerAxis").toDouble(gRaSkyPerAxis);gDecSkyPerAxis=o.value("decSkyPerAxis").toDouble(gDecSkyPerAxis);gGuideRateDegPerHour=o.value("guideRateDegPerHour").toDouble(gGuideRateDegPerHour);
+    logMessage(1,QString("config: EQMOD-compatible Motor Controller first, ASTEP fallback; baudRates=%1 openSettleMs=%2 raSkyPerAxis=%3 decSkyPerAxis=%4; no hidden driver-level sky GOTO qualification cap (Core/profile safety remains authoritative)").arg([&]{QStringList x;for(int b:gBaudRates)x<<QString::number(b);return x.join(',');}()).arg(gOpenSettleMs).arg(gRaSkyPerAxis).arg(gDecSkyPerAxis));return true;
 }
 void stop(void*){QMutexLocker l(&gMutex);for(auto it=gDevices.begin();it!=gDevices.end();++it){if(it.value().session)it.value().session->close();it.value().session.reset();it.value().connected=false;}}
 
-const char*manifest(void*){return json(QJsonObject{{"driverId","oal.eqdrive"},{"name","OpenAstroLink native EQDrive dual-protocol driver"},{"version","0.2.10.45"},{"abiVersion",2},{"threadModel","per-device-serial"},{"protocol","Sky-Watcher/EQMOD Motor Controller + EQDrive ASTEP"}});}
+const char*manifest(void*){return json(QJsonObject{{"driverId","oal.eqdrive"},{"name","OpenAstroLink native EQDrive dual-protocol driver"},{"version","0.2.10.50"},{"abiVersion",2},{"threadModel","per-device-serial"},{"protocol","Sky-Watcher/EQMOD Motor Controller + EQDrive ASTEP"}});}
 const char*devices(void*){refreshDevices();QJsonArray a;QMutexLocker l(&gMutex);for(const auto&d:gDevices)a.append(QJsonObject{{"id",d.id},{"type","mount"},{"name",d.description},{"serialNumber",d.serial},{"firmware",d.firmware},{"transport",QJsonObject{{"kind","serial"},{"protocol",protocolName(d)},{"port",d.port},{"baudRate",d.baudRate},{"dtr",d.dtr},{"rts",d.rts},{"persistentSession",d.connected}}}});return json(a);}
 const char*capabilities(void*,const char*deviceId){const auto d=getDevice(QString::fromUtf8(deviceId?deviceId:""));if(!d)return json(QJsonObject{});const bool mc=d->protocol==WireProtocol::MotorController;return json(QJsonObject{{"schemaVersion","1.0"},{"mount",QJsonObject{{"position",QJsonObject{{"supported",true},{"frame","raw-axis-plus-compat-sync-anchor"},{"requiresSync",true}}},{"rawAxes",QJsonObject{{"supported",true},{"units","degrees"},{"semantics","mechanical axes; controller step counts are exposed only as diagnostics"},{"axis1","hour axis, Home=0deg"},{"axis2","declination/polar-distance axis, Home=0deg"}}},{"slew",QJsonObject{{"supported",true},{"abortSupported",true},{"requiresSync",true},{"implementation",mc?"raw-axis EQMOD-compatible Motor Controller goto":"raw-axis official ASTEP Goto"}}},{"sync",QJsonObject{{"supported",true},{"implementation","compatibility sync anchor; OAL Core geometry preferred"}}},{"tracking",QJsonObject{{"supported",true},{"modes",QJsonArray{"off","equatorial"}}}},{"park",QJsonObject{{"supported",false}}},{"pulseGuide",QJsonObject{{"supported",!mc},{"implementation",mc?"not yet enabled for Motor Controller transport":"temporary ASTEP Speed offset"},{"maxDurationMs",5000}}},{"manualSlew",QJsonObject{{"supported",true},{"rateLevels",9},{"axes",2}}},{"pierSide",QJsonObject{{"supported",false}}},{"telemetry",QJsonObject{{"axisDegrees",true},{"driverState",true},{"firmware",d->firmware},{"wireProtocol",protocolName(*d)}}},{"coordinateModel",QJsonObject{{"type","eqmod-gem-ha-dec-v9"},{"meridianFlip",false},{"startupHome",true},{"note","Direct-MC startup counts are physical Home/Park; OAL Core uses EQMOD-style mechanical HA/Dec pointing states and side-of-pier branches"}}}}}});}
 const char*health(void*,const char*deviceId){
@@ -485,8 +484,10 @@ const char*invoke(void*,const char*deviceId,const char*method,const char*request
         const auto pos=positionAny(d);if(!pos)return fail("TRANSPORT_ERROR","Could not read EQDrive axis position before GOTO");
         const auto sky=skyFromAxes(d,pos->first,pos->second,QDateTime::currentMSecsSinceEpoch());
         const double dRa=oal::eqdrive::wrap180(ra-sky.first),dDec=dec-sky.second;
-        if(std::max(std::abs(dRa),std::abs(dDec))>gMaxNativeGotoDeg)
-            return fail("HIL_SAFETY_LIMIT",QString("Native EQDrive GOTO is temporarily limited to %1 deg per command while axis/pier direction is being qualified; requested dRA=%2 deg dDEC=%3 deg").arg(gMaxNativeGotoDeg).arg(dRa,0,'f',3).arg(dDec,0,'f',3));
+        // Coordinate model v9 is HIL-qualified.  Do not impose a second hidden
+        // per-command qualification envelope in the transport driver.  Any
+        // supervised sky-separation policy belongs to OAL Core/profile, while
+        // raw-axis calls retain their explicit per-request mechanical ceiling.
         const double axisDelta1=dRa/d.raSkyPerAxis,axisDelta2=dDec/d.decSkyPerAxis;
         if(d.protocol==WireProtocol::MotorController){
             QString err;

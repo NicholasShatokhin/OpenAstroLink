@@ -1,3 +1,15 @@
+## v0.2.10.50 порядок робіт
+
+Cross-platform build qualification більше не головний blocker: Windows x64, Linux x86_64 та Raspberry Pi/Linux ARM64 node builds підтверджені. Найближча Beta тепер вузько сфокусована:
+
+1. **HIL autofocus** — repeatability, backlash, cancel/failure rollback та verification frame.
+2. **HIL auto-exposure** — convergence/lock/reacquire на типових сценах.
+3. **Scheduler HIL** — mixed DSO/planetary execution, cancellation і restart boundaries.
+4. **Mosaic HIL** — tile geometry, solve/recenter і traversal.
+5. **Polar Alignment HIL** — guided sample motion і safe-region behavior.
+
+Smart Telescope UX, ширша unattended-observatory automation та one-button workflows лишаються OAL 1.0 scope.
+
 # Roadmap OpenAstroLink після v0.2.10.47
 
 Позначки: ✅ зроблено; 🟡 частково/HIL pending; ⏳ не зроблено.

@@ -1,10 +1,14 @@
-# План валідації — v0.2.10.47
+## v0.2.10.50 validation focus
+
+Build qualification підтверджена для Windows x64, native Linux x86_64 та Linux/WSL→ARM64 Raspberry Pi node/probe/native-driver target. Ці builds лишаються regression gates. Наступний release gate — HIL workflow behavior, починаючи з autofocus. Для HIL-qualified direct-MC mount після змін заліза лишається small-motion sanity check, після чого треба тестувати звичайний supervised full-range GOTO; прихованого 15° driver qualification cap більше немає. Profile-level sky-safety оператор може залишити ввімкненим.
+
+# План валідації — v0.2.10.50
 
 Цей реліз — build/HIL qualification checkpoint.
 
 ## Static gates
 
-Запустити всі `tools/*check.py`, включно з `cmake_presets_compat_check.py`, перевірити JSON і `cmake --list-presets`.
+Запустити всі `tools/*check.py`, включно з `cmake_presets_compat_check.py` та `mount_v9_unrestricted_goto_check.py`, перевірити JSON і `cmake --list-presets`.
 
 ## Windows
 
@@ -42,3 +46,7 @@ Scheduler/DSO v0.2.10.46: один block на 2–3 короткі science frame
 Чиста збірка/package, hardware probe, HIL mount/focuser/camera, real-sky ASTAP, повторюваний autofocus, перевірені abort paths.
 
 Unattended production PASS не ставити до реалізації reliable event replay, idempotency, durable science storage, production guiding/session recovery, security/auth/audit, safety/weather/roof/power, driver isolation і public conformance.
+
+## Mount v9 full-range gate
+
+Після будь-якої зміни hardware/config зробити один small supervised sanity GOTO, а потім normal supervised full-range GOTO на representative east/west targets. Hidden 15° `maxNativeGotoDeg` driver gate у v0.2.10.50 відсутній. Якщо `maxGotoSkyDeltaDeg` у profile увімкнений/малий, це окрема user-controlled Core safety policy, а не driver limitation. Abort має реально зупинити обидві осі. Automatic meridian flip не включати в unattended PASS без окремого HIL.

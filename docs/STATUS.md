@@ -1,4 +1,24 @@
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.49
+# Status update — v0.2.10.50
+
+**Build foundation:** Windows x64 ✅, Linux x86_64 ✅, Raspberry Pi/Linux ARM64 cross node+probe+native drivers ✅, macOS presets/bootstrap 🟡 physical build pending. Native OAL drivers are default; INDI is opt-in.
+
+**Mount:** direct-MC coordinate model v9 remains HIL-qualified and frozen. The temporary driver-level 15°/`maxNativeGotoDeg` qualification gate is removed. Core/profile sky-safety remains user controlled; raw-axis motion keeps its explicit mechanical guard.
+
+**Next Beta qualification:** HIL autofocus → auto-exposure → scheduler → mosaic → Polar Alignment. Smart Telescope UX remains an OAL 1.0 item.
+
+### Build infrastructure follow-up — build-fix21
+- Windows native configure uses Ninja with explicit `CMAKE_CXX_COMPILER=cl.exe`; this restores the previously HIL-proven MSVC/Ninja path without depending on Visual Studio instance discovery.
+- New `*-msvc-ninja` build directories avoid both the old Strawberry/GNU cache and the failed Visual Studio-generator cache.
+- `scripts/build_windows.ps1` loads `vcvars64` and discovers Ninja automatically. Raw presets require an x64 MSVC Developer Command Prompt. Raspberry Pi cross compilation on Windows remains GNU/Ninja.
+
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.50
+
+### Build infrastructure follow-up — build-fix18
+
+- ✅ Native dependency bootstrap is now cross-platform: Linux/WSL and macOS search/resolve Qt, OpenCV and native vendor SDKs automatically; Windows adds Qt via aqtinstall, optional OpenCV via per-user vcpkg, official QHY download, official ZWO fallback download, and local Canon discovery.
+- ✅ Native CMake configuration now searches OpenAstroLink-managed Qt and vendor SDK cache roots before falling back to system packages. This prevents Ubuntu 22.04 Qt 6.2.4 from winning after a custom Qt >= 6.4 has been bootstrapped.
+- ✅ Canon EDSDK remains search-only/manual-download because of Canon SDK distribution terms; INDI remains optional and OFF by default.
+- ✅ Mount coordinate model v9 is unchanged.
 
 ## v0.2.10.49 persistent calendar / mosaic / polar safety
 
@@ -184,31 +204,20 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | RFC 9457 HTTP Problem Details | 🟡 operation problems exist; HTTP model incomplete |
 | Conformance suite | 🟡 regression checks/simulator exist; public suite incomplete |
 
-## Cross-platform build status
+## Cross-platform build status — v0.2.10.50
 
-### v0.2.10.49 build-fix9 build-matrix follow-up
-
-- ✅ Windows observatory `--clean-first` build is confirmed on the physical MSVC 2022 host.
-- ✅ Linux presets no longer require Ninja; they use Unix Makefiles while Windows stays on MSVC + Ninja.
-- ✅ Native RPi ARM64/ARMHF presets now enforce the target architecture instead of merely using an RPi-labelled build directory.
-- ✅ Cross node presets exist for ARM64/ARMHF from Linux/WSL and from the installed Windows Arm GNU Toolchains.
-- ✅ macOS host-native/Apple-Silicon/Intel presets and vendor-SDK discovery paths are present; physical Mac build/HIL remains pending.
-- ✅ build-fix4 adds an explicit automatic Linux/WSL bootstrap for ARM64/ARMHF sysroots (`debootstrap` Bookworm or `--from-pi` rsync), matching host Qt tools, and architecture-verified QHY staging from a sibling `QHYCCD_Linux_New` checkout.
-- ✅ build-fix5 hardens WSL foreign-root creation by explicitly mounting/registering `binfmt_misc`, verifying QEMU execution before debootstrap stage two, resuming interrupted roots, installing the Debian archive keyring, and adding Qt Positioning to target dependencies.
-- ✅ build-fix6 fixes Jammy stale-keyring failure (`F8D2585B8783D481`) by fetching official Bookworm signing keys, pin-verifying their fingerprints and passing the verified keyring to `debootstrap --keyring`; signature checking stays enabled.
-- ✅ build-fix7 fixes the `name: unbound variable` failure in the verified-key helper under `set -u` by separating local declarations from assignments.
-- ✅ build-fix8 makes target Qt/OpenCV discovery explicit inside the Debian multiarch sysroot and keeps host Qt isolated to runnable build tools.
-- ✅ build-fix9 hardens QHY ARM staging: a requested QHY stage must produce `include/qhyccd.h` and `lib/libqhy.so` with the correct ELF architecture before the bootstrap can report readiness; the build helper consumes the recorded staged SDK directly.
-- 🟡 Physical ARM cross-build qualification is still pending; stock cross presets keep vendor SDKs OFF, while local presets can enable the confirmed Canon EDSDK ARM64 and ZWO `armv8` libraries. QHY requires a genuine AArch64 SDK; the legacy `QHYCCD_Linux_New` `armv8` archive is actually 32-bit ARM.
-
-
-| Target | Status | Notes |
+| Target | Status | Evidence / boundary |
 |---|---|---|
-| Windows x64, MSVC + Ninja | ✅ clean build | v0.2.10.49 build-fix1 completed a full `--clean-first` observatory build on the physical Windows/MSVC/Qt/vendor-SDK host on 2026-09-03. |
-| Linux x86_64 | 🟡 configure/build qualification | build-fix2 removes the accidental Ninja hard dependency by using Unix Makefiles for Linux presets; compiler selection now proceeds normally. Qt6/OpenCV/vendor runtime qualification remains. |
-| Linux ARM64 / Raspberry Pi | 🟡 build qualification | Bookworm ARM64 sysroot, matching host Qt tools, target Qt 6.4.2 and OpenCV 4.6 discovery are physically confirmed on WSL. The first full configure then exposed a stale/non-existent QHY staging record; build-fix9 makes QHY staging validated/fatal before readiness. Full cross compilation remains to be completed. |
-| macOS ARM64 / x86_64 | 🟡 source/config qualification | build-fix3 adds Apple Clang presets plus Canon EDSDK and ZWO macOS SDK discovery. Physical Mac build/HIL and packaging/signing are still pending. |
-| WSL compile/test | 🟡 | Supported for build testing; direct hardware requires explicit passthrough |
+| Windows x64, MSVC 2022 + Ninja | ✅ confirmed | Clean/full observatory build succeeded on the physical Windows development host. Presets pin `cl.exe` so Strawberry/MinGW cannot capture the ABI. |
+| Linux x86_64 | ✅ confirmed | Native observatory build succeeded on Ubuntu 22.04 using the OAL per-user Qt bootstrap (Qt >= 6.4) rather than Jammy's Qt 6.2.4. |
+| Linux ARM64 / Raspberry Pi 4 | ✅ confirmed build | Linux/WSL→AArch64 build reached 100% for `openastrolink-node`, `oal-hardware-probe` and native QHY 26.06.04, Canon EDSDK, ZWO ASI/EAF, Gemini, Sky-Watcher and EQDrive drivers. |
+| Linux ARM64 / Raspberry Pi 5 | 🟡 ABI-supported | Pi 5 shares the generic AArch64 target and vendor ARM64 SDK matrix. Physical Pi 5 runtime/HIL is still pending. |
+| OpenAstroSuite ARM64 GUI | 🟡 build/runtime pending | Cross observatory GUI preset exists; node/probe are confirmed. GUI build/runtime on the target display stack still needs qualification. |
+| macOS ARM64 / x86_64 | 🟡 configured | Apple Clang presets and dependency/vendor bootstrap exist. Physical Mac build, signing and runtime/HIL are pending. |
+
+Native OAL drivers are the default on every normal preset; INDI is explicit opt-in compatibility only. Qt/OpenCV/QHY/ZWO may be searched/bootstrapped by platform wrappers; Canon EDSDK remains manual-download/local-discovery.
+
+The direct-MC mount remains coordinate model v9. v0.2.10.50 removes the temporary hidden EQDrive `maxNativeGotoDeg` qualification gate after HIL success; Core/profile sky-safety and raw-axis explicit safety are unchanged.
 
 ### v0.2.10.5 build fixes
 
@@ -267,3 +276,11 @@ The ARM64 build no longer depends on `QHYCCD_Linux_New` for QHY. A dedicated off
 ### v0.2.10.49 build-fix15 — BLAS/LAPACK alternatives closure
 
 Physical ARM64 build evidence now confirms the official QHYCCD 26.06.04 path end to end through driver linking: the fetched SDK is an AArch64 `libqhy.so` and `oal_driver_qhy.so` builds successfully alongside Canon EDSDK and ZWO. The final executable link still failed because Bookworm's BLAS/LAPACK runtime SONAMEs live in alternatives-managed `.../<multiarch>/blas` and `.../<multiarch>/lapack` directories. The previous sysroot symlink repair was also executed without root permissions, as shown by the large `Permission denied` block. build-fix15 repairs links as root, adds those numerical subdirectories to the link-time search, validates their target ELF architecture, and explicitly links target LAPACK/BLAS after OpenCV. This fix is prepared but awaits the next physical WSL -> AArch64 link run. Mount v9 is unchanged.
+
+
+### v0.2.10.49 build-fix17 — physical ARM64 success + native-first compatibility policy
+
+- ✅ Physical WSL -> AArch64 build now reaches 100% for both `openastrolink-node` and `oal-hardware-probe` with the full native vendor matrix: QHYCCD 26.06.04 ARM64, Canon EDSDK ARM64, ZWO ASI/EAF ARM64, Gemini, SkyWatcher and EQDrive. The BLAS/LAPACK closure from build-fix15 is therefore physically confirmed.
+- ✅ `OAS_ENABLE_INDI` now defaults to `OFF`; all ordinary observatory/node presets are native-first.
+- ✅ INDI remains available through explicit `*-indi-release` presets or `-DOAS_ENABLE_INDI=ON` only for equipment without a native OAL driver.
+- ✅ Mount v9 geometry/control remains frozen and unchanged.

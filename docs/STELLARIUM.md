@@ -1,5 +1,8 @@
 # Stellarium integration
 
+
+> **Current release:** v0.2.10.50. The Stellarium bridge remains supported and uses the active OAL mount path.
+
 Version: 0.2.10.38
 
 OpenAstroLink includes a direct TCP bridge compatible with Stellarium's external Telescope Control protocol. It is deliberately a mount bridge, not a replacement for the OAL observatory API.

@@ -1,5 +1,8 @@
 # Gemini EAF — v0.2.10.11
 
+
+> **Поточний реліз:** v0.2.10.50. Native `oal.gemini` лишається default focuser integration; попередній Windows motion HIL результат збережено.
+
 Канонічний документ: `../GEMINI_EAF.md`.
 
 Основний шлях — native `oal.gemini` через перевірений serial/MyFocuserPro2-compatible transport. INDI/Alpaca лишаються fallback. Capabilities визначаються реальним handshake/firmware, неперевірені команди не оголошуються підтриманими. Особлива увага — достовірності absolute position після power cycle.

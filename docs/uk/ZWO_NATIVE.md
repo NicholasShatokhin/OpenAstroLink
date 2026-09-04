@@ -1,5 +1,8 @@
 # Нативні драйвери ZWO ASI та ZWO EAF
 
+
+> **Поточний реліз:** v0.2.10.50. Native ZWO ASI/EAF лишаються default OAL drivers; ARM64 vendor libraries пройшли повний Raspberry Pi cross-build.
+
 Версія: 0.2.10
 
 ## Призначення

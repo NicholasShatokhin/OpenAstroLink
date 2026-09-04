@@ -44,7 +44,8 @@ def resolve(n):
     r.update(p.get('cacheVariables',{})); return r
 checks.append((resolve('rpi4-native-release').get('OAS_ENABLE_INDI')=='OFF','native-only preset disables INDI'))
 checks.append((resolve('rpi4-native-release').get('OAS_ENABLE_NATIVE_CANON')=='ON','native-only preset enables native Canon'))
-checks.append((resolve('rpi4-observatory-release').get('OAS_ENABLE_INDI')=='ON','observatory preset enables INDI'))
+checks.append((resolve('rpi4-observatory-release').get('OAS_ENABLE_INDI')=='OFF','observatory preset keeps INDI opt-in'))
+checks.append((resolve('rpi4-observatory-indi-release').get('OAS_ENABLE_INDI')=='ON','explicit observatory INDI preset enables compatibility'))
 failed=[m for ok,m in checks if not ok]
 if failed:
     print('Native telescope hardware pack check: FAIL')

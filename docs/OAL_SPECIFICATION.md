@@ -1,3 +1,7 @@
+## v0.2.10.50 implementation boundary
+
+The protocol/driver model remains native-first with INDI as opt-in compatibility. Cross-platform build qualification now covers Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node targets. Direct-MC mount coordinate model v9 is HIL-qualified and unchanged; the EQDrive transport no longer carries a hidden temporary sky-GOTO qualification envelope. Operator safety belongs to Core/profile policy, while raw-axis calls expose their explicit mechanical guard.
+
 ## v0.2.10.47 implementation note
 
 The scheduler now executes both DSO FITS/RAW and planetary SER blocks. Planetary blocks acquire the target on a full frame, optionally autofocus in planet mode, derive a hardware ROI, record a finite SER, move the ROI while preserving its size, and write frame-indexed ROI-origin provenance. Slow mount recentering is an optional calibrated loop and is disabled by default until HIL-qualified. These supervised capabilities do not change the OAL 1.0 planned boundary for durable restart/recovery, weather/roof interlocks, meridian handling, authentication or process isolation.
@@ -5,7 +9,7 @@ The scheduler now executes both DSO FITS/RAW and planetary SER blocks. Planetary
 # OpenAstroLink specification and implementation status
 
 **Canonical language:** English  
-**Release covered:** OpenAstroSuite / OpenAstroLink v0.2.10.47
+**Release covered:** OpenAstroSuite / OpenAstroLink v0.2.10.50
 **Status legend:** ✅ implemented in the current codebase; 🟡 partially implemented / hardware qualification pending; 🧪 experimental; ⏳ specified but not yet implemented.
 
 This document is the implementation-facing specification snapshot. It distinguishes the target OAL protocol/driver architecture from features that are merely planned.

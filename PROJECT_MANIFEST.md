@@ -1,4 +1,30 @@
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.49
+## v0.2.10.50
+
+- Package: `0.2.10.50-cross-platform-mount-v9-release`
+- Core version: `0.2.10.50`
+- Physical/real-host build milestones are now confirmed for Windows x64/MSVC+Ninja, native Linux x86_64 and Linux/WSL→AArch64 Raspberry Pi node/probe + native vendor-driver matrix.
+- Native OAL drivers are the default; INDI remains opt-in compatibility only.
+- Raspberry Pi 4 and Pi 5 share the generic Linux ARM64/aarch64 ABI target; legacy `rpi4-*` preset names remain compatible aliases in documentation/build workflows. Pi 5 physical runtime qualification remains pending.
+- `oal.eqdrive` v0.2.10.50 removes the temporary hidden `maxNativeGotoDeg` qualification envelope after mount coordinate model v9 HIL qualification. No mount-geometry equations, signs, Home/Park conventions or transport direction logic were changed.
+- Core/profile `maxGotoSkyDeltaDeg` (`maxGotoAxisDeltaDeg` legacy alias) remains the operator-controlled supervised sky-safety policy. Raw-axis requests retain the explicit `maxAxisDeltaDeg` mechanical guard.
+- Immediate Beta sequence: HIL autofocus, auto-exposure, scheduler, mosaic, Polar Alignment. Smart Telescope UX is deferred to OAL 1.0.
+
+### Linux dependency bootstrap recovery — build-fix22
+
+- Fixed aqtinstall Linux x86_64 architecture identifier: `linux_gcc_64` (not install-directory name `gcc_64`).
+- Added live `aqt list-qt` validation for the requested Qt architecture and required HttpServer/WebSockets/SerialPort/Positioning modules.
+- Linux apt bootstrap now tries cached package indexes first and only runs `apt-get update` as a fallback; unrelated broken PPAs are never modified automatically.
+- Added lock timeout and regression coverage.
+- No runtime, mount v9 geometry, or INDI-default changes.
+
+### Windows build-system recovery — build-fix21
+- Native Windows presets use the proven **MSVC + Ninja** path with `CMAKE_CXX_COMPILER=cl.exe`; they no longer rely on CMake Visual Studio instance discovery.
+- This also prevents Strawberry/MinGW `c++.exe` from poisoning Qt MSVC2022 and vendor `.lib` builds.
+- Native Windows build directories use a fresh `*-msvc-ninja` suffix so both stale GNU/Ninja caches and failed VS-generator caches are ignored.
+- `scripts/build_windows.ps1` loads `vcvars64` automatically and locates Ninja from `PATH` or the Visual Studio CMake-tools installation. Raw presets should be run from an x64 MSVC Developer Command Prompt.
+- Raspberry Pi cross presets hosted on Windows remain GNU/Ninja and are unchanged.
+
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.50
 
 ## v0.2.10.49
 
@@ -22,6 +48,13 @@
 - build-fix8 explicitly seeds target Qt/OpenCV CMake package directories from the Debian multiarch sysroot (`aarch64-linux-gnu` / `arm-linux-gnueabihf`) and persists them in the bootstrap env; host Qt remains host-tools-only for `moc/rcc/uic`.
 - build-fix9 makes requested QHY ARM staging a validated success requirement, verifies the staged header/library architecture, and forwards the staged SDK from the bootstrap env record into the cross-build helper.
 - Mount coordinate model v9 and all HIL-qualified geometry remain unchanged.
+
+### Build infrastructure follow-up — build-fix18
+
+- Native Linux/macOS/Windows build wrappers now search and bootstrap missing redistributable dependencies before CMake: Qt, OpenCV, QHY and ZWO where deterministic sources are available.
+- Managed per-user Qt/vendor cache roots are auto-discovered by CMake on subsequent native configure runs.
+- Ubuntu 22.04 can bootstrap a custom Qt >= 6.4 instead of falling back to its incompatible Qt 6.2.4.
+- Canon EDSDK remains local-search-only; INDI remains optional/OFF by default; mount v9 is unchanged.
 
 ## v0.2.10.48
 
@@ -390,3 +423,25 @@ Canon hard-recovery must initialize EDSDK on the long-lived application Qt event
 - Cross link search includes `usr/lib/<multiarch>/blas` and `usr/lib/<multiarch>/lapack`.
 - Target `liblapack.so.3` and `libblas.so.3` are validated by ELF architecture and linked explicitly after OpenCV to close Armadillo/ARPACK/SuperLU/OpenCV numerical dependencies.
 - No runtime sysroot RPATH is embedded; mount v9 remains frozen and unchanged.
+
+### build-fix16 delta
+- Added reproducible host-native vendor SDK bootstrap: official QHYCCD on Linux/macOS/Windows x64, plus pinned INDI-mirror ZWO ASI/EAF on Linux/macOS.
+- Added native build-script switches to consume staged vendor SDKs without editing machine-global paths.
+- Added `rpi4-cross-arm64-observatory-release` and Windows-host equivalent with `OAS_BUILD_GUI=ON`; node-only cross presets remain headless by design.
+- Mount v9 geometry/control code unchanged.
+
+
+### build-fix17 delta
+- Physical WSL -> AArch64 full-native node/probe build is now confirmed at 100% with QHYCCD 26.06.04, Canon EDSDK and ZWO ASI/EAF; build-fix15 BLAS/LAPACK closure is validated.
+- INDI compatibility is opt-in globally: `OAS_ENABLE_INDI=OFF` by default and normal observatory/node presets stay native-first.
+- Explicit `*-indi-release` presets preserve compatibility for INDI-only equipment without changing native driver priority.
+- User presets default to native OAL and expose separate opt-in INDI variants on Windows/Linux/macOS.
+- Mount v9 geometry/control code unchanged.
+
+### build-fix21 delta
+- Native Linux Jammy bootstrap UX fixed: `build_linux.sh --bootstrap-deps` is the canonical path and installs per-user Qt 6.8.3 with aqtinstall when distro Qt is only 6.2.4.
+- Linux build wrapper detects and removes a stale `CMakeCache.txt` copied between WSL `/mnt/c/...` and a native Linux checkout `~/...`; `--clean` is also available explicitly.
+- A missing/stale `OAS_QT_ROOT` no longer suppresses discovery of another valid managed/user Qt installation.
+- Linux example/user presets no longer hard-code a not-yet-installed Qt prefix and use a relocatable sibling `CANON_EDSDK_ROOT=${sourceDir}/../edsdk` instead of shell `~` paths.
+- CMake's Jammy Qt failure now points directly to the automatic bootstrap command and explains that adding more Jammy Qt 6.2.4 development packages cannot satisfy Qt HttpServer/Qt >= 6.4.
+- Mount v9 geometry/control code unchanged.

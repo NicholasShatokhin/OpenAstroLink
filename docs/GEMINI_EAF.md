@@ -1,5 +1,8 @@
 # GeminiAstro EAF — OAL support policy
 
+
+> **Current release:** v0.2.10.50. The native `oal.gemini` path remains the default focuser integration; its earlier Windows motion HIL result is retained.
+
 ## Current status in v0.2.10.11
 
 Gemini EAF now has a **native OAL ABI-v2 driver path** and has passed basic Windows hardware-in-the-loop validation on real USB-serial hardware:

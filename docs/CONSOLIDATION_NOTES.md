@@ -1,5 +1,8 @@
 # How the previous fragments were consolidated
 
+
+> **Current release context:** v0.2.10.50. These notes are historical architecture/consolidation rationale; native OAL remains the default and INDI is opt-in.
+
 This package is not a literal stacking of every diff produced during development. Several classes had been redefined in conflicting ways, some previously labelled “finished” backends were in fact stubs, and the console and Qt paths contained duplicated logic. Consolidation made the following deliberate changes.
 
 ## One device core

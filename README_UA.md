@@ -1,4 +1,36 @@
+## v0.2.10.50 — кросплатформна build-кваліфікація та HIL-підтверджене монтування
+
+- **Build qualification:** Windows x64/MSVC+Ninja, native Linux x86_64 та Linux/WSL → Raspberry Pi ARM64 cross-build уже успішно доходять до повної збірки на реальних development hosts. ARM64 build включає native QHY 26.06.04, Canon EDSDK, ZWO ASI/EAF, Gemini, Sky-Watcher та EQDrive. Presets/bootstrap для macOS Apple Silicon/Intel реалізовані, але фізична Mac-збірка ще pending.
+- **Raspberry Pi 4/5:** 64-bit target — загальний Linux `aarch64`. Назви `rpi4-*` лишаються для сумісності, але ARM64 binaries придатні і для Pi 4, і для Pi 5 за сумісного userspace/ABI. Фізичний Pi 5 runtime/HIL ще pending.
+- **Native-first policy:** на всіх платформах за замовчуванням використовуються native OAL drivers. INDI — лише явний compatibility opt-in (`*-indi-release` або `OAS_ENABLE_INDI=ON`).
+- **Vendor/bootstrap policy:** Qt/OpenCV/QHY/ZWO спочатку шукаються локально і можуть автоматично bootstrap/download там, де це детерміновано. Canon EDSDK OAL лише шукає локально й не завантажує.
+- **Mount v9 frozen:** HIL-кваліфікований direct-MC mapping (`Axis1=+1`, `Axis2=-1`) і GEM geometry не змінені. Тимчасовий прихований EQDrive gate `maxNativeGotoDeg`/15° видалено з драйвера. Користувацький Core/profile sky-separation safety policy лишається доступним, а raw-axis команди зберігають явну mechanical ceiling.
+- **Пріоритет найближчої Beta незмінний:** HIL autofocus → auto-exposure → scheduler → mosaic → Polar Alignment. Smart Telescope UX належить OAL 1.0, не найближчій Beta.
+
+## v0.2.10.49 build-fix22: виправлення Linux Qt bootstrap
+
+Native Linux dependency bootstrap тепер використовує правильний repository architecture ID `linux_gcc_64` для aqtinstall на x86_64 (каталог встановлення Qt як і раніше має назву `gcc_64`). Перед завантаженням перевіряються доступна архітектура та потрібні модулі, тому зникає оманлива помилка `qt_base package not found`, яку давав `gcc_64`. Для системних пакетів Linux спочатку виконується встановлення з уже наявних apt-індексів, і лише за потреби запускається `apt-get update`, тому сторонній зламаний PPA не блокує bootstrap без необхідності. INDI лишається opt-in, геометрія mount v9 не змінювалась.
+
+## v0.2.10.49 build-fix20: детерміновані Windows MSVC presets
+
+Нативні Windows presets використовують Ninja з явним `CMAKE_CXX_COMPILER=cl.exe` та окремими `*-msvc-ninja` build directories. Це усуває і підхоплення Strawberry/MinGW, і залежність від CMake Visual-Studio-instance discovery. Сирий preset запускайте з x64 MSVC Developer Command Prompt, або використовуйте `scripts/build_windows.ps1`, який сам завантажує `vcvars64`. RPi cross presets на Windows залишаються GNU/Ninja.
+
 # OpenAstroSuite / OpenAstroLink
+
+### Автоматичний bootstrap native-залежностей
+
+Рекомендовані build-wrapper-и спочатку шукають наявні залежності й автоматично готують відсутні redistributable компоненти:
+
+```bash
+./scripts/build_linux.sh my-linux-observatory
+./scripts/build_macos.sh my-macos-arm64-observatory
+```
+
+```powershell
+.\scripts\build_windows.ps1 -Preset my-windows-observatory -Clean
+```
+
+Qt/OpenCV/QHY/ZWO автоматизовані там, де є детерміноване джерело. Canon EDSDK лише автовиявляється локально й має бути окремо отриманий у Canon. `--no-auto-deps` (Linux/macOS) або `-NoAutoDeps` (Windows) повертає ручне керування залежностями.
 
 ## v0.2.10.49 — persistent календар спостережень, мозаїки та опційно обмежений рух Polar Alignment
 
@@ -31,7 +63,7 @@
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.49 — persistent per-block календар, DSO/planetary/mosaic execution, опційно обмежений рух Polar Alignment + HIL-кваліфікований direct-MC v9 mapping**
+**Поточний пакет: v0.2.10.50 — cross-platform build-qualified native-first Beta foundation, HIL-qualified direct-MC v9 mapping без прихованого EQDrive qualification slew cap**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 
@@ -391,7 +423,7 @@ cmake --build --preset my-windows-observatory --parallel
 
 ```powershell
 .\scripts\package_windows.ps1 `
-  -BuildDir build/windows-observatory `
+  -BuildDir build/windows-observatory-msvc-ninja `
   -QtBin C:/Qt/6.10.0/msvc2022_64/bin `
   -OpenCvBin C:/opencv/opencv/build/x64/vc16/bin `
   -VendorRuntimeDirs @(
@@ -406,12 +438,13 @@ cmake --build --preset my-windows-observatory --parallel
 
 # macOS (Apple Silicon або Intel)
 
-build-fix3 додає host-native presets для macOS на Apple Clang. Для Canon на macOS основний transport — EDSDK; пошук ZWO ASI/EAF підтримує vendor-layout `mac_arm64`, `mac_x64` та `mac`. QHY на macOS опційний, доки не підключено сумісну macOS SDK library.
+Host-native macOS presets використовують Apple Clang. Build wrapper спочатку шукає наявні залежності й може автоматично bootstrap-ити redistributable Qt/OpenCV/QHY/ZWO. Canon EDSDK лишається user-supplied/local-discovery. Presets для Apple Silicon/Intel реалізовані; physical Mac build/HIL ще pending.
 
 ```bash
-brew install cmake qt opencv
+xcode-select --install   # якщо Command Line Tools ще не встановлені
+brew install cmake        # Homebrew optional, але зручний
 cp CMakeUserPresets.example.json CMakeUserPresets.json
-./scripts/build_macos.sh my-macos-arm64-observatory
+./scripts/build_macos.sh my-macos-arm64-observatory --bootstrap-deps
 ```
 
 Для Intel Mac використовуйте `my-macos-x86_64-observatory`. Реальна build/HIL-кваліфікація та signed/notarized packaging ще попереду.
@@ -421,6 +454,15 @@ cp CMakeUserPresets.example.json CMakeUserPresets.json
 Той самий node і GUI можуть напряму володіти обладнанням на desktop Linux, mini-PC або Raspberry Pi.
 
 WSL зручний для compile/test, але для реальної обсерваторії краще native Linux, якщо USB/serial passthrough у WSL не налаштовано спеціально.
+
+### Рекомендований Linux build
+
+Wrapper сам шукає залежності та bootstrap-ить відсутні redistributable компоненти. На Ubuntu 22.04/Jammy він ставить підтримуваний per-user Qt замість системного Qt 6.2.4:
+
+```bash
+./scripts/build_linux.sh my-linux-observatory --bootstrap-deps --clean
+```
+
 
 ## Базові залежності Debian/Ubuntu
 
@@ -554,11 +596,12 @@ cmake --build --preset linux-node-release -j"$(nproc)"
 INDI легко вмикається для іншого обладнання, але не є залежністю native OAL drivers.
 
 ```text
-*-native-release       тільки native OAL
-*-observatory-release  native OAL + INDI compatibility client
+*-native-release             тільки native OAL
+*-observatory-release        native OAL за замовчуванням (INDI OFF)
+*-observatory-indi-release   native OAL + опційна INDI compatibility
 ```
 
-`indiserver` потрібен лише тоді, коли реально використовується INDI-пристрій.
+`OAS_ENABLE_INDI` тепер глобально має default `OFF`. `indiserver` потрібен лише тоді, коли реально використовується INDI-only пристрій. Увімкнення INDI не замінює native OAL driver — наші драйвери лишаються пріоритетним/default transport.
 
 # Перший HIL
 
@@ -710,3 +753,45 @@ RPi cross-toolchain тепер може напряму завантажити й
 ### build-fix15: closure Debian BLAS/LAPACK alternatives для ARM cross-link
 
 Перший фізичний build з офіційним QHYCCD 26.06.04 ARM64 SDK підтвердив сам QHY path: vendor archive успішно завантажився, staged як справжній AArch64 `libqhy.so`, а `oal_driver_qhy.so` скомпілювався й злінився. Єдиний залишковий failure — фінальний link `openastrolink-node` / `oal-hardware-probe`. Debian Bookworm розміщує reference BLAS/LAPACK SONAME у `usr/lib/<multiarch>/blas` та `usr/lib/<multiarch>/lapack`, а вище використовує alternatives-managed links. build-fix14 шукав лише parent multiarch directory, а post-APT `symlinks -cr` запускався без root privileges на root-owned sysroot, тому друкував `Permission denied` і не виправив абсолютні alternatives links. build-fix15 запускає нормалізацію symlink через `sudo`, додає BLAS/LAPACK subdirectories у link-time-only `-rpath-link`/`-L`, перевіряє, що обидві leaf libraries є ELF потрібної target-архітектури, і явно лінкує target `liblapack.so.3` / `libblas.so.3` після OpenCV. Runtime sysroot RPATH у binaries не вбудовується. Mount v9 не змінювався.
+
+## v0.2.10.49 build-fix16: автоматичний vendor bootstrap і GUI cross-preset для RPi
+
+`build-fix16` фіксує першу успішну повну ARM64 cross-збірку `openastrolink-node` та `oal-hardware-probe` з Canon EDSDK, ZWO ASI/EAF і офіційним QHYCCD 26.06.04 AArch64 SDK. Також прибрано дві асиметрії підготовки середовища:
+
+* `scripts/bootstrap_vendor_sdks.sh` може автоматично підготувати нативні QHY та ZWO SDK на Linux/macOS. QHY завантажується з офіційного versioned SDK repository QHYCCD; ZWO ASI/EAF беруться з pinned revision `indi-3rdparty/libasi`, щоб bootstrap був відтворюваним і не залежав від мінливої сторінки завантажень ZWO.
+* `scripts/bootstrap_vendor_sdks.ps1` автоматично завантажує та готує офіційний QHY Windows x64 SDK і знаходить вже встановлений/розпакований ZWO Windows SDK. Canon EDSDK залишається user-supplied: його не слід мовчки перерозповсюджувати або завантажувати стороннім bootstrap-скриптом.
+* `build_linux.sh` і `build_macos.sh` отримали `--bootstrap-vendor` / `--use-vendor-sdk`; `build_windows.ps1` — `-BootstrapVendor` / `-UseVendorSdk`.
+* `rpi4-cross-arm64-observatory-release` збирає **і** `OpenAstroSuite`, **і** `openastrolink-node`. Старий `rpi4-cross-arm64-node-release` навмисно має `OAS_BUILD_GUI=OFF`; саме тому успішна node cross-збірка не створила `OpenAstroSuite`.
+
+Приклади:
+
+```bash
+./scripts/build_linux.sh my-linux-observatory --bootstrap-vendor
+./scripts/build_macos.sh my-macos-arm64-observatory --bootstrap-vendor
+
+cmake --preset my-rpi4-cross-arm64-observatory-full
+cmake --build --preset my-rpi4-cross-arm64-observatory-full -j"$(nproc)"
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\build_windows.ps1 -Preset my-windows-observatory -BootstrapVendor -Clean
+```
+
+Qt/OpenCV та відкриті системні бібліотеки краще встановлювати через package manager ОС (або Qt installer на підтримуваних host-системах), а не vendoring-ом у OAL. Canon EDSDK навмисно не завантажується автоматично.
+
+
+## v0.2.10.49 build-fix17: native-first за замовчуванням; INDI лише opt-in
+
+Усі стандартні observatory/node presets тепер за замовчуванням використовують native OAL drivers з `OAS_ENABLE_INDI=OFF`. INDI лишається явним compatibility layer через `*-indi-release` presets або `-DOAS_ENABLE_INDI=ON` і призначений лише для обладнання, для якого ще немає native OAL driver. Pinned `indi-3rdparty`, який vendor bootstrap використовує як mirror ZWO SDK blobs на Linux/macOS, є лише джерелом SDK-файлів і **не** вмикає та не збирає INDI runtime. Фізичний WSL -> AArch64 лог також уже підтвердив повну native ARM64 збірку node/probe до 100% з QHYCCD 26.06.04, Canon EDSDK та ZWO ASI/EAF. Геометрія/керування mount v9 frozen і не змінювалися.
+
+### Примітка щодо Ubuntu 22.04 / Jammy і Qt
+
+Jammy надає лише Qt 6.2.4. Встановлення додаткових пакетів `qt6-*`/`libqt6*-dev` з Jammy не задовольняє вимогу OpenAstroLink Qt >= 6.4 + Qt HttpServer. Використовуйте:
+
+```bash
+./scripts/build_linux.sh my-linux-observatory --bootstrap-deps --clean
+```
+
+Скрипт встановлює повний per-user Qt через `aqtinstall` у `~/.local/share/openastrolink/qt` і не потребує GUI-інсталятора Qt або Qt Account. Не запускайте GUI-інсталятор Qt через `sudo`. Linux wrapper також автоматично видаляє застарілий CMake cache, якщо checkout було перенесено між WSL (`/mnt/c/...`) і нативним Linux (`~/...`).

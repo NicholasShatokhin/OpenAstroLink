@@ -1,5 +1,8 @@
 # OAL API — v0.2.10.25
 
+
+> **Поточний реліз:** v0.2.10.50. Native OAL drivers — default, INDI — opt-in, API version у `openapi.yaml` — 0.2.10.50.
+
 Канонічний документ: `../OAL_API.md`.
 
 Node API забезпечує discovery, profile, device connect/disconnect, operations, mount/focuser/camera commands, solve, autofocus, guiding, polar alignment і sessions. У v0.2.10 camera connect має `role: main|guide`; guide capture доступний через `/cameras/guide/capture`. `/integrations/stellarium` керує TCP bridge.

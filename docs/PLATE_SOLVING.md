@@ -1,5 +1,8 @@
 # Plate solving — adaptive urban workflow
 
+
+> **Current release:** v0.2.10.50. Adaptive/node-local plate solving remains implemented and is reused by scheduler/mosaic workflows.
+
 This document describes the v0.2.10.17 node-local plate-solving path intended for light-polluted sites, small sensors and mounts where a single 10–15 s exposure produces elongated stars.
 
 ## Why the adaptive path exists

@@ -1,8 +1,11 @@
 # Native Canon EOS driver — `oal.canon`
 
+
+> **Current release:** v0.2.10.50. `oal.canon` remains native OAL. EDSDK is supported on Windows and in the validated Linux/ARM64 vendor build; Linux may also use the selectable gphoto2 transport. Canon EDSDK is user-supplied and is not downloaded automatically by OAL.
+
 ## Role in OpenAstroLink
 
-`oal.canon` is a native OpenAstroLink ABI-v2 camera driver. It does not pass camera control through INDI, ASCOM/Alpaca or LX200. On Raspberry Pi/Linux the current transport implementation links `libgphoto2` directly and uses its Canon/PTP2 USB support as the low-level hardware-access library.
+`oal.canon` is a native OpenAstroLink ABI-v2 camera driver. It does not pass camera control through INDI, ASCOM/Alpaca or LX200. On Linux the transport is selectable: the validated ARM64/full-vendor build uses Canon EDSDK, while `libgphoto2` remains available as an alternative PTP transport when selected at configure time.
 
 This is the same architectural rule used by `oal.qhy`: a vendor/protocol library may sit below a native OAL driver, but capabilities, operations, cancellation, events and frame semantics belong to OAL.
 

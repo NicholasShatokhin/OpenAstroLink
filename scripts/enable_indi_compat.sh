@@ -17,12 +17,12 @@ OAL treats INDI as a compatibility layer. Native QHY/Gemini/Sky-Watcher
 remains the preferred path, while INDI can be present for other equipment.
 
 Build choices:
-  Native-only proof/minimal build:
-    cmake --preset rpi4-native-release
-    # equivalent core option: -DOAS_ENABLE_INDI=OFF
-
-  Recommended observatory build with compatibility available:
+  Default observatory build (native OAL drivers):
     cmake --preset rpi4-observatory-release
+    # OAS_ENABLE_INDI=OFF
+
+  Optional compatibility build for INDI-only equipment:
+    cmake --preset rpi4-observatory-indi-release
     # equivalent core option: -DOAS_ENABLE_INDI=ON
 
 Compiling INDI support does not require indiserver to be running. Start an

@@ -1,4 +1,20 @@
-# Платформи збірки — v0.2.10.49 build-fix6
+## Поточна build-кваліфікація — v0.2.10.50
+
+| Target | Build status | Примітка |
+|---|---|---|
+| Windows x64 / MSVC 2022 + Ninja | ✅ confirmed | Повний observatory build успішний після deterministic `cl.exe` selection. |
+| Linux x86_64 | ✅ confirmed | Native build успішний з per-user Qt bootstrap на Ubuntu 22.04/Jammy. |
+| Linux ARM64 / Raspberry Pi 4 | ✅ confirmed | WSL/Linux cross-build доходить до 100% для node, probe та native vendor drivers, включно з QHY 26.06.04. |
+| Linux ARM64 / Raspberry Pi 5 | 🟡 ABI-supported | Той самий generic aarch64 target; physical Pi 5 runtime/HIL ще pending. |
+| macOS Apple Silicon / Intel | 🟡 configured | Presets/vendor bootstrap є; physical Mac build/sign/package qualification pending. |
+
+Native drivers — default. INDI — тільки opt-in. Сирий `cmake --preset` лишається side-effect-free; platform wrappers можуть шукати/bootstrap redistributable dependencies. Canon EDSDK — тільки manual download/local discovery.
+
+## Вибір Windows compiler — build-fix20
+
+Нативні Windows presets використовують generator Ninja з явним `CMAKE_CXX_COMPILER=cl.exe`. Так зберігається перевірений MSVC/Ninja шлях, Strawberry/MinGW `c++.exe` не може бути обраний, а CMake не мусить знаходити зареєстрований Visual Studio instance. Сирий `cmake --preset my-windows-observatory` запускайте з x64 MSVC Developer Command Prompt; `scripts/build_windows.ps1` сам завантажує `vcvars64`. Нативні Windows build directories мають суфікс `*-msvc-ninja`, щоб не змішувати старий GNU-Ninja та невдалий VS-generator cache. Windows-hosted Raspberry Pi cross presets лишаються GNU/Ninja, бо вони навмисно збирають Linux ARM.
+
+# Платформи збірки — v0.2.10.50
 
 ## Підтримувані observatory hosts
 
@@ -224,8 +240,55 @@ brew install cmake qt opencv
 
 ### v0.2.10.49 build-fix13 — транзитивне AArch64 linker closure у sysroot
 
-Реальна ARM64 cross-build уже компілює Canon EDSDK, ZWO ASI/EAF, Gemini, SkyWatcher, EQDrive, `oas_core`, `openastrolink-node` та `oal-hardware-probe`; перший залишковий failure виник лише на фінальному executable link. GNU ld повідомив, що `liblapack.so.3` і `libblas.so.3`, потрібні target OpenCV, не знаходяться, після чого з'явилися сотні unresolved BLAS/LAPACK symbols та `GLIBC_2.36` mismatch із транзитивної target library. Cross link policy тепер передає target-sysroot multiarch/runtime directories через link-time-only `-rpath-link` і `-L`, тому `DT_NEEDED` closure має резолвитись із Bookworm sysroot, а не з Jammy host cross-runtime. Bootstrap також явно встановлює й перевіряє BLAS/LAPACK.
+ARM64 cross-link closure тепер фізично підтверджений. Попередній final-link failure був спричинений Bookworm BLAS/LAPACK alternatives у `usr/lib/<multiarch>/blas` та `.../lapack` і відсутніми target-only transitive search paths. Виправлена policy додає target-sysroot `-rpath-link`/`-L`, встановлює/перевіряє BLAS/LAPACK, нормалізує sysroot symlinks з потрібними privileges і резолвить `DT_NEEDED` із Bookworm target, а не Jammy host. Після цього build доходить до 100% для `openastrolink-node` і `oal-hardware-probe` з Canon EDSDK, ZWO ASI/EAF, QHY, Gemini, SkyWatcher та EQDrive.
 
 #### Debian BLAS/LAPACK alternatives у cross sysroot (build-fix15)
 
 У Bookworm `libblas.so.3` і `liblapack.so.3` можуть експортуватися через Debian alternatives, тоді як concrete reference libraries лежать у `usr/lib/<multiarch>/blas` та `usr/lib/<multiarch>/lapack`. Foreign GNU linker не повинен покладатися на host-resolution таких absolute alternatives links. Тому OAL bootstrap нормалізує links у sysroot з root privileges, перевіряє concrete target libraries через `file`, а CMake cross-link policy передає обидва numerical subdirectories через link-time-only `-rpath-link`/`-L`. OAL також явно лінкує target LAPACK і BLAS runtime libraries після OpenCV, щоб детерміновано закрити numerical symbols OpenCV/Armadillo/ARPACK/SuperLU.
+
+
+### build-fix17 — native OAL є default; INDI лише opt-in
+
+`OAS_ENABLE_INDI` тепер має default `OFF` і на рівні CMake option, і в усіх звичайних observatory/node presets. Для INDI-only обладнання слід використовувати явні `*-indi-release` presets або `-DOAS_ENABLE_INDI=ON`. Native OAL drivers ніколи не маршрутизуються через INDI. Vendor bootstrap на Linux/macOS може використовувати pinned revision `indi-3rdparty` лише як відтворюваний mirror ZWO SDK blobs; це не встановлює, не вмикає і не лінкує INDI compatibility backend.
+
+## Автоматичний bootstrap залежностей native-збірки (build-fix18)
+
+Рекомендовані native build-wrapper-и тепер спочатку шукають наявні залежності й лише за відсутності встановлюють або завантажують ті компоненти, які можна відтворювано розповсюджувати. Сам `cmake --preset ...` лишається без прихованих мережевих/системних side effects.
+
+Linux/WSL:
+
+```bash
+./scripts/build_linux.sh my-linux-observatory
+```
+
+Перший запуск може доставити відсутні пакети Debian/Ubuntu, встановити per-user Qt через `aqtinstall`, якщо системний Qt старіший за 6.4, знайти/встановити OpenCV і staged QHY/ZWO SDK. Результат записується в `.oal/native-deps-linux-<arch>.env`. `--no-auto-deps` вимикає автоматизацію.
+
+macOS:
+
+```bash
+./scripts/build_macos.sh my-macos-arm64-observatory
+```
+
+За наявності Homebrew він використовується для build tools/OpenCV; Qt спочатку шукається, а за відсутності встановлюється в per-user cache OpenAstroLink. QHY/ZWO також staged у цей cache.
+
+Windows:
+
+```powershell
+.\scripts\build_windows.ps1 -Preset my-windows-observatory -Clean
+```
+
+Wrapper шукає Qt/OpenCV/vendor SDK, може встановити Qt через `aqtinstall`, OpenCV через per-user vcpkg, завантажує QHY з офіційного QHY SDK repository та шукає локальні ZWO/Canon SDK. `-NoAutoDeps` повертає повністю ручний режим.
+
+Canon EDSDK навмисно лише **автовиявляється**, але не завантажується/перерозповсюджується OpenAstroLink через окремі умови Canon SDK. Для ZWO Linux/macOS дозволено pinned SDK mirror; Windows ZWO спочатку автовиявляється локально, а за відсутності завантажується через офіційний ZWO developer product-download endpoint; цей endpoint стежить за поточним vendor release, а не за pinned-версією.
+
+Після одноразового bootstrap CMake також шукає managed cache напряму, тому наступні ручні `cmake --preset ...` можуть використовувати вже staged залежності.
+
+### Примітка щодо Ubuntu 22.04 / Jammy і Qt
+
+Jammy надає лише Qt 6.2.4. Встановлення додаткових пакетів `qt6-*`/`libqt6*-dev` з Jammy не задовольняє вимогу OpenAstroLink Qt >= 6.4 + Qt HttpServer. Використовуйте:
+
+```bash
+./scripts/build_linux.sh my-linux-observatory --bootstrap-deps
+```
+
+Скрипт встановлює повний per-user Qt через `aqtinstall` у `~/.local/share/openastrolink/qt` і не потребує GUI-інсталятора Qt або Qt Account. Не запускайте GUI-інсталятор Qt через `sudo`. Linux wrapper також автоматично видаляє застарілий CMake cache, якщо checkout було перенесено між WSL (`/mnt/c/...`) і нативним Linux (`~/...`).

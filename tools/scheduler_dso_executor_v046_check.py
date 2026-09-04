@@ -7,7 +7,7 @@ def need(path,*tokens):
     missing=[t for t in tokens if t not in s]
     if missing: raise SystemExit(f'{path}: missing {missing}')
 
-need('CMakeLists.txt','VERSION 0.2.10.49')
+need('CMakeLists.txt','VERSION 0.2.10.50')
 need('src/core/astro_types.h',
      'struct ObservationPlan','struct ObservationBlock','enum class ObservationMode { DsoFits, PlanetarySer, MosaicFits }',
      'struct DsoFitsBlock','struct PlanetarySerBlock','observationPlanToJson','observationPlanFromJson',
@@ -25,5 +25,5 @@ need('src/oal/oal_server.cpp','b.contains("blocks")','observationPlanFromJson(b)
 need('src/gui/main_window.cpp','Add DSO','setObservationPlan(p','Recenter every N frames','Autofocus every N frames')
 need('docs/SCHEDULER.md','v0.2.10.49','Sync + correction slew','planetary-ser')
 need('docs/uk/SCHEDULER.md','v0.2.10.49','Sync + correction slew','planetary-ser')
-need('docs/openapi.yaml','version: 0.2.10.49','ObservationBlock:','DsoFitsBlock:','/sessions/current/plan:')
-print('scheduler ObservationPlan + retained DSO executor v0.2.10.49: PASS')
+need('docs/openapi.yaml','version: 0.2.10.50','ObservationBlock:','DsoFitsBlock:','/sessions/current/plan:')
+print('scheduler ObservationPlan + retained DSO executor v0.2.10.50: PASS')

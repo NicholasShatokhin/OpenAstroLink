@@ -29,6 +29,11 @@ if [[ -r /etc/os-release ]]; then
 fi
 
 qt_ver=""
+custom_qt_ver=""
+if [[ -n "${OAS_QT_ROOT:-}" ]]; then
+  if [[ -x "$OAS_QT_ROOT/bin/qtpaths6" ]]; then custom_qt_ver="$($OAS_QT_ROOT/bin/qtpaths6 --qt-version 2>/dev/null || true)";
+  elif [[ -x "$OAS_QT_ROOT/bin/qtpaths" ]]; then custom_qt_ver="$($OAS_QT_ROOT/bin/qtpaths --qt-version 2>/dev/null || true)"; fi
+fi
 if command -v qtpaths6 >/dev/null 2>&1; then
   qt_ver="$(qtpaths6 --qt-version 2>/dev/null || true)"
 elif command -v qmake6 >/dev/null 2>&1; then
@@ -36,14 +41,23 @@ elif command -v qmake6 >/dev/null 2>&1; then
 elif command -v pkg-config >/dev/null 2>&1; then
   qt_ver="$(pkg-config --modversion Qt6Core 2>/dev/null || true)"
 fi
+if [[ -n "$custom_qt_ver" ]]; then
+  echo "Qt6(custom): ${custom_qt_ver} ($OAS_QT_ROOT)"
+fi
 if [[ -n "$qt_ver" ]]; then
-  echo "Qt6:   ${qt_ver}"
+  echo "Qt6(system): ${qt_ver}"
   if [[ "$(printf '%s\n' '6.4.0' "$qt_ver" | sort -V | head -n1)" != "6.4.0" ]]; then
-    echo "ERROR: OpenAstroLink requires Qt >= 6.4; detected ${qt_ver}." >&2
-    echo "       Qt6::HttpServer is part of the required node REST stack." >&2
-    echo "       Ubuntu 22.04/Jammy system Qt 6.2.4 is not a supported build baseline." >&2
-    echo "       Use Ubuntu 24.04+, Debian 12+/Raspberry Pi OS Bookworm+, or a custom Qt >= 6.4." >&2
-    exit 5
+    if [[ -n "$custom_qt_ver" && "$(printf '%s\n' '6.4.0' "$custom_qt_ver" | sort -V | head -n1)" == "6.4.0" ]]; then
+      echo "Qt6 system ${qt_ver} is below 6.4; the OAL-managed custom Qt ${custom_qt_ver} will be used."
+    elif [[ "${OAS_ALLOW_CUSTOM_QT:-0}" == "1" ]]; then
+      echo "Qt6(host system): ${qt_ver} is below 6.4, but custom Qt is allowed; CMake will validate the preset's Qt6_DIR/CMAKE_PREFIX_PATH."
+    else
+      echo "ERROR: OpenAstroLink requires Qt >= 6.4; detected ${qt_ver}." >&2
+      echo "       Qt6::HttpServer is part of the required node REST stack." >&2
+      echo "       Ubuntu 22.04/Jammy system Qt 6.2.4 is not a supported build baseline." >&2
+      echo "       Use Ubuntu 24.04+, Debian 12+/Raspberry Pi OS Bookworm+, or a custom Qt >= 6.4." >&2
+      exit 5
+    fi
   fi
 else
   echo "Qt6:   not detected in PATH/pkg-config (CMake may still find a custom prefix)."

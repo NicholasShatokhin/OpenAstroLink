@@ -1,4 +1,8 @@
-# Raspberry Pi 4/5 observatory node — v0.2.10.49 build-fix7
+## v0.2.10.50 Raspberry Pi 4/5 ARM64 status
+
+OpenAstroLink treats 64-bit Raspberry Pi as a generic Linux `aarch64` target. Pi 4 and Pi 5 therefore share the same OAL ABI and vendor ARM64 SDK matrix. The historical `rpi4-*` preset/sysroot names are retained for backward compatibility; they do not encode a Cortex-A72-only binary. The current WSL/Linux→ARM64 build has reached 100% for `openastrolink-node`, `oal-hardware-probe` and native QHY/Canon/ZWO/Gemini/Sky-Watcher/EQDrive drivers. Physical Pi 5 runtime/HIL and the ARM64 `OpenAstroSuite` GUI runtime are still pending.
+
+# Raspberry Pi 4/5 observatory node — v0.2.10.50
 
 Version 0.2.10 keeps the v0.2.2 process boundary and makes the Raspberry Pi hardware stack **native-OAL-first**: QHY, Canon EOS, Gemini EAF and Sky-Watcher are available as ABI-v2 native OAL plugins; INDI remains an optional compatibility path for additional equipment.
 
@@ -33,12 +37,12 @@ cmake -S . -B build-rpi -G Ninja \
   -DOAS_BUILD_GUI=ON \
   -DOAS_BUILD_NODE=ON \
   -DOAS_ENABLE_QHY=ON \
-  -DOAS_ENABLE_INDI=ON \
+  -DOAS_ENABLE_INDI=OFF \
   -DOAS_ENABLE_GPHOTO2=OFF
 cmake --build build-rpi -j$(nproc)
 ```
 
-For the first architecture test, build with QHY/INDI disabled and use three simulated devices. Then enable hardware backends.
+The standard Raspberry Pi build is native-first: INDI is disabled unless explicitly requested. For the first architecture test, QHY may also be disabled and simulated devices used; then enable the native hardware backends.
 
 The systemd user must have permission to open the telescope interfaces. On Raspberry Pi OS this normally means membership in the relevant serial/USB groups (commonly `dialout`, and depending on device/udev rules also `plugdev`/`video`) plus the QHY vendor udev rules. Verify actual permissions with `ls -l /dev/ttyUSB* /dev/ttyACM*` and the QHY SDK installation rather than assuming a group name.
 
@@ -101,9 +105,9 @@ At the next boot `openastrolink-node` restores those bindings. If an INDI server
 Typical Raspberry configuration for the planned hardware is now conceptually:
 
 ```text
-Camera:  native:oal.qhy/qhy:<exact-hardware-id> or native:oal.canon/canon:<serial>
-Focuser: native:oal.gemini/<device> preferred; INDI/gemini-eaf compatibility remains available
-Mount:   INDI/LX200 compatibility until a native driver for the exact mount is validated
+Camera:  native:oal.qhy / native:oal.canon / native:oal.zwo.asi
+Focuser: native:oal.gemini / native:oal.zwo.eaf
+Mount:   native:oal.eqdrive / native:oal.skywatcher; INDI/LX200 only when explicitly needed
 ```
 
 Native devices own their hardware transport and therefore do not require an endpoint text field in the GUI. Exact INDI device names must still match what compatibility drivers publish.
@@ -120,7 +124,7 @@ The process/node architecture is now paired with:
 - `oal-hardware-probe` reporting native drivers/devices separately from compatibility devices;
 - node installer deployment of native plugin libraries/manifests.
 
-See `docs/NATIVE_DRIVER_SDK.md` and `docs/RPI_FIRST_HARDWARE.md`. Planetary live/SER, native Gemini/mount, async solve, automated polar wizard, durable DSO execution, final FITS/RAW data plane and security/safety hardening remain pending.
+See `docs/NATIVE_DRIVER_SDK.md` and `docs/RPI_FIRST_HARDWARE.md`. Native Gemini/mount, planetary SER, async solve, persistent DSO/planetary/mosaic scheduling and guided Polar Alignment foundations are now implemented. The nearest Beta work is HIL qualification of autofocus, auto-exposure, scheduler, mosaic and Polar Alignment. Production guiding, full unattended safety/security and mid-block durable recovery remain OAL 1.0 work.
 
 
 Native Canon EOS is provided by `oal.canon`. On Raspberry Pi it links directly to libgphoto2 for USB/PTP transport; INDI is not part of this camera path.
@@ -129,7 +133,7 @@ Native Canon EOS is provided by `oal.canon`. On Raspberry Pi it links directly t
 
 The node can own two cameras simultaneously (`main` and `guide`) and persists both bindings. The Stellarium bridge can be enabled with `--stellarium-port 10000` or through OAL settings/API. ZWO ASI/EAF native drivers may be loaded alongside QHY/Canon/Gemini/Sky-Watcher and optional INDI compatibility devices.
 
-## Build/cross presets — v0.2.10.49 build-fix7
+## Build/cross presets — v0.2.10.50
 > build-fix7: the Bookworm signing-key fetch helper is now safe under `set -u`; the `name: unbound variable` failure is fixed.
 
 
@@ -182,3 +186,7 @@ For the full ARM64 vendor preset, QHY staging is no longer best-effort. The boot
 ### v0.2.10.49 build-fix10 — QHY ARM64 vs ARMHF
 
 The legacy `QHYCCD_Linux_New` `armv8` SDK is physically a 32-bit ARM/EABI build. Use it with the ARMHF node only. A 64-bit Raspberry Pi node must use a genuine QHY `Arm_64`/`AARCH64` SDK; until that SDK is staged, build the ARM64 node with QHY disabled (`my-rpi4-cross-arm64`).
+
+### build-fix17 — native-first INDI policy
+
+`rpi4-observatory-release` and `rpi4-node-release` now keep INDI disabled by default. Use `rpi4-observatory-indi-release` / `rpi4-node-indi-release` only for INDI-only equipment. Native QHY/Canon/ZWO/Gemini/Sky-Watcher/EQDrive paths remain the preferred paths.

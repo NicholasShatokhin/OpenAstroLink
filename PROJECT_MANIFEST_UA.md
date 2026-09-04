@@ -1,4 +1,30 @@
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.49
+## v0.2.10.50
+
+- Package: `0.2.10.50-cross-platform-mount-v9-release`
+- Core version: `0.2.10.50`
+- Підтверджені real-host builds: Windows x64/MSVC+Ninja, native Linux x86_64 та Linux/WSL→AArch64 Raspberry Pi node/probe + native vendor-driver matrix.
+- Native OAL drivers — default; INDI лишається тільки opt-in compatibility.
+- Raspberry Pi 4 і Pi 5 використовують спільний Linux ARM64/aarch64 target; legacy `rpi4-*` назви presets лишаються сумісними. Physical Pi 5 runtime qualification ще pending.
+- `oal.eqdrive` v0.2.10.50 видаляє тимчасовий прихований `maxNativeGotoDeg` qualification envelope після HIL-підтвердження coordinate model v9. Геометричні формули, signs, Home/Park та transport direction logic не змінювалися.
+- Core/profile `maxGotoSkyDeltaDeg` (`maxGotoAxisDeltaDeg` legacy alias) лишається operator-controlled supervised sky-safety policy; raw-axis request має окремий `maxAxisDeltaDeg` guard.
+- Найближча Beta: HIL autofocus, auto-exposure, scheduler, mosaic, Polar Alignment. Smart Telescope UX — OAL 1.0.
+
+### Відновлення Linux dependency bootstrap — build-fix22
+
+- Виправлено architecture identifier aqtinstall для Linux x86_64: `linux_gcc_64` (а не назва каталогу встановлення `gcc_64`).
+- Додано live-перевірку через `aqt list-qt` потрібної Qt-архітектури та модулів HttpServer/WebSockets/SerialPort/Positioning.
+- Linux apt bootstrap спочатку використовує наявні package indexes і лише як fallback запускає `apt-get update`; сторонні зламані PPA автоматично не змінюються.
+- Додано timeout для apt-lock та regression-перевірку.
+- Runtime, геометрія mount v9 та default-політика INDI не змінювались.
+
+### Відновлення Windows build-system — build-fix21
+- Нативні Windows presets повернено на перевірений шлях **MSVC + Ninja** з явним `CMAKE_CXX_COMPILER=cl.exe`; CMake більше не залежить від Visual Studio instance discovery.
+- Це одночасно не дозволяє Strawberry/MinGW `c++.exe` потрапити в збірку з Qt MSVC2022 та vendor `.lib`.
+- Нативні Windows build directories отримали новий суфікс `*-msvc-ninja`, тому і старі GNU/Ninja cache, і невдалі VS-generator cache ігноруються.
+- `scripts/build_windows.ps1` сам завантажує `vcvars64` і знаходить Ninja у `PATH` або в Visual Studio CMake tools. Сирий preset запускайте з x64 MSVC Developer Command Prompt.
+- Windows-hosted Raspberry Pi cross presets залишаються GNU/Ninja і не змінювались.
+
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.50
 
 ## v0.2.10.49
 
@@ -21,6 +47,13 @@
 - build-fix8 явно задає target Qt/OpenCV CMake package directories із Debian multiarch sysroot (`aarch64-linux-gnu` / `arm-linux-gnueabihf`) і зберігає їх у bootstrap env; host Qt лишається тільки для `moc/rcc/uic`.
 - build-fix9 робить запитаний QHY ARM staging обов’язковою перевіреною частиною success contract, перевіряє staged header/library architecture та передає SDK з bootstrap env record у cross-build helper.
 - Coordinate model mount v9 та вся HIL-кваліфікована геометрія не змінювалися.
+
+### Інфраструктура збірки — build-fix18
+
+- Native wrapper-и Linux/macOS/Windows тепер шукають і за потреби автоматично готують redistributable залежності перед CMake: Qt, OpenCV, QHY і ZWO там, де є детерміноване джерело.
+- CMake повторно використовує per-user managed cache Qt/vendor SDK при наступних native configure.
+- Ubuntu 22.04 може автоматично отримати custom Qt >= 6.4 замість несумісного системного Qt 6.2.4.
+- Canon EDSDK лишається локальним search-only; INDI лишається опціональним/OFF; mount v9 не змінено.
 
 ## v0.2.10.48
 
@@ -382,3 +415,25 @@ Hard-recovery Canon повинен ініціалізувати EDSDK на до�
 - Cross link search включає `usr/lib/<multiarch>/blas` та `usr/lib/<multiarch>/lapack`.
 - Target `liblapack.so.3` і `libblas.so.3` перевіряються за ELF-архітектурою та явно лінкуються після OpenCV, закриваючи числовий dependency chain Armadillo/ARPACK/SuperLU/OpenCV.
 - Runtime sysroot RPATH не вбудовується; mount v9 лишається frozen і не змінювався.
+
+### build-fix16 delta
+- Додано відтворюваний bootstrap нативних vendor SDK: офіційний QHYCCD для Linux/macOS/Windows x64 та pinned INDI-mirror ZWO ASI/EAF для Linux/macOS.
+- Build scripts можуть використовувати staged SDK без ручного редагування глобальних шляхів системи.
+- Додано `rpi4-cross-arm64-observatory-release` та Windows-host аналог з `OAS_BUILD_GUI=ON`; node-only cross presets навмисно лишаються headless.
+- Геометрію/керування mount v9 не змінено.
+
+
+### build-fix17 delta
+- Фізично підтверджено 100% WSL -> AArch64 full-native build node/probe з QHYCCD 26.06.04, Canon EDSDK і ZWO ASI/EAF; BLAS/LAPACK closure із build-fix15 валідований.
+- INDI compatibility тепер глобально opt-in: `OAS_ENABLE_INDI=OFF` за замовчуванням, звичайні observatory/node presets лишаються native-first.
+- Явні `*-indi-release` presets зберігають compatibility для INDI-only обладнання без зміни пріоритету native drivers.
+- Локальні user presets за замовчуванням native OAL і мають окремі opt-in INDI варіанти для Windows/Linux/macOS.
+- Геометрія/керування mount v9 не змінювались.
+
+### build-fix21 delta
+- Виправлено UX bootstrap нативного Linux на Jammy: канонічний шлях `build_linux.sh --bootstrap-deps` ставить per-user Qt 6.8.3 через aqtinstall, якщо distro Qt має лише 6.2.4.
+- Linux build wrapper визначає та видаляє застарілий `CMakeCache.txt`, скопійований між WSL `/mnt/c/...` і нативним Linux checkout `~/...`; також додано явний `--clean`.
+- Відсутній/застарілий `OAS_QT_ROOT` більше не блокує пошук іншого валідного managed/user Qt.
+- Linux example/user presets більше не hard-code-ять ще не встановлений Qt prefix і використовують relocatable sibling `CANON_EDSDK_ROOT=${sourceDir}/../edsdk` замість shell `~` paths.
+- CMake error для Jammy Qt тепер прямо вказує команду автоматичного bootstrap і пояснює, що встановлення додаткових Jammy Qt 6.2.4 dev packages не може дати Qt HttpServer/Qt >= 6.4.
+- Геометрія/керування mount v9 не змінювались.
