@@ -1,4 +1,9 @@
-# Оновлення стану — v0.2.10.50
+# Оновлення стану — v0.2.10.51
+
+## v0.2.10.51 — Sky Map MVP
+
+OpenAstroSuite тепер має lightweight offline Sky Map у лівій робочій області. Вона рендерить horizon/all-sky view через existing observer/time coordinate path, має bright-star/DSO search, pan/zoom, live telescope і plate-solve markers, approximate main-camera FOV та controller-backed Slew/Sync/Abort/Park і transfer target у Scheduler. Mount geometry не змінена; direct-MC v9 лишається frozen.
+
 
 **Build foundation:** Windows x64 ✅, Linux x86_64 ✅, Raspberry Pi/Linux ARM64 cross node+probe+native drivers ✅, macOS presets/bootstrap 🟡 physical build pending. Native OAL drivers — default; INDI — opt-in.
 
@@ -6,7 +11,7 @@
 
 **Наступна Beta-кваліфікація:** HIL autofocus → auto-exposure → scheduler → mosaic → Polar Alignment. Smart Telescope UX — OAL 1.0.
 
-# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.50
+# Стан OpenAstroSuite / OpenAstroLink — v0.2.10.51
 
 ## v0.2.10.49 — persistent calendar / mosaic / Polar safety
 
@@ -243,7 +248,7 @@ ARM cross toolchains явно фіксують Debian multiarch (`aarch64-linux-
 
 Реальна WSL -> AArch64 збірка тепер доходить до 100% компіляції source. Canon EDSDK ARM64, ZWO ASI/EAF ARM64, Gemini, SkyWatcher, EQDrive та `oas_core` успішно компілюються/лінкуються; падали лише фінальні executable `openastrolink-node` і `oal-hardware-probe`. Причина — search path cross-linker, а не source OAL: GNU ld не резолвив транзитивні BLAS/LAPACK/Armadillo/ARPACK/SuperLU залежності OpenCV з Bookworm sysroot і міг перейти до Jammy cross-runtime libc. build-fix13 додає target-sysroot `-rpath-link`/`-L` closure та явну bootstrap-перевірку BLAS/LAPACK. QHY для ARM64 лишається OFF до справжнього AArch64 SDK. Mount v9 не змінювався.
 
-## Cross-platform build status — v0.2.10.50
+## Cross-platform build status — v0.2.10.51
 
 | Target | Статус | Evidence / boundary |
 |---|---|---|

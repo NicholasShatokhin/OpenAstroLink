@@ -1,3 +1,10 @@
+## v0.2.10.51 — offline Sky Map navigation MVP
+
+- У лівій області OpenAstroSuite додано workspace `Imaging / Sky Map`.
+- Sky Map повністю offline і використовує existing observer/time coordinate conversion. Є bright stars, selected Messier/DSO targets, constellation guides, pan/zoom/search, live telescope marker, solved-position marker та approximate camera FOV.
+- Click вибирає object; double-click або **Slew** викликає normal OAL GOTO через active mount backend. Sync, Abort, Park/Unpark і transfer target у Scheduler використовують той самий controller contract.
+- Direct-MC mount geometry v9 не змінена й лишається HIL-qualified. Smart Telescope UX все ще OAL 1.0 scope.
+
 ## v0.2.10.50 — кросплатформна build-кваліфікація та HIL-підтверджене монтування
 
 - **Build qualification:** Windows x64/MSVC+Ninja, native Linux x86_64 та Linux/WSL → Raspberry Pi ARM64 cross-build уже успішно доходять до повної збірки на реальних development hosts. ARM64 build включає native QHY 26.06.04, Canon EDSDK, ZWO ASI/EAF, Gemini, Sky-Watcher та EQDrive. Presets/bootstrap для macOS Apple Silicon/Intel реалізовані, але фізична Mac-збірка ще pending.
@@ -63,7 +70,7 @@ Qt/OpenCV/QHY/ZWO автоматизовані там, де є детермін�
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.50 — cross-platform build-qualified native-first Beta foundation, HIL-qualified direct-MC v9 mapping без прихованого EQDrive qualification slew cap**
+**Поточний пакет: v0.2.10.51 — cross-platform build-qualified native-first Beta foundation, HIL-qualified direct-MC v9 mapping без прихованого EQDrive qualification slew cap**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

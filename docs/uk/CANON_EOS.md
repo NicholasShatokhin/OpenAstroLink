@@ -1,7 +1,7 @@
 # Нативний Canon EOS — v0.2.10.5
 
 
-> **Поточний реліз:** v0.2.10.50. `oal.canon` лишається native OAL. EDSDK підтримується на Windows і у валідованій Linux/ARM64 vendor-збірці; Linux також може використовувати selectable gphoto2 transport. Canon EDSDK надає користувач, OAL його автоматично не завантажує.
+> **Поточний реліз:** v0.2.10.51. `oal.canon` лишається native OAL. EDSDK підтримується на Windows і у валідованій Linux/ARM64 vendor-збірці; Linux також може використовувати selectable gphoto2 transport. Canon EDSDK надає користувач, OAL його автоматично не завантажує.
 
 Канонічний документ: `../CANON_EOS.md`.
 

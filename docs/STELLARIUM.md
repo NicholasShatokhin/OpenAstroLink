@@ -1,7 +1,7 @@
 # Stellarium integration
 
 
-> **Current release:** v0.2.10.50. The Stellarium bridge remains supported and uses the active OAL mount path.
+> **Current release:** v0.2.10.51. The Stellarium bridge remains supported and uses the active OAL mount path.
 
 Version: 0.2.10.38
 

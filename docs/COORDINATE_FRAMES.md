@@ -1,7 +1,7 @@
 # Equatorial coordinate frames
 
 
-> **Current release:** v0.2.10.50. The J2000 interchange contract and mount-frame separation remain unchanged by the v9 HIL qualification.
+> **Current release:** v0.2.10.51. The J2000 interchange contract and mount-frame separation remain unchanged by the v9 HIL qualification.
 
 OpenAstroLink uses **J2000** as the canonical equatorial coordinate frame at the API, session, Stellarium and plate-solving boundaries.
 

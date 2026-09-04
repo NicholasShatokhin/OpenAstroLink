@@ -1,7 +1,7 @@
 # Live View, Scene Autofocus, and Finder Alignment
 
 
-> **Current release:** v0.2.10.50. The Live View/finder/scene-autofocus workflow described here remains implemented; nearest-Beta work is HIL convergence and repeatability.
+> **Current release:** v0.2.10.51. The Live View/finder/scene-autofocus workflow described here remains implemented; nearest-Beta work is HIL convergence and repeatability.
 
 OpenAstroLink v0.2.10.35 includes an operational preview workflow intended for telescope setup, target acquisition, finder alignment, lunar/planetary framing, and daytime focusing.
 

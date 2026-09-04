@@ -1,10 +1,11 @@
-## v0.2.10.50
+## v0.2.10.51
 
-- Package: `0.2.10.50-cross-platform-mount-v9-release`
-- Core version: `0.2.10.50`
+- Package: `0.2.10.51-sky-map-mvp`
+- Core version: `0.2.10.51`
 - Підтверджені real-host builds: Windows x64/MSVC+Ninja, native Linux x86_64 та Linux/WSL→AArch64 Raspberry Pi node/probe + native vendor-driver matrix.
 - Native OAL drivers — default; INDI лишається тільки opt-in compatibility.
 - Raspberry Pi 4 і Pi 5 використовують спільний Linux ARM64/aarch64 target; legacy `rpi4-*` назви presets лишаються сумісними. Physical Pi 5 runtime qualification ще pending.
+- OpenAstroSuite Sky Map MVP: offline horizon map, search, pan/zoom, telescope/solve/FOV markers і mount/Scheduler actions через `ObservatoryController`.
 - `oal.eqdrive` v0.2.10.50 видаляє тимчасовий прихований `maxNativeGotoDeg` qualification envelope після HIL-підтвердження coordinate model v9. Геометричні формули, signs, Home/Park та transport direction logic не змінювалися.
 - Core/profile `maxGotoSkyDeltaDeg` (`maxGotoAxisDeltaDeg` legacy alias) лишається operator-controlled supervised sky-safety policy; raw-axis request має окремий `maxAxisDeltaDeg` guard.
 - Найближча Beta: HIL autofocus, auto-exposure, scheduler, mosaic, Polar Alignment. Smart Telescope UX — OAL 1.0.
@@ -24,7 +25,7 @@
 - `scripts/build_windows.ps1` сам завантажує `vcvars64` і знаходить Ninja у `PATH` або в Visual Studio CMake tools. Сирий preset запускайте з x64 MSVC Developer Command Prompt.
 - Windows-hosted Raspberry Pi cross presets залишаються GNU/Ninja і не змінювались.
 
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.50
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.51
 
 ## v0.2.10.49
 

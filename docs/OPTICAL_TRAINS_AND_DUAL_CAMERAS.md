@@ -1,7 +1,7 @@
 # Optical trains and dual-camera operation
 
 
-> **Current release:** v0.2.10.50. Optical-train and dual-camera semantics remain part of the current supervised Beta foundation.
+> **Current release:** v0.2.10.51. Optical-train and dual-camera semantics remain part of the current supervised Beta foundation.
 
 Version: 0.2.10
 

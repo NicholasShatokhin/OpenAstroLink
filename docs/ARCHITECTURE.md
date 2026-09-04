@@ -1,4 +1,4 @@
-## Current deployment policy — v0.2.10.50
+## Current deployment policy — v0.2.10.51
 
 Native OAL drivers are the primary execution path on Windows, Linux, Raspberry Pi and macOS. INDI is not part of the default runtime and is enabled only as a compatibility adapter when needed. Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node builds are now confirmed; macOS remains build-configured but physically unqualified.
 

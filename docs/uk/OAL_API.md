@@ -1,7 +1,7 @@
 # OAL API — v0.2.10.25
 
 
-> **Поточний реліз:** v0.2.10.50. Native OAL drivers — default, INDI — opt-in, API version у `openapi.yaml` — 0.2.10.50.
+> **Поточний реліз:** v0.2.10.51. Native OAL drivers — default, INDI — opt-in, API version у `openapi.yaml` — 0.2.10.50.
 
 Канонічний документ: `../OAL_API.md`.
 

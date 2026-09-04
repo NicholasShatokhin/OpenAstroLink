@@ -1,8 +1,8 @@
-## v0.2.10.50 Raspberry Pi 4/5 ARM64 status
+## v0.2.10.51 Raspberry Pi 4/5 ARM64 status
 
 OpenAstroLink розглядає 64-bit Raspberry Pi як generic Linux `aarch64` target. Тому Pi 4 і Pi 5 мають спільний OAL ABI та ARM64 vendor SDK matrix. Історичні назви `rpi4-*` preset/sysroot лишаються для backward compatibility і не означають Cortex-A72-only binary. Поточний WSL/Linux→ARM64 build доходить до 100% для `openastrolink-node`, `oal-hardware-probe` та native QHY/Canon/ZWO/Gemini/Sky-Watcher/EQDrive drivers. Physical Pi 5 runtime/HIL і ARM64 `OpenAstroSuite` GUI runtime ще pending.
 
-# Raspberry Pi 4/5 observatory node — v0.2.10.50
+# Raspberry Pi 4/5 observatory node — v0.2.10.51
 
 Канонічний документ: `../RPI_NODE.md`.
 
@@ -10,7 +10,7 @@ OpenAstroLink розглядає 64-bit Raspberry Pi як generic Linux `aarch64
 
 Stellarium bridge можна запускати з `--stellarium-port 10000` або settings/API. INDI compatibility можна додати без зміни native OAL конфігурації.
 
-## Build presets у v0.2.10.50
+## Build presets у v0.2.10.51
 
 Native 64-bit Raspberry Pi 4/5 node:
 

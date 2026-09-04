@@ -1,7 +1,7 @@
 # Native Canon EOS driver — `oal.canon`
 
 
-> **Current release:** v0.2.10.50. `oal.canon` remains native OAL. EDSDK is supported on Windows and in the validated Linux/ARM64 vendor build; Linux may also use the selectable gphoto2 transport. Canon EDSDK is user-supplied and is not downloaded automatically by OAL.
+> **Current release:** v0.2.10.51. `oal.canon` remains native OAL. EDSDK is supported on Windows and in the validated Linux/ARM64 vendor build; Linux may also use the selectable gphoto2 transport. Canon EDSDK is user-supplied and is not downloaded automatically by OAL.
 
 ## Role in OpenAstroLink
 

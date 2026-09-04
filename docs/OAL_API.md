@@ -1,7 +1,7 @@
 # OpenAstroLink HTTP API — v0.2.10.47 reference implementation
 
 
-> **Current release:** v0.2.10.50. Native OAL drivers are default, INDI is opt-in, and the API version in `openapi.yaml` is 0.2.10.50.
+> **Current release:** v0.2.10.51. Native OAL drivers are default, INDI is opt-in, and the API version in `openapi.yaml` is 0.2.10.50.
 
 The transitional envelope remains:
 

@@ -1,4 +1,4 @@
-## Поточна deployment policy — v0.2.10.50
+## Поточна deployment policy — v0.2.10.51
 
 Native OAL drivers — основний execution path на Windows, Linux, Raspberry Pi та macOS. INDI не входить у default runtime і вмикається лише як compatibility adapter. Windows x64, Linux x86_64 та Raspberry Pi/Linux ARM64 node builds уже підтверджені; macOS build-configured, але physical qualification ще pending.
 

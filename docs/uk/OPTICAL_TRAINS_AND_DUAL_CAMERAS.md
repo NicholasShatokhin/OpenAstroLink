@@ -1,7 +1,7 @@
 # Оптичні тракти та одночасна робота двох камер
 
 
-> **Поточний реліз:** v0.2.10.50. Optical-train і dual-camera semantics лишаються частиною supervised Beta foundation.
+> **Поточний реліз:** v0.2.10.51. Optical-train і dual-camera semantics лишаються частиною supervised Beta foundation.
 
 Версія: 0.2.10
 

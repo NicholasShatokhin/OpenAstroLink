@@ -1,4 +1,4 @@
-## Поточна build-кваліфікація — v0.2.10.50
+## Поточна build-кваліфікація — v0.2.10.51
 
 | Target | Build status | Примітка |
 |---|---|---|
@@ -14,7 +14,7 @@ Native drivers — default. INDI — тільки opt-in. Сирий `cmake --pr
 
 Нативні Windows presets використовують generator Ninja з явним `CMAKE_CXX_COMPILER=cl.exe`. Так зберігається перевірений MSVC/Ninja шлях, Strawberry/MinGW `c++.exe` не може бути обраний, а CMake не мусить знаходити зареєстрований Visual Studio instance. Сирий `cmake --preset my-windows-observatory` запускайте з x64 MSVC Developer Command Prompt; `scripts/build_windows.ps1` сам завантажує `vcvars64`. Нативні Windows build directories мають суфікс `*-msvc-ninja`, щоб не змішувати старий GNU-Ninja та невдалий VS-generator cache. Windows-hosted Raspberry Pi cross presets лишаються GNU/Ninja, бо вони навмисно збирають Linux ARM.
 
-# Платформи збірки — v0.2.10.50
+# Платформи збірки — v0.2.10.51
 
 ## Підтримувані observatory hosts
 

@@ -7,16 +7,17 @@ class QTimer;
 class QComboBox; class QLineEdit; class QDoubleSpinBox; class QSpinBox; class QLabel; class QTextEdit; class QListWidget; class QGraphicsScene; class QCheckBox; class QPushButton; class QTabWidget; class QDateTimeEdit;
 
 namespace oas {
+class SkyMapWidget;
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 public: explicit MainWindow(ObservatoryController *controller,QWidget *parent=nullptr);
 private:
-    QWidget *buildDevicesTab(); QWidget *buildLiveFinderTab(); QWidget *buildCaptureTab(); QWidget *buildMountTab(); QWidget *buildFocusTab(); QWidget *buildPolarTab(); QWidget *buildSchedulerTab(); QWidget *buildOperationsTab(); QWidget *buildServerTab(); QWidget *buildProfileTab();
+    QWidget *buildDevicesTab(); QWidget *buildLiveFinderTab(); QWidget *buildCaptureTab(); QWidget *buildMountTab(); QWidget *buildFocusTab(); QWidget *buildPolarTab(); QWidget *buildSchedulerTab(); QWidget *buildOperationsTab(); QWidget *buildServerTab(); QWidget *buildProfileTab(); QWidget *buildSkyMapPanel();
     void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap(); void updateHistogram(const QImage &image,bool allowAutoApply=true); void renderCameraFrame(const QImage &image); void updateFinderWizardText();
     void refreshMountStatus(); void refreshFocuserStatus(); void synchronizeMountCoordinatesFrom(const QString &system); void setAutofocusBusy(bool busy); void setCaptureBusy(bool busy); void setAdaptiveSolveBusy(bool busy); void setLiveViewBusy(bool busy);
-    void updateMountStatusFromState(const QJsonObject &state); void updateFocuserStatusFromState(const QJsonObject &state); void updateDeviceStatusFromState(const QJsonObject &state); void updateOperation(const QJsonObject &operation);
+    void updateMountStatusFromState(const QJsonObject &state); void updateFocuserStatusFromState(const QJsonObject &state); void updateDeviceStatusFromState(const QJsonObject &state); void updateOperation(const QJsonObject &operation); void updateSkyMapFromState(const QJsonObject &state); void refreshSkyMapContext(); void updateSkySelectionText();
     ObservatoryController *c_{};
-    QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QTextEdit *log_{};
+    QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QTextEdit *log_{}; QTabWidget *leftTabs_{}; SkyMapWidget *skyMap_{}; QLineEdit *skySearch_{}; QLabel *skySelection_{}; QCheckBox *skyLabels_{}; QCheckBox *skyDsos_{}; QCheckBox *skyConstellations_{}; QTimer *skyMapTimer_{};
     QImage lastImage_;
     QComboBox *cameraBackend_{}; QLineEdit *cameraEndpoint_{}; QLabel *cameraDeviceStatus_{};
     QComboBox *guideCameraBackend_{}; QLineEdit *guideCameraEndpoint_{}; QLabel *guideCameraDeviceStatus_{};

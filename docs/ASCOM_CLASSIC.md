@@ -1,7 +1,7 @@
 # Classic ASCOM compatibility
 
 
-> **Current release:** v0.2.10.50. Classic ASCOM remains an optional Windows compatibility backend; native OAL drivers are the default.
+> **Current release:** v0.2.10.51. Classic ASCOM remains an optional Windows compatibility backend; native OAL drivers are the default.
 
 OpenAstroLink now has a Windows **Classic ASCOM** mount backend in addition to ASCOM Alpaca.
 

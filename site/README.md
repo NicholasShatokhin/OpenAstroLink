@@ -1,3 +1,7 @@
+# Site snapshot — v0.2.10.51
+
+Includes the new offline Sky Map navigation section.
+
 ## v0.2.10.50 site snapshot
 
 The landing page now reflects confirmed Windows/Linux/Raspberry-Pi ARM64 build status, native-first/INDI-opt-in policy, HIL-qualified mount v9 with the temporary driver GOTO cap removed, and the current Beta workflow priorities. Pi 5 is described as ARM64 ABI-supported with physical qualification pending; macOS remains configured/pending physical build.

@@ -1,8 +1,8 @@
-## v0.2.10.50 validation focus
+## v0.2.10.51 validation focus
 
 Build qualification is confirmed for Windows x64, native Linux x86_64 and the Linux/WSL→ARM64 Raspberry Pi node/probe/native-driver target. Keep those builds as regression gates. The next release gate is HIL workflow behavior, starting with autofocus. For the HIL-qualified direct-MC mount, retain a small-motion sanity check after hardware changes, then exercise normal supervised full-range GOTO; there is no longer a hidden 15° driver qualification cap. Profile-level sky-safety may still be enabled by the operator.
 
-# Validation plan — v0.2.10.50
+# Validation plan — v0.2.10.51
 
 This release is primarily a build/HIL qualification checkpoint.
 
@@ -202,3 +202,13 @@ Minimum acceptable supervised use:
 ## G. Not yet an unattended acceptance gate
 
 Do not mark unattended production PASS until reliable event replay, idempotency, durable science storage, production guiding/session recovery, security/auth/audit, weather/roof/power safety, driver crash isolation and public conformance have been implemented and tested.
+
+## Sky Map MVP — v0.2.10.51
+
+- Confirm `Imaging / Sky Map` appears in the left workspace on Windows, Linux and Raspberry Pi GUI builds.
+- With a configured site, select a bright star and compare displayed Alt/Az against an independent reference.
+- Confirm a Sky Map GOTO and the Mount-tab GOTO for the same J2000 coordinate generate the same active-backend target.
+- Confirm double-click GOTO can be aborted and Park/Unpark are routed through the active controller.
+- After a plate solve, confirm the green solved marker follows the solved J2000 center.
+- Confirm the red telescope marker updates from mount state and approximate FOV changes when the optical profile changes.
+- Confirm `Use in Scheduler` copies the selected J2000 coordinate exactly.

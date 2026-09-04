@@ -1,8 +1,8 @@
-## v0.2.10.50 Raspberry Pi 4/5 ARM64 status
+## v0.2.10.51 Raspberry Pi 4/5 ARM64 status
 
 OpenAstroLink treats 64-bit Raspberry Pi as a generic Linux `aarch64` target. Pi 4 and Pi 5 therefore share the same OAL ABI and vendor ARM64 SDK matrix. The historical `rpi4-*` preset/sysroot names are retained for backward compatibility; they do not encode a Cortex-A72-only binary. The current WSL/Linux→ARM64 build has reached 100% for `openastrolink-node`, `oal-hardware-probe` and native QHY/Canon/ZWO/Gemini/Sky-Watcher/EQDrive drivers. Physical Pi 5 runtime/HIL and the ARM64 `OpenAstroSuite` GUI runtime are still pending.
 
-# Raspberry Pi 4/5 observatory node — v0.2.10.50
+# Raspberry Pi 4/5 observatory node — v0.2.10.51
 
 Version 0.2.10 keeps the v0.2.2 process boundary and makes the Raspberry Pi hardware stack **native-OAL-first**: QHY, Canon EOS, Gemini EAF and Sky-Watcher are available as ABI-v2 native OAL plugins; INDI remains an optional compatibility path for additional equipment.
 
@@ -133,7 +133,7 @@ Native Canon EOS is provided by `oal.canon`. On Raspberry Pi it links directly t
 
 The node can own two cameras simultaneously (`main` and `guide`) and persists both bindings. The Stellarium bridge can be enabled with `--stellarium-port 10000` or through OAL settings/API. ZWO ASI/EAF native drivers may be loaded alongside QHY/Canon/Gemini/Sky-Watcher and optional INDI compatibility devices.
 
-## Build/cross presets — v0.2.10.50
+## Build/cross presets — v0.2.10.51
 > build-fix7: the Bookworm signing-key fetch helper is now safe under `set -u`; the `name: unbound variable` failure is fixed.
 
 

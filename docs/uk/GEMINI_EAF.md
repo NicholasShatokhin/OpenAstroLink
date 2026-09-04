@@ -1,7 +1,7 @@
 # Gemini EAF — v0.2.10.11
 
 
-> **Поточний реліз:** v0.2.10.50. Native `oal.gemini` лишається default focuser integration; попередній Windows motion HIL результат збережено.
+> **Поточний реліз:** v0.2.10.51. Native `oal.gemini` лишається default focuser integration; попередній Windows motion HIL результат збережено.
 
 Канонічний документ: `../GEMINI_EAF.md`.
 

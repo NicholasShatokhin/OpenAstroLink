@@ -1,7 +1,7 @@
 # Інтеграція зі Stellarium
 
 
-> **Поточний реліз:** v0.2.10.50. Stellarium bridge підтримується й використовує active OAL mount path.
+> **Поточний реліз:** v0.2.10.51. Stellarium bridge підтримується й використовує active OAL mount path.
 
 Версія: 0.2.10
 

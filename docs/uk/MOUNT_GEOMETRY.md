@@ -35,7 +35,7 @@ High-level SynScan paths лишаються окремими: `oal.skywatcher` h
 
 Використовуй **Calibrate current physical pose as persistent Home / Park** у бажаній фізичній позі. Native EQDrive зберігає поточні механічні осі одночасно як OAL Home і Park. Classic ASCOM не має OAL mechanical-axis interface, тому та сама дія викликає стандартний ASCOM `SetPark`. Щоб native й ASCOM паркувались однаково, один раз відкалібруй кожен backend у тій самій позі, не рухаючи монтування між перемиканнями.
 
-## Безпека — v0.2.10.50
+## Безпека — v0.2.10.51
 
 Coordinate model v9 HIL-qualified і frozen. Тимчасовий 15°/`maxNativeGotoDeg` qualification gate усередині `oal.eqdrive` видалено. Це **не** змінює v9 equations, axis signs, Home/Park convention або transport direction logic.
 

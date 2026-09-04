@@ -1,4 +1,4 @@
-## Current qualification — v0.2.10.50
+## Current qualification — v0.2.10.51
 
 | Target | Build status | Notes |
 |---|---|---|
@@ -14,7 +14,7 @@ Native drivers are the default everywhere. INDI is opt-in only. Raw `cmake --pre
 
 Native Windows presets use the Ninja generator with `CMAKE_CXX_COMPILER=cl.exe`. This keeps the proven MSVC/Ninja build path while preventing Strawberry/MinGW `c++.exe` from being selected, and it does not require CMake to discover a registered Visual Studio instance. Raw `cmake --preset my-windows-observatory` must run in an x64 MSVC Developer Command Prompt; `scripts/build_windows.ps1` loads `vcvars64` automatically. Native Windows build directories use `*-msvc-ninja` names to avoid stale GNU-Ninja and failed VS-generator cache collisions. Windows-hosted Raspberry Pi cross presets remain GNU/Ninja because they intentionally target Linux ARM.
 
-# Build platforms — v0.2.10.50
+# Build platforms — v0.2.10.51
 
 English is canonical; Ukrainian mirror: `docs/uk/BUILD_PLATFORMS.md`.
 

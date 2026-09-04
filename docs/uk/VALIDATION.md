@@ -1,8 +1,8 @@
-## v0.2.10.50 validation focus
+## v0.2.10.51 validation focus
 
 Build qualification підтверджена для Windows x64, native Linux x86_64 та Linux/WSL→ARM64 Raspberry Pi node/probe/native-driver target. Ці builds лишаються regression gates. Наступний release gate — HIL workflow behavior, починаючи з autofocus. Для HIL-qualified direct-MC mount після змін заліза лишається small-motion sanity check, після чого треба тестувати звичайний supervised full-range GOTO; прихованого 15° driver qualification cap більше немає. Profile-level sky-safety оператор може залишити ввімкненим.
 
-# План валідації — v0.2.10.50
+# План валідації — v0.2.10.51
 
 Цей реліз — build/HIL qualification checkpoint.
 
@@ -50,3 +50,13 @@ Unattended production PASS не ставити до реалізації reliabl
 ## Mount v9 full-range gate
 
 Після будь-якої зміни hardware/config зробити один small supervised sanity GOTO, а потім normal supervised full-range GOTO на representative east/west targets. Hidden 15° `maxNativeGotoDeg` driver gate у v0.2.10.50 відсутній. Якщо `maxGotoSkyDeltaDeg` у profile увімкнений/малий, це окрема user-controlled Core safety policy, а не driver limitation. Abort має реально зупинити обидві осі. Automatic meridian flip не включати в unattended PASS без окремого HIL.
+
+## Sky Map MVP — v0.2.10.51
+
+- Перевірити `Imaging / Sky Map` у лівій workspace на Windows, Linux та Raspberry Pi GUI builds.
+- З configured site вибрати яскраву зорю й порівняти Alt/Az з незалежним reference.
+- Sky Map GOTO та Mount-tab GOTO для тієї самої J2000 coordinate мають давати той самий target active backend.
+- Double-click GOTO має abort-итися; Park/Unpark проходять через active controller.
+- Після plate solve зелений solved marker має відповідати solved J2000 center.
+- Червоний telescope marker оновлюється зі mount state, approximate FOV — зі зміною optical profile.
+- `Use in Scheduler` копіює selected J2000 coordinate без зміни.

@@ -1,10 +1,11 @@
-## v0.2.10.50
+## v0.2.10.51
 
-- Package: `0.2.10.50-cross-platform-mount-v9-release`
-- Core version: `0.2.10.50`
+- Package: `0.2.10.51-sky-map-mvp`
+- Core version: `0.2.10.51`
 - Physical/real-host build milestones are now confirmed for Windows x64/MSVC+Ninja, native Linux x86_64 and Linux/WSL→AArch64 Raspberry Pi node/probe + native vendor-driver matrix.
 - Native OAL drivers are the default; INDI remains opt-in compatibility only.
 - Raspberry Pi 4 and Pi 5 share the generic Linux ARM64/aarch64 ABI target; legacy `rpi4-*` preset names remain compatible aliases in documentation/build workflows. Pi 5 physical runtime qualification remains pending.
+- OpenAstroSuite Sky Map MVP: offline horizon map, search, pan/zoom, telescope/solve/FOV markers and mount/Scheduler actions through `ObservatoryController`.
 - `oal.eqdrive` v0.2.10.50 removes the temporary hidden `maxNativeGotoDeg` qualification envelope after mount coordinate model v9 HIL qualification. No mount-geometry equations, signs, Home/Park conventions or transport direction logic were changed.
 - Core/profile `maxGotoSkyDeltaDeg` (`maxGotoAxisDeltaDeg` legacy alias) remains the operator-controlled supervised sky-safety policy. Raw-axis requests retain the explicit `maxAxisDeltaDeg` mechanical guard.
 - Immediate Beta sequence: HIL autofocus, auto-exposure, scheduler, mosaic, Polar Alignment. Smart Telescope UX is deferred to OAL 1.0.
@@ -24,7 +25,7 @@
 - `scripts/build_windows.ps1` loads `vcvars64` automatically and locates Ninja from `PATH` or the Visual Studio CMake-tools installation. Raw presets should be run from an x64 MSVC Developer Command Prompt.
 - Raspberry Pi cross presets hosted on Windows remain GNU/Ninja and are unchanged.
 
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.50
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.51
 
 ## v0.2.10.49
 

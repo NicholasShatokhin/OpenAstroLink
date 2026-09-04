@@ -1,7 +1,7 @@
 # Мережеві транспорти SynScan
 
 
-> **Поточний реліз:** v0.2.10.50. Direct SynScan/EQDrive Wi-Fi та serial EQDrive зберігають HIL-кваліфіковану v9 Core geometry; polarity/geometry не змінювати без нових HIL доказів.
+> **Поточний реліз:** v0.2.10.51. Direct SynScan/EQDrive Wi-Fi та serial EQDrive зберігають HIL-кваліфіковану v9 Core geometry; polarity/geometry не змінювати без нових HIL доказів.
 
 OpenAstroLink навмисно розділяє два різні network backend, тому що Wi-Fi
 адаптер монтування та застосунок SynScan App/Pro є різними protocol endpoint.

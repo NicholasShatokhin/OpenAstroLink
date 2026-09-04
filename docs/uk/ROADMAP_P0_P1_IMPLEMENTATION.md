@@ -1,4 +1,4 @@
-## v0.2.10.50 порядок робіт
+## v0.2.10.51 порядок робіт
 
 Cross-platform build qualification більше не головний blocker: Windows x64, Linux x86_64 та Raspberry Pi/Linux ARM64 node builds підтверджені. Найближча Beta тепер вузько сфокусована:
 

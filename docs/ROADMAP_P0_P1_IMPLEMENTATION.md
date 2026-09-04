@@ -1,4 +1,4 @@
-## v0.2.10.50 execution order
+## v0.2.10.51 execution order
 
 Cross-platform build qualification is no longer the primary blocker: Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node builds are confirmed. The nearest Beta work is now deliberately narrow:
 
@@ -10,7 +10,7 @@ Cross-platform build qualification is no longer the primary blocker: Windows x64
 
 Smart Telescope UX, broader unattended-observatory automation and productized one-button workflows remain OAL 1.0 scope.
 
-# OpenAstroLink roadmap — implementation status after v0.2.10.50
+# OpenAstroLink roadmap — implementation status after v0.2.10.51
 
 Legend: ✅ done; 🟡 partial/HIL pending; ⏳ not done.
 
@@ -53,6 +53,10 @@ Operation problems are structured. Complete HTTP API migration to RFC 9457 Probl
 Simulator and many structural checks exist. Build the black-box public suite for driver/device/API/event/error/cancellation/reconnect/data-plane/safety conformance.
 
 ## P1 — after P0 core semantics stabilize
+### Sky Map navigation — ✅ MVP
+
+v0.2.10.51 adds the offline left-side navigation map: bright stars/selected DSOs, horizon projection, pan/zoom/search, telescope/solved/FOV overlays and controller-backed mount actions. Real-mount UI smoke remains part of Beta qualification; full planetarium/Smart Telescope presentation remains later scope.
+
 
 ### Device profiles — ⏳
 

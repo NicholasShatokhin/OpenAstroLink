@@ -35,7 +35,7 @@ Home/Park is deliberately not stored as celestial RA/DEC for native raw-axis mou
 
 Use **Calibrate current physical pose as persistent Home / Park** at the desired physical pose. Native EQDrive stores the current mechanical axes as both OAL Home and Park. Classic ASCOM has no OAL mechanical-axis interface, so the same action calls the ASCOM driver's standard `SetPark` capability. To obtain identical native and ASCOM park behavior, calibrate each backend once at the same physical pose without moving the mount between backend switches.
 
-## Safety status — v0.2.10.50
+## Safety status — v0.2.10.51
 
 Coordinate model v9 is HIL-qualified and frozen. The temporary 15°/`maxNativeGotoDeg` qualification gate that lived inside `oal.eqdrive` has therefore been removed. This change does **not** alter the v9 equations, axis signs, Home/Park convention or transport direction logic.
 

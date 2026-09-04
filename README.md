@@ -1,3 +1,10 @@
+## v0.2.10.51 — offline Sky Map navigation MVP
+
+- Added a left-side `Imaging / Sky Map` workspace in OpenAstroSuite.
+- The Sky Map is fully offline and uses the existing observer/time coordinate conversion path. It includes bright stars, selected Messier/DSO targets, constellation guides, pan/zoom/search, a live telescope marker, solved-position marker and approximate camera FOV.
+- Click selects an object; double-click or **Slew** sends normal OAL GOTO through the active mount backend. Sync, Abort, Park/Unpark and Scheduler target transfer use the same controller contract.
+- Direct-MC mount geometry v9 is untouched and remains HIL-qualified. Smart Telescope UX is still OAL 1.0 scope.
+
 ## v0.2.10.50 — cross-platform build qualification and HIL-qualified mount release
 
 - **Build qualification:** Windows x64/MSVC+Ninja, native Linux x86_64, and Linux/WSL → Raspberry Pi ARM64 cross-builds have all reached successful full builds on real development hosts. The ARM64 build includes the native QHY 26.06.04, Canon EDSDK, ZWO ASI/EAF, Gemini, Sky-Watcher and EQDrive paths. macOS Apple Silicon/Intel presets and dependency bootstrap are implemented; a physical Mac build remains pending.
@@ -63,7 +70,7 @@ Qt/OpenCV/QHY/ZWO are resolved where deterministic distribution is available. Ca
 - QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
 - Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
 
-**Current package: v0.2.10.50 — cross-platform build-qualified native-first Beta foundation with HIL-qualified direct-MC v9 mapping and no hidden EQDrive qualification slew cap**
+**Current package: v0.2.10.51 — cross-platform build-qualified native-first Beta foundation with HIL-qualified direct-MC v9 mapping and no hidden EQDrive qualification slew cap**
 
 ## v0.2.10.46 — ObservationPlan and supervised DSO executor
 

@@ -1,7 +1,7 @@
 # Documentation policy
 
 
-> **Current release:** v0.2.10.50. English remains canonical and Ukrainian mirrors remain required.
+> **Current release:** v0.2.10.51. English remains canonical and Ukrainian mirrors remain required.
 
 English is the canonical and normative documentation language for OpenAstroLink/OpenAstroSuite. Every human-readable project document should have a Ukrainian mirror under `docs/uk/` (or `README_UA.md` / `PROJECT_MANIFEST_UA.md` at repository root).
 

@@ -1,4 +1,4 @@
-## v0.2.10.50 implementation boundary
+## v0.2.10.51 implementation boundary
 
 The protocol/driver model remains native-first with INDI as opt-in compatibility. Cross-platform build qualification now covers Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node targets. Direct-MC mount coordinate model v9 is HIL-qualified and unchanged; the EQDrive transport no longer carries a hidden temporary sky-GOTO qualification envelope. Operator safety belongs to Core/profile policy, while raw-axis calls expose their explicit mechanical guard.
 
@@ -9,7 +9,7 @@ The scheduler now executes both DSO FITS/RAW and planetary SER blocks. Planetary
 # OpenAstroLink specification and implementation status
 
 **Canonical language:** English  
-**Release covered:** OpenAstroSuite / OpenAstroLink v0.2.10.50
+**Release covered:** OpenAstroSuite / OpenAstroLink v0.2.10.51
 **Status legend:** ✅ implemented in the current codebase; 🟡 partially implemented / hardware qualification pending; 🧪 experimental; ⏳ specified but not yet implemented.
 
 This document is the implementation-facing specification snapshot. It distinguishes the target OAL protocol/driver architecture from features that are merely planned.

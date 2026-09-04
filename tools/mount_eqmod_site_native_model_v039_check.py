@@ -8,7 +8,7 @@ def need(path,*tokens):
         assert token in text,f'{path}: missing {token!r}'
         checks.append((path,token))
     return text
-need('CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.50')
+need('CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.51')
 need('src/core/astro_types.h','nativeCoordinateModelVersion','preferBackendSite','HA=-6h, Dec=+90°')
 need('src/core/settings.cpp','mountGeometry/nativeCoordinateModelVersion','mountGeometry/preferBackendSite')
 need('src/core/mount_geometry.cpp','eqmodGemAxesForSky','skyFromEqmodGemAxes','nativeCoordinateModelVersion>=7','canonical={0.0,0.0,true}')
