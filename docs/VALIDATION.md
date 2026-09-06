@@ -1,8 +1,8 @@
-## v0.2.10.51 validation focus
+## v0.2.10.53 validation focus
 
 Build qualification is confirmed for Windows x64, native Linux x86_64 and the Linux/WSL→ARM64 Raspberry Pi node/probe/native-driver target. Keep those builds as regression gates. The next release gate is HIL workflow behavior, starting with autofocus. For the HIL-qualified direct-MC mount, retain a small-motion sanity check after hardware changes, then exercise normal supervised full-range GOTO; there is no longer a hidden 15° driver qualification cap. Profile-level sky-safety may still be enabled by the operator.
 
-# Validation plan — v0.2.10.51
+# Validation plan — v0.2.10.53
 
 This release is primarily a build/HIL qualification checkpoint.
 
@@ -203,7 +203,7 @@ Minimum acceptable supervised use:
 
 Do not mark unattended production PASS until reliable event replay, idempotency, durable science storage, production guiding/session recovery, security/auth/audit, weather/roof/power safety, driver crash isolation and public conformance have been implemented and tested.
 
-## Sky Map MVP — v0.2.10.51
+## Sky Map MVP — v0.2.10.52
 
 - Confirm `Imaging / Sky Map` appears in the left workspace on Windows, Linux and Raspberry Pi GUI builds.
 - With a configured site, select a bright star and compare displayed Alt/Az against an independent reference.
@@ -211,4 +211,22 @@ Do not mark unattended production PASS until reliable event replay, idempotency,
 - Confirm double-click GOTO can be aborted and Park/Unpark are routed through the active controller.
 - After a plate solve, confirm the green solved marker follows the solved J2000 center.
 - Confirm the red telescope marker updates from mount state and approximate FOV changes when the optical profile changes.
-- Confirm `Use in Scheduler` copies the selected J2000 coordinate exactly.
+- ✅ Running-GUI confirmation: catalogue-object `Use in Scheduler` copies the selected J2000 coordinate successfully.
+- Click an empty point inside the horizon circle; confirm a yellow `Target` marker appears and RA/DEC + Alt/Az are plausible.
+- Confirm **Slew** and double-click GOTO use that free-point coordinate, and that Abort still works.
+- Confirm free-point `Use in Scheduler` copies the same J2000 coordinate.
+- Confirm clicks outside the horizon circle do not create targets and nearby catalogue objects keep click priority.
+
+## Sky Map framing / Stellarium Remote Control — v0.2.10.53
+
+- [ ] Solve a real main-camera frame and confirm `lastSolvedFrame` center equals the solve center.
+- [ ] Confirm measured width/height equals solver scale × actual solved pixel dimensions.
+- [ ] Rotate the camera physically and verify Sky Map PA sign/orientation against the solved image.
+- [ ] Verify predicted main and guide footprint sizes against the optical profile.
+- [ ] Toggle solved/main/guide layers and labels independently.
+- [ ] Verify Scheduler mosaic columns/rows/overlap/rotation render correctly and remain centered on the selected target.
+- [ ] Verify Sky Map main PA ↔ Scheduler mosaic rotation synchronization in both directions.
+- [ ] Transfer selected target/framing to Scheduler and confirm J2000 coordinates are unchanged.
+- [ ] Enable Stellarium Remote Control and export Solved, Main, Guide and Mosaic envelope footprints; compare center/size/PA.
+- [ ] Hide the Stellarium footprint and verify the TCP Telescope Control bridge continues uninterrupted.
+

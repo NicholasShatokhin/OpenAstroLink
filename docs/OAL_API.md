@@ -1,7 +1,7 @@
 # OpenAstroLink HTTP API — v0.2.10.47 reference implementation
 
 
-> **Current release:** v0.2.10.51. Native OAL drivers are default, INDI is opt-in, and the API version in `openapi.yaml` is 0.2.10.50.
+> **Current release:** v0.2.10.53. Native OAL drivers are default, INDI is opt-in, and the API version in `openapi.yaml` is 0.2.10.50.
 
 The transitional envelope remains:
 
@@ -119,3 +119,7 @@ Recenter/autofocus may be configured before the first science frame and every N 
 ## v0.2.10 camera roles and Stellarium integration
 
 `POST /api/v1/devices/connect` accepts optional `role: "main" | "guide"` for cameras. Omitting role preserves backward-compatible main-camera behavior. Guide exposures use `POST /api/v1/cameras/guide/capture` and resource `camera.guide`. `GET/POST /api/v1/integrations/stellarium` reads or configures the mount-only Stellarium TCP bridge.
+
+## Sky frame state — v0.2.10.53
+
+`GET /api/v1/state` and solve result events expose `lastSolvedFrame` for the measured main-camera solve footprint.

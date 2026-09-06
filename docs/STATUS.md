@@ -1,8 +1,17 @@
-# Status update — v0.2.10.51
+# Status update — v0.2.10.53
 
-## v0.2.10.51 — Sky Map MVP
 
-OpenAstroSuite now exposes a lightweight offline Sky Map in the left-side workspace. It renders a horizon/all-sky view from the existing observer/time coordinate path, supports bright-star/DSO search, pan/zoom, live telescope and plate-solve markers, approximate main-camera FOV, and controller-backed Slew/Sync/Abort/Park plus Scheduler target transfer. The map does not change mount geometry; direct-MC v9 remains frozen.
+## v0.2.10.53 — Sky Map camera footprints and Stellarium framing
+
+- Plate solving now publishes stateful measured `lastSolvedFrame` geometry (J2000 center, angular size, PA, solved image dimensions).
+- Sky Map renders measured solved, predicted main and predicted guide camera rectangles independently.
+- Mosaic planner overlay reuses Scheduler rows/columns/overlap/rotation; main PA is synchronized with Scheduler.
+- One selected OAL footprint can be exported to Stellarium's optional Remote Control rectangular FOV marker; Telescope Control TCP remains position/GOTO only.
+- Mount direct-MC v9 geometry was not changed.
+
+## v0.2.10.52 — Sky Map free-point targeting
+
+The offline Sky Map can now select an arbitrary visible sky position, not only catalogue entries. A click inside the horizon circle is inverted to Az/Alt and converted once to J2000 through the existing coordinate path; a yellow `Target` marker shows the selection. Slew, Sync, double-click GOTO and Scheduler transfer all use the same selected-coordinate contract. Catalogue targets retain click priority. The user has confirmed catalogue-object coordinate transfer from Sky Map into Scheduler in the running GUI. Direct-MC mount geometry v9 remains frozen and unchanged.
 
 
 **Build foundation:** Windows x64 ✅, Linux x86_64 ✅, Raspberry Pi/Linux ARM64 cross node+probe+native drivers ✅, macOS presets/bootstrap 🟡 physical build pending. Native OAL drivers are default; INDI is opt-in.
@@ -16,7 +25,7 @@ OpenAstroSuite now exposes a lightweight offline Sky Map in the left-side worksp
 - New `*-msvc-ninja` build directories avoid both the old Strawberry/GNU cache and the failed Visual Studio-generator cache.
 - `scripts/build_windows.ps1` loads `vcvars64` and discovers Ninja automatically. Raw presets require an x64 MSVC Developer Command Prompt. Raspberry Pi cross compilation on Windows remains GNU/Ninja.
 
-# OpenAstroSuite / OpenAstroLink status — v0.2.10.51
+# OpenAstroSuite / OpenAstroLink status — v0.2.10.53
 
 ### Build infrastructure follow-up — build-fix18
 
@@ -209,7 +218,7 @@ Status legend: ✅ implemented; 🟡 implemented/partially implemented but HIL o
 | RFC 9457 HTTP Problem Details | 🟡 operation problems exist; HTTP model incomplete |
 | Conformance suite | 🟡 regression checks/simulator exist; public suite incomplete |
 
-## Cross-platform build status — v0.2.10.51
+## Cross-platform build status — v0.2.10.53
 
 | Target | Status | Evidence / boundary |
 |---|---|---|

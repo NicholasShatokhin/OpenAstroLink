@@ -115,6 +115,7 @@ public:
     const CameraFrame &lastFrame() const override{return lastFrame_;}
     const CameraFrame &lastGuideFrame() const override{return lastGuideFrame_;}
     const SolveResult &lastSolve() const override{return lastSolve_;}
+    const SkyFrame &lastSolvedFrame() const override{return lastSolvedFrame_;}
 
     bool startOalServer(quint16 httpPort,bool websocketEnabled,quint16 wsPort,QString *error=nullptr) override;
     void stopOalServer() override;
@@ -189,6 +190,7 @@ private:
     std::deque<CameraFrame> previewFrameCache_;
     CameraFrame lastGuideFrame_;
     SolveResult lastSolve_;
+    SkyFrame lastSolvedFrame_;
     AutofocusEngine autofocusEngine_;
     MotionEstimator motionEstimator_;
     PlanetDetector planetDetector_;

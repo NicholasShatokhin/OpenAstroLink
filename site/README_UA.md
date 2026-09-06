@@ -1,4 +1,4 @@
-# Site snapshot — v0.2.10.51
+# Site snapshot — v0.2.10.53
 
 Містить новий розділ offline Sky Map navigation.
 
@@ -15,3 +15,8 @@ Landing page оновлено під підтверджені Windows/Linux/Rasp
 - `styles.css` — спільне адаптивне оформлення.
 
 Провайдер розгортання поки не фіксується. Каталог можна публікувати через GitHub Pages, Cloudflare Pages, Netlify, nginx або інший статичний хостинг. DNS/TLS варто налаштовувати після вибору deployment target.
+
+
+Sky Map v0.2.10.52 додає наведення у довільну видиму точку неба через той самий OAL mount/Scheduler path.
+
+Sky Map v0.2.10.53 додає measured solved camera rectangles, predicted main/guide footprints, Scheduler mosaic preview та optional Stellarium Remote Control frame export.

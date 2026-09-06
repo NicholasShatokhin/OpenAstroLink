@@ -225,6 +225,22 @@ struct SolveResult {
     std::vector<DetectedStar> imageStars;
 };
 
+// A camera/planner footprint on the celestial sphere.  The rotation follows
+// the existing OAL mosaic/SolveResult convention: the sensor X axis is rotated
+// `rotationDeg` from local celestial east toward celestial north.
+struct SkyFrame {
+    bool valid{false};
+    QString source;
+    QString label;
+    EquatorialCoord center{};
+    double widthDeg{0.0};
+    double heightDeg{0.0};
+    double rotationDeg{0.0};
+    int widthPx{0};
+    int heightPx{0};
+    bool measured{false};
+};
+
 struct MountStatus {
     ConnectionState connection{ConnectionState::Disconnected};
     EquatorialCoord coordinate{};
@@ -633,6 +649,21 @@ inline QJsonObject solveToJson(const SolveResult &s) {
             {"coordinateFrame", s.frame == EquatorialFrame::JNow ? "JNOW" : "J2000"}, {"rotationDeg", s.rotationDeg}, {"scaleArcsecPerPx", s.scaleArcsecPerPx},
             {"matchedStars", s.matchedStars}, {"rmsArcsec", s.rmsArcsec},
             {"catalog", s.catalog}, {"message", s.message}};
+}
+
+inline QJsonObject skyFrameToJson(const SkyFrame &f) {
+    return {{"valid",f.valid},{"source",f.source},{"label",f.label},
+            {"center",coordToJson(f.center)},{"widthDeg",f.widthDeg},{"heightDeg",f.heightDeg},
+            {"rotationDeg",f.rotationDeg},{"widthPx",f.widthPx},{"heightPx",f.heightPx},{"measured",f.measured}};
+}
+
+inline SkyFrame skyFrameFromJson(const QJsonObject &o) {
+    SkyFrame f;f.valid=o.value("valid").toBool(false);f.source=o.value("source").toString();f.label=o.value("label").toString();
+    const auto c=o.value("center").toObject();f.center.raDeg=c.value("raDeg").toDouble();f.center.decDeg=c.value("decDeg").toDouble();
+    f.center.frame=c.value("coordinateFrame").toString("J2000").trimmed().toUpper()=="JNOW"?EquatorialFrame::JNow:EquatorialFrame::J2000;
+    f.widthDeg=o.value("widthDeg").toDouble();f.heightDeg=o.value("heightDeg").toDouble();f.rotationDeg=o.value("rotationDeg").toDouble();
+    f.widthPx=o.value("widthPx").toInt();f.heightPx=o.value("heightPx").toInt();f.measured=o.value("measured").toBool(false);
+    return f;
 }
 
 inline QJsonObject autofocusToJson(const AutofocusResult &r) {

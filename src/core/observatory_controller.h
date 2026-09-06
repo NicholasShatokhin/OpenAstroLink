@@ -102,6 +102,7 @@ public:
     virtual const CameraFrame &lastFrame() const = 0;
     virtual const CameraFrame &lastGuideFrame() const = 0;
     virtual const SolveResult &lastSolve() const = 0;
+    virtual const SkyFrame &lastSolvedFrame() const = 0;
 
     // Available only for an embedded/local core. A remote GUI cannot rebind the
     // transport of the node it is currently using.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.51 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.53 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -379,6 +379,8 @@ if(OAS_BUILD_GUI)
         src/gui/main_window.cpp
         src/gui/sky_map_widget.h
         src/gui/sky_map_widget.cpp
+        src/gui/stellarium_remote_control_client.h
+        src/gui/stellarium_remote_control_client.cpp
         src/core/remote_observatory_controller.h
         src/core/remote_observatory_controller.cpp
     )

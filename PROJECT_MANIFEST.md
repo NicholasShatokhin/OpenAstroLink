@@ -1,11 +1,18 @@
-## v0.2.10.51
+## v0.2.10.53
 
-- Package: `0.2.10.51-sky-map-mvp`
-- Core version: `0.2.10.51`
+- Package: `0.2.10.53-sky-map-framing`
+- Core version: `0.2.10.53`
+- Adds stateful measured solved frame geometry, main/guide predicted footprints, Scheduler-synchronized mosaic planner overlay and optional Stellarium Remote Control rectangular-FOV export.
+- Direct-MC mount geometry v9 remains unchanged.
+
+## v0.2.10.52
+
+- Package: `0.2.10.52-sky-map-free-point`
+- Core version: `0.2.10.52`
 - Physical/real-host build milestones are now confirmed for Windows x64/MSVC+Ninja, native Linux x86_64 and Linux/WSL→AArch64 Raspberry Pi node/probe + native vendor-driver matrix.
 - Native OAL drivers are the default; INDI remains opt-in compatibility only.
 - Raspberry Pi 4 and Pi 5 share the generic Linux ARM64/aarch64 ABI target; legacy `rpi4-*` preset names remain compatible aliases in documentation/build workflows. Pi 5 physical runtime qualification remains pending.
-- OpenAstroSuite Sky Map MVP: offline horizon map, search, pan/zoom, telescope/solve/FOV markers and mount/Scheduler actions through `ObservatoryController`.
+- OpenAstroSuite Sky Map: offline horizon map, catalogue search, pan/zoom, telescope/solve/FOV markers and mount/Scheduler actions through `ObservatoryController`. v0.2.10.52 adds arbitrary visible-sky point selection converted to J2000, with the same Slew/Sync/double-click/Scheduler path. Catalogue-object → Scheduler transfer is confirmed in the running GUI.
 - `oal.eqdrive` v0.2.10.50 removes the temporary hidden `maxNativeGotoDeg` qualification envelope after mount coordinate model v9 HIL qualification. No mount-geometry equations, signs, Home/Park conventions or transport direction logic were changed.
 - Core/profile `maxGotoSkyDeltaDeg` (`maxGotoAxisDeltaDeg` legacy alias) remains the operator-controlled supervised sky-safety policy. Raw-axis requests retain the explicit `maxAxisDeltaDeg` mechanical guard.
 - Immediate Beta sequence: HIL autofocus, auto-exposure, scheduler, mosaic, Polar Alignment. Smart Telescope UX is deferred to OAL 1.0.
@@ -25,7 +32,7 @@
 - `scripts/build_windows.ps1` loads `vcvars64` automatically and locates Ninja from `PATH` or the Visual Studio CMake-tools installation. Raw presets should be run from an x64 MSVC Developer Command Prompt.
 - Raspberry Pi cross presets hosted on Windows remain GNU/Ninja and are unchanged.
 
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.51
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.53
 
 ## v0.2.10.49
 

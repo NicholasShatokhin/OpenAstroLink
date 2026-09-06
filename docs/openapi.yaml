@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.51
+  version: 0.2.10.53
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -401,6 +401,24 @@ components:
       required: true
       schema: { type: string }
   schemas:
+    SkyFrame:
+      type: object
+      properties:
+        valid: {type: boolean}
+        source: {type: string}
+        label: {type: string}
+        center:
+          type: object
+          properties:
+            raDeg: {type: number}
+            decDeg: {type: number}
+            coordinateFrame: {type: string, enum: [J2000, JNOW]}
+        widthDeg: {type: number}
+        heightDeg: {type: number}
+        rotationDeg: {type: number}
+        widthPx: {type: integer}
+        heightPx: {type: integer}
+        measured: {type: boolean}
     EquatorialCoord:
       type: object
       required: [raDeg, decDeg]

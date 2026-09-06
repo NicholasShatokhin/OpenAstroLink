@@ -1,7 +1,7 @@
 # OAL API — v0.2.10.25
 
 
-> **Поточний реліз:** v0.2.10.51. Native OAL drivers — default, INDI — opt-in, API version у `openapi.yaml` — 0.2.10.50.
+> **Поточний реліз:** v0.2.10.53. Native OAL drivers — default, INDI — opt-in, API version у `openapi.yaml` — 0.2.10.53.
 
 Канонічний документ: `../OAL_API.md`.
 
@@ -13,3 +13,7 @@ Node API забезпечує discovery, profile, device connect/disconnect, ope
 ## v0.2.10.25 adaptive solve
 
 `POST /api/v1/solve/adaptive` запускає асинхронну `solver.adaptive` operation з locks `camera + solver`. Node сам робить короткі експозиції, registration/stack, background normalization та retry solver. Деталі: `docs/uk/PLATE_SOLVING.md`.
+
+## Sky frame state — v0.2.10.53
+
+`GET /api/v1/state` and solve result events expose `lastSolvedFrame` for the measured main-camera solve footprint.

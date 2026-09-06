@@ -1,9 +1,26 @@
+## v0.2.10.53 — measured/planned camera footprints і Stellarium framing export
+
+- Sky Map зберігає й малює точну повернуту **last solved camera frame** з plate-solve center, pixel scale, dimensions кадру та solver PA.
+- До solve доступні незалежні predicted **main** і **guide** camera footprints з optical profile, editable PA і show/hide labels.
+- **Mosaic planner grid** використовує Scheduler columns/rows/overlap/rotation і центр selected Sky Map target; main PA Sky Map синхронізований із Scheduler mosaic rotation.
+- Target/framing переноситься у Scheduler.
+- Якщо в Stellarium увімкнено optional Remote Control plugin, OpenAstroSuite передає solved/main/guide/mosaic-envelope footprint у built-in rectangular FOV marker. Standard Telescope Control TCP лишається mount position/GOTO only.
+- Direct-MC mount geometry v9 не змінювалася.
+
+## v0.2.10.52 — наведення у довільну точку Sky Map
+
+- Offline Sky Map тепер дозволяє вибрати **довільну видиму точку неба**, а не лише catalogue objects. Click у будь-яке місце всередині horizon circle створює жовтий marker `Target`.
+- Screen position інвертується у Az/Alt і один раз переводиться у звичайну J2000 coordinate через existing `horizontalToEquatorial`. Якщо поруч є catalogue object, він має пріоритет.
+- **Slew**, double-click GOTO, **Sync** і **Use in Scheduler** використовують той самий free-point target contract. Click поза visible hemisphere ігнорується.
+- Перенесення координат catalogue object із Sky Map у Scheduler уже успішно підтверджене у працюючому GUI.
+- Mount geometry v9 не змінювалася; всі actions і далі йдуть через `ObservatoryController` та active OAL mount backend.
+
 ## v0.2.10.51 — offline Sky Map navigation MVP
 
 - У лівій області OpenAstroSuite додано workspace `Imaging / Sky Map`.
 - Sky Map повністю offline і використовує existing observer/time coordinate conversion. Є bright stars, selected Messier/DSO targets, constellation guides, pan/zoom/search, live telescope marker, solved-position marker та approximate camera FOV.
-- Click вибирає object; double-click або **Slew** викликає normal OAL GOTO через active mount backend. Sync, Abort, Park/Unpark і transfer target у Scheduler використовують той самий controller contract.
-- Direct-MC mount geometry v9 не змінена й лишається HIL-qualified. Smart Telescope UX все ще OAL 1.0 scope.
+- Catalogue-object select, double-click/Slew GOTO, Sync, Abort, Park/Unpark і transfer target у Scheduler використовують normal OAL controller contract.
+- Direct-MC mount geometry v9 не змінювалася і лишається HIL-qualified. Smart Telescope UX — scope OAL 1.0.
 
 ## v0.2.10.50 — кросплатформна build-кваліфікація та HIL-підтверджене монтування
 
@@ -70,7 +87,7 @@ Qt/OpenCV/QHY/ZWO автоматизовані там, де є детермін�
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.51 — cross-platform build-qualified native-first Beta foundation, HIL-qualified direct-MC v9 mapping без прихованого EQDrive qualification slew cap**
+**Поточний пакет: v0.2.10.53 — cross-platform build-qualified native-first Beta foundation з offline free-point Sky Map navigation і HIL-qualified direct-MC v9 mount geometry**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

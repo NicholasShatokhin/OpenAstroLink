@@ -1,11 +1,18 @@
-## v0.2.10.51
+## v0.2.10.53
 
-- Package: `0.2.10.51-sky-map-mvp`
-- Core version: `0.2.10.51`
+- Package: `0.2.10.53-sky-map-framing`
+- Core version: `0.2.10.53`
+- Додає stateful measured solved frame geometry, main/guide predicted footprints, Scheduler-synchronized mosaic planner overlay та optional Stellarium Remote Control rectangular-FOV export.
+- Direct-MC mount geometry v9 не змінена.
+
+## v0.2.10.52
+
+- Package: `0.2.10.52-sky-map-free-point`
+- Core version: `0.2.10.52`
 - Підтверджені real-host builds: Windows x64/MSVC+Ninja, native Linux x86_64 та Linux/WSL→AArch64 Raspberry Pi node/probe + native vendor-driver matrix.
 - Native OAL drivers — default; INDI лишається тільки opt-in compatibility.
 - Raspberry Pi 4 і Pi 5 використовують спільний Linux ARM64/aarch64 target; legacy `rpi4-*` назви presets лишаються сумісними. Physical Pi 5 runtime qualification ще pending.
-- OpenAstroSuite Sky Map MVP: offline horizon map, search, pan/zoom, telescope/solve/FOV markers і mount/Scheduler actions через `ObservatoryController`.
+- OpenAstroSuite Sky Map: offline horizon map, catalogue search, pan/zoom, telescope/solve/FOV markers і mount/Scheduler actions через `ObservatoryController`. v0.2.10.52 додає вибір довільної видимої точки неба з conversion у J2000 і тим самим Slew/Sync/double-click/Scheduler path. Catalogue-object → Scheduler transfer підтверджений у running GUI.
 - `oal.eqdrive` v0.2.10.50 видаляє тимчасовий прихований `maxNativeGotoDeg` qualification envelope після HIL-підтвердження coordinate model v9. Геометричні формули, signs, Home/Park та transport direction logic не змінювалися.
 - Core/profile `maxGotoSkyDeltaDeg` (`maxGotoAxisDeltaDeg` legacy alias) лишається operator-controlled supervised sky-safety policy; raw-axis request має окремий `maxAxisDeltaDeg` guard.
 - Найближча Beta: HIL autofocus, auto-exposure, scheduler, mosaic, Polar Alignment. Smart Telescope UX — OAL 1.0.
@@ -25,7 +32,7 @@
 - `scripts/build_windows.ps1` сам завантажує `vcvars64` і знаходить Ninja у `PATH` або в Visual Studio CMake tools. Сирий preset запускайте з x64 MSVC Developer Command Prompt.
 - Windows-hosted Raspberry Pi cross presets залишаються GNU/Ninja і не змінювались.
 
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.51
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.53
 
 ## v0.2.10.49
 

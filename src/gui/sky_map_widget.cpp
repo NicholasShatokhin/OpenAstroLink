@@ -27,24 +27,46 @@ SkyMapWidget::SkyMapWidget(QWidget *parent) : QWidget(parent) {
     setMinimumSize(460, 360);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
-    setToolTip("Drag to pan, mouse wheel to zoom, click to select, double-click to slew");
+    setToolTip("Drag to pan, mouse wheel to zoom, click any sky position to select, double-click to slew");
 }
 
 void SkyMapWidget::setObserver(const ObserverLocation &observer) { observer_ = observer; update(); }
 void SkyMapWidget::setUtc(const QDateTime &utc) { utc_ = utc.toUTC(); update(); }
 void SkyMapWidget::setMountCoordinate(const EquatorialCoord &coord, bool valid) { if(valid) mountCoordinate_ = coord; else mountCoordinate_.reset(); update(); }
 void SkyMapWidget::setSolvedCoordinate(const EquatorialCoord &coord, bool valid) { if(valid) solvedCoordinate_ = coord; else solvedCoordinate_.reset(); update(); }
-void SkyMapWidget::setFovDegrees(double widthDeg, double heightDeg) { fovWidthDeg_ = std::max(0.0, widthDeg); fovHeightDeg_ = std::max(0.0, heightDeg); update(); }
+void SkyMapWidget::setSolvedFrame(const SkyFrame &frame) { solvedFrame_ = frame; if(frame.valid) solvedCoordinate_ = frame.center; update(); }
+void SkyMapWidget::setMainPlannedFrame(const SkyFrame &frame) { mainPlannedFrame_ = frame; update(); }
+void SkyMapWidget::setGuidePlannedFrame(const SkyFrame &frame) { guidePlannedFrame_ = frame; update(); }
+void SkyMapWidget::setShowSolvedFrame(bool enabled) { showSolvedFrame_ = enabled; update(); }
+void SkyMapWidget::setShowMainFrame(bool enabled) { showMainFrame_ = enabled; update(); }
+void SkyMapWidget::setShowGuideFrame(bool enabled) { showGuideFrame_ = enabled; update(); }
+void SkyMapWidget::setShowFrameLabels(bool enabled) { showFrameLabels_ = enabled; update(); }
+void SkyMapWidget::setPlannerMosaic(const SkyFrame &mainFrame,int columns,int rows,double overlapPercent,bool enabled) { planner_.mainFrame=mainFrame;planner_.columns=std::max(1,columns);planner_.rows=std::max(1,rows);planner_.overlapPercent=std::clamp(overlapPercent,0.0,90.0);planner_.enabled=enabled&&mainFrame.valid;update(); }
 void SkyMapWidget::setShowLabels(bool enabled) { showLabels_ = enabled; update(); }
 void SkyMapWidget::setShowDsos(bool enabled) { showDsos_ = enabled; update(); }
 void SkyMapWidget::setShowConstellations(bool enabled) { showConstellations_ = enabled; update(); }
 
-bool SkyMapWidget::hasSelection() const { return selectedIndex_ >= 0 && selectedIndex_ < int(catalog().size()); }
-QString SkyMapWidget::selectedName() const { return hasSelection() ? catalog()[size_t(selectedIndex_)].name : QString{}; }
-QString SkyMapWidget::selectedKind() const { return hasSelection() ? catalog()[size_t(selectedIndex_)].kind : QString{}; }
-double SkyMapWidget::selectedMagnitude() const { return hasSelection() ? catalog()[size_t(selectedIndex_)].magnitude : 99.0; }
+bool SkyMapWidget::hasSelection() const { return customSelection_.has_value() || (selectedIndex_ >= 0 && selectedIndex_ < int(catalog().size())); }
+QString SkyMapWidget::selectedName() const {
+    if(customSelection_) {
+        const double raHours = customSelection_->raDeg / 15.0;
+        return QString("Sky point RA %1h Dec %2%3°")
+            .arg(raHours, 0, 'f', 3)
+            .arg(customSelection_->decDeg >= 0.0 ? "+" : "")
+            .arg(customSelection_->decDeg, 0, 'f', 2);
+    }
+    return selectedIndex_ >= 0 && selectedIndex_ < int(catalog().size()) ? catalog()[size_t(selectedIndex_)].name : QString{};
+}
+QString SkyMapWidget::selectedKind() const {
+    if(customSelection_) return "Point";
+    return selectedIndex_ >= 0 && selectedIndex_ < int(catalog().size()) ? catalog()[size_t(selectedIndex_)].kind : QString{};
+}
+double SkyMapWidget::selectedMagnitude() const {
+    return customSelection_ ? 99.0 : (selectedIndex_ >= 0 && selectedIndex_ < int(catalog().size()) ? catalog()[size_t(selectedIndex_)].magnitude : 99.0);
+}
 EquatorialCoord SkyMapWidget::selectedCoordinate() const {
-    if(!hasSelection()) return {};
+    if(customSelection_) return *customSelection_;
+    if(selectedIndex_ < 0 || selectedIndex_ >= int(catalog().size())) return {};
     const auto &o = catalog()[size_t(selectedIndex_)];
     return {o.raDeg, o.decDeg, EquatorialFrame::J2000};
 }
@@ -98,6 +120,19 @@ QPointF SkyMapWidget::projectHorizontal(const HorizontalCoord &horizontal) const
     return {c.x() + radial * std::sin(az), c.y() - radial * std::cos(az)};
 }
 
+std::optional<HorizontalCoord> SkyMapWidget::unprojectHorizontal(const QPointF &point) const {
+    const QPointF delta = point - skyCenter();
+    const double r = skyRadius();
+    if(r <= 0.0) return std::nullopt;
+    const double radial = std::hypot(delta.x(), delta.y());
+    // The navigation surface intentionally represents only the visible hemisphere.
+    if(radial > r) return std::nullopt;
+    const double altDeg = std::clamp(90.0 - 90.0 * radial / r, 0.0, 90.0);
+    double azDeg = std::atan2(delta.x(), -delta.y()) * 180.0 / kPi;
+    if(azDeg < 0.0) azDeg += 360.0;
+    return HorizontalCoord{azDeg, altDeg};
+}
+
 std::optional<int> SkyMapWidget::nearestObject(const QPointF &point, double radiusPx) const {
     const auto &objects = catalog();
     double best = radiusPx;
@@ -116,12 +151,85 @@ std::optional<int> SkyMapWidget::nearestObject(const QPointF &point, double radi
 
 void SkyMapWidget::setSelectedIndex(int index, bool emitSignal) {
     if(index < 0 || index >= int(catalog().size())) return;
+    customSelection_.reset();
     selectedIndex_ = index;
     update();
     if(emitSignal) {
         const auto &o = catalog()[size_t(index)];
         emit selectionChanged(o.name, o.raDeg, o.decDeg);
     }
+}
+
+bool SkyMapWidget::setCustomSelectionAtPoint(const QPointF &point, bool emitSignal) {
+    const auto horizontal = unprojectHorizontal(point);
+    if(!horizontal) return false;
+    customSelection_ = horizontalToEquatorial(*horizontal, observer_, EquatorialFrame::J2000, utc_);
+    selectedIndex_ = -1;
+    update();
+    if(emitSignal) emit selectionChanged(selectedName(), customSelection_->raDeg, customSelection_->decDeg);
+    return true;
+}
+
+namespace {
+EquatorialCoord tangentOffsetSky(const EquatorialCoord &center,double eastDeg,double northDeg) {
+    constexpr double D=kPi/180.0,R=180.0/kPi;
+    const auto c0=convertEquatorialFrame(center,EquatorialFrame::J2000);
+    const double ra=c0.raDeg*D,dec=c0.decDeg*D;
+    const double cx=std::cos(dec)*std::cos(ra),cy=std::cos(dec)*std::sin(ra),cz=std::sin(dec);
+    const double ex=-std::sin(ra),ey=std::cos(ra),ez=0.0;
+    const double nx=-std::sin(dec)*std::cos(ra),ny=-std::sin(dec)*std::sin(ra),nz=std::cos(dec);
+    double x=cx+std::tan(eastDeg*D)*ex+std::tan(northDeg*D)*nx;
+    double y=cy+std::tan(eastDeg*D)*ey+std::tan(northDeg*D)*ny;
+    double z=cz+std::tan(eastDeg*D)*ez+std::tan(northDeg*D)*nz;
+    const double norm=std::sqrt(x*x+y*y+z*z);x/=norm;y/=norm;z/=norm;
+    double outRa=std::atan2(y,x)*R;if(outRa<0.0)outRa+=360.0;
+    return {outRa,std::asin(std::clamp(z,-1.0,1.0))*R,EquatorialFrame::J2000};
+}
+}
+
+std::vector<EquatorialCoord> SkyMapWidget::frameCorners(const SkyFrame &frame) const {
+    std::vector<EquatorialCoord> out;if(!frame.valid||frame.widthDeg<=0.0||frame.heightDeg<=0.0)return out;
+    const double a=frame.rotationDeg*kPi/180.0,c=std::cos(a),sn=std::sin(a),hw=0.5*frame.widthDeg,hh=0.5*frame.heightDeg;
+    for(const auto &xy:std::vector<QPointF>{{-hw,-hh},{hw,-hh},{hw,hh},{-hw,hh}}) {
+        const double east=xy.x()*c-xy.y()*sn;
+        const double north=xy.x()*sn+xy.y()*c;
+        out.push_back(tangentOffsetSky(frame.center,east,north));
+    }
+    return out;
+}
+
+void SkyMapWidget::drawSkyFrame(QPainter &p,const SkyFrame &frame,const QColor &color,Qt::PenStyle style,const QString &fallbackLabel) const {
+    const auto corners=frameCorners(frame);if(corners.size()!=4)return;
+    QPainterPath clip;clip.addEllipse(skyCenter(),skyRadius(),skyRadius());p.save();p.setClipPath(clip);
+    QPolygonF poly;for(const auto &corner:corners)poly<<projectHorizontal(equatorialToHorizontal(corner,observer_,utc_));
+    p.setBrush(Qt::NoBrush);p.setPen(QPen(color,1.7,style));p.drawPolygon(poly);
+    const auto centerHorizontal=equatorialToHorizontal(frame.center,observer_,utc_);const QPointF q=projectHorizontal(centerHorizontal);
+    p.drawLine(q+QPointF(-4,0),q+QPointF(4,0));p.drawLine(q+QPointF(0,-4),q+QPointF(0,4));
+    const QString label=frame.label.isEmpty()?fallbackLabel:frame.label;
+    if(showFrameLabels_&&!label.isEmpty()) p.drawText(q+QPointF(8,14),QString("%1  %2° × %3°  PA %4°").arg(label).arg(frame.widthDeg,0,'f',2).arg(frame.heightDeg,0,'f',2).arg(frame.rotationDeg,0,'f',1));
+    p.restore();
+}
+
+std::vector<SkyFrame> SkyMapWidget::plannerTiles() const {
+    std::vector<SkyFrame> out;if(!planner_.enabled||!planner_.mainFrame.valid)return out;
+    const double frac=1.0-planner_.overlapPercent/100.0;const double stepX=planner_.mainFrame.widthDeg*frac,stepY=planner_.mainFrame.heightDeg*frac;
+    const double a=planner_.mainFrame.rotationDeg*kPi/180.0,c=std::cos(a),sn=std::sin(a);
+    for(int row=0;row<planner_.rows;++row)for(int col=0;col<planner_.columns;++col){
+        const double sx=(double(col)-0.5*double(planner_.columns-1))*stepX;
+        const double sy=(0.5*double(planner_.rows-1)-double(row))*stepY;
+        const double east=sx*c-sy*sn,north=sx*sn+sy*c;
+        SkyFrame f=planner_.mainFrame;f.source="mosaic-tile";f.label.clear();f.center=tangentOffsetSky(planner_.mainFrame.center,east,north);f.measured=false;out.push_back(f);
+    }
+    return out;
+}
+
+SkyFrame SkyMapWidget::plannerEnvelopeFrame() const {
+    SkyFrame f=planner_.mainFrame;if(!planner_.enabled||!f.valid)return {};
+    const double frac=1.0-planner_.overlapPercent/100.0;
+    f.source="mosaic-envelope";f.label="Mosaic envelope";f.measured=false;
+    f.widthDeg=f.widthDeg+(planner_.columns-1)*f.widthDeg*frac;
+    f.heightDeg=f.heightDeg+(planner_.rows-1)*f.heightDeg*frac;
+    return f;
 }
 
 void SkyMapWidget::paintEvent(QPaintEvent *) {
@@ -212,19 +320,14 @@ void SkyMapWidget::paintEvent(QPaintEvent *) {
         else { QPolygonF d; d << q + QPointF(0,-7) << q + QPointF(7,0) << q + QPointF(0,7) << q + QPointF(-7,0); p.drawPolygon(d); }
         p.drawText(q + QPointF(10,-9), label);
     };
+    drawMarker(customSelection_, QColor(255, 210, 70), "Target", true);
     drawMarker(mountCoordinate_, QColor(255, 90, 90), "Telescope", true);
     drawMarker(solvedCoordinate_, QColor(80, 230, 130), "Solved", false);
 
-    if(mountCoordinate_ && fovWidthDeg_ > 0.0 && fovHeightDeg_ > 0.0) {
-        const auto h = equatorialToHorizontal(*mountCoordinate_, observer_, utc_);
-        if(h.altDeg >= 0.0) {
-            const QPointF q = projectHorizontal(h);
-            const double pxPerDeg = r / 90.0;
-            p.setPen(QPen(QColor(255, 120, 120, 170), 1.2, Qt::DashLine));
-            p.setBrush(Qt::NoBrush);
-            p.drawEllipse(q, std::max(2.0, 0.5 * fovWidthDeg_ * pxPerDeg), std::max(2.0, 0.5 * fovHeightDeg_ * pxPerDeg));
-        }
-    }
+    if(planner_.enabled) for(const auto &tile:plannerTiles()) drawSkyFrame(p,tile,QColor(245,180,55,105),Qt::DotLine,QString());
+    if(showMainFrame_) drawSkyFrame(p,mainPlannedFrame_,QColor(70,190,255,210),Qt::DashLine,"Main planned");
+    if(showGuideFrame_) drawSkyFrame(p,guidePlannedFrame_,QColor(220,100,255,210),Qt::DotLine,"Guide planned");
+    if(showSolvedFrame_) drawSkyFrame(p,solvedFrame_,QColor(80,235,135,235),Qt::SolidLine,"Solved");
 
     p.setPen(QColor(120, 145, 170));
     p.drawText(10, height() - 12, QString("UTC %1   site %2°, %3°   zoom %4×")
@@ -254,17 +357,17 @@ void SkyMapWidget::mouseReleaseEvent(QMouseEvent *event) {
         dragging_ = false;
         if(!movedDuringDrag_) {
             if(const auto nearest = nearestObject(event->position(), 13.0)) setSelectedIndex(*nearest);
+            else setCustomSelectionAtPoint(event->position());
         }
     }
     QWidget::mouseReleaseEvent(event);
 }
 void SkyMapWidget::mouseDoubleClickEvent(QMouseEvent *event) {
     if(event->button() == Qt::LeftButton) {
-        if(const auto nearest = nearestObject(event->position(), 16.0)) {
-            setSelectedIndex(*nearest);
-            const auto &o = catalog()[size_t(*nearest)];
-            emit objectActivated(o.name, o.raDeg, o.decDeg);
-        }
+        if(const auto nearest = nearestObject(event->position(), 16.0)) setSelectedIndex(*nearest);
+        else if(!setCustomSelectionAtPoint(event->position())) { QWidget::mouseDoubleClickEvent(event); return; }
+        const auto target = selectedCoordinate();
+        emit objectActivated(selectedName(), target.raDeg, target.decDeg);
     }
     QWidget::mouseDoubleClickEvent(event);
 }

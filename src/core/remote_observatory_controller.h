@@ -90,6 +90,7 @@ public:
     const CameraFrame &lastFrame() const override{return lastFrame_;}
     const CameraFrame &lastGuideFrame() const override{return lastGuideFrame_;}
     const SolveResult &lastSolve() const override{return lastSolve_;}
+    const SkyFrame &lastSolvedFrame() const override{return lastSolvedFrame_;}
 
     bool startOalServer(quint16,bool,quint16,QString *error=nullptr) override;
     void stopOalServer() override;
@@ -136,6 +137,7 @@ private:
     CameraFrame lastFrame_;
     CameraFrame lastGuideFrame_;
     SolveResult lastSolve_;
+    SkyFrame lastSolvedFrame_;
     GuidingStatus guiding_;
     SessionStatus session_;
     ObservationPlan pendingPlan_;

@@ -1,7 +1,7 @@
 # Plate solving — adaptive urban workflow
 
 
-> **Current release:** v0.2.10.51. Adaptive/node-local plate solving remains implemented and is reused by scheduler/mosaic workflows.
+> **Current release:** v0.2.10.53. Adaptive/node-local plate solving remains implemented and is reused by scheduler/mosaic workflows.
 
 This document describes the v0.2.10.17 node-local plate-solving path intended for light-polluted sites, small sensors and mounts where a single 10–15 s exposure produces elongated stars.
 
@@ -112,3 +112,8 @@ The GUI exposes a dedicated **Adaptive base exposure** (default 1.5 s), so a lon
 ### Adaptive DSLR memory / exposure behavior (v0.2.10.32)
 
 The requested adaptive bin is an **effective solver bin**. If a camera ignores hardware binning, the node downsamples each operational frame immediately before retaining it for adaptive stacking. This prevents multiple full-resolution DSLR RGB previews from accumulating in memory. Adaptive capture also has a bounded wall-clock budget and chooses the next short exposure from background/p99/saturation/star-count quality metrics; it does not alter gain/ISO automatically.
+
+## Solved camera footprint — v0.2.10.53
+
+A successful main-camera solve now also publishes `lastSolvedFrame`. Its center is the solve center, its position angle is `SolveResult.rotationDeg`, and its angular width/height are calculated from the solver pixel scale multiplied by the actual solved image dimensions. This measured footprint is exposed in node state/events and is used by Sky Map and optional Stellarium frame export.
+

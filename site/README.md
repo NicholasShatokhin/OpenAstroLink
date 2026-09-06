@@ -1,4 +1,4 @@
-# Site snapshot — v0.2.10.51
+# Site snapshot — v0.2.10.53
 
 Includes the new offline Sky Map navigation section.
 
@@ -15,3 +15,8 @@ This directory is the initial static site for `https://openastro.link/`.
 - `styles.css` — shared responsive styling.
 
 No deployment provider is assumed yet. The directory can be published as static files by GitHub Pages, Cloudflare Pages, Netlify, nginx, or another host. DNS/TLS should be configured only after choosing the deployment target.
+
+
+Sky Map v0.2.10.52 adds arbitrary visible-sky point targeting with the same OAL mount/Scheduler path.
+
+Sky Map v0.2.10.53 adds measured solved camera rectangles, predicted main/guide footprints, Scheduler mosaic preview and optional Stellarium Remote Control frame export.

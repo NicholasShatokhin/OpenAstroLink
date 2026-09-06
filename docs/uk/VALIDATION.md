@@ -1,8 +1,8 @@
-## v0.2.10.51 validation focus
+## v0.2.10.53 validation focus
 
 Build qualification підтверджена для Windows x64, native Linux x86_64 та Linux/WSL→ARM64 Raspberry Pi node/probe/native-driver target. Ці builds лишаються regression gates. Наступний release gate — HIL workflow behavior, починаючи з autofocus. Для HIL-qualified direct-MC mount після змін заліза лишається small-motion sanity check, після чого треба тестувати звичайний supervised full-range GOTO; прихованого 15° driver qualification cap більше немає. Profile-level sky-safety оператор може залишити ввімкненим.
 
-# План валідації — v0.2.10.51
+# План валідації — v0.2.10.53
 
 Цей реліз — build/HIL qualification checkpoint.
 
@@ -51,7 +51,7 @@ Unattended production PASS не ставити до реалізації reliabl
 
 Після будь-якої зміни hardware/config зробити один small supervised sanity GOTO, а потім normal supervised full-range GOTO на representative east/west targets. Hidden 15° `maxNativeGotoDeg` driver gate у v0.2.10.50 відсутній. Якщо `maxGotoSkyDeltaDeg` у profile увімкнений/малий, це окрема user-controlled Core safety policy, а не driver limitation. Abort має реально зупинити обидві осі. Automatic meridian flip не включати в unattended PASS без окремого HIL.
 
-## Sky Map MVP — v0.2.10.51
+## Sky Map MVP — v0.2.10.52
 
 - Перевірити `Imaging / Sky Map` у лівій workspace на Windows, Linux та Raspberry Pi GUI builds.
 - З configured site вибрати яскраву зорю й порівняти Alt/Az з незалежним reference.
@@ -59,4 +59,22 @@ Unattended production PASS не ставити до реалізації reliabl
 - Double-click GOTO має abort-итися; Park/Unpark проходять через active controller.
 - Після plate solve зелений solved marker має відповідати solved J2000 center.
 - Червоний telescope marker оновлюється зі mount state, approximate FOV — зі зміною optical profile.
-- `Use in Scheduler` копіює selected J2000 coordinate без зміни.
+- ✅ Підтверджено у running GUI: catalogue-object `Use in Scheduler` успішно копіює selected J2000 coordinate.
+- Click у порожню точку всередині horizon circle має створити жовтий `Target`; RA/DEC + Alt/Az повинні бути правдоподібні.
+- **Slew** і double-click GOTO мають використовувати free-point coordinate, Abort — працювати як раніше.
+- Free-point `Use in Scheduler` має копіювати ту саму J2000 coordinate.
+- Click поза horizon circle не створює target, а nearby catalogue object має click priority.
+
+## Sky Map framing / Stellarium Remote Control — v0.2.10.53
+
+- [ ] Solve real main-camera frame і перевірити, що `lastSolvedFrame` center збігається з solve center.
+- [ ] Measured width/height мають дорівнювати solver scale × actual solved pixel dimensions.
+- [ ] Фізично повернути камеру й перевірити PA sign/orientation на Sky Map проти solved image.
+- [ ] Predicted main/guide footprint sizes мають відповідати optical profile.
+- [ ] Solved/main/guide layers і labels мають незалежно вмикатися.
+- [ ] Scheduler mosaic columns/rows/overlap/rotation мають правильно рендеритися навколо selected target.
+- [ ] Перевірити двосторонню синхронізацію Sky Map main PA ↔ Scheduler mosaic rotation.
+- [ ] Передати selected target/framing у Scheduler без зміни J2000 coordinates.
+- [ ] Увімкнути Stellarium Remote Control і передати Solved/Main/Guide/Mosaic envelope; звірити center/size/PA.
+- [ ] Hide Stellarium footprint не має переривати TCP Telescope Control bridge.
+

@@ -1,4 +1,4 @@
-## v0.2.10.51 порядок робіт
+## v0.2.10.53 порядок робіт
 
 Cross-platform build qualification більше не головний blocker: Windows x64, Linux x86_64 та Raspberry Pi/Linux ARM64 node builds підтверджені. Найближча Beta тепер вузько сфокусована:
 
@@ -10,7 +10,7 @@ Cross-platform build qualification більше не головний blocker: W
 
 Smart Telescope UX, ширша unattended-observatory automation та one-button workflows лишаються OAL 1.0 scope.
 
-# Roadmap OpenAstroLink після v0.2.10.47
+# Roadmap OpenAstroLink після v0.2.10.52
 
 Позначки: ✅ зроблено; 🟡 частково/HIL pending; ⏳ не зроблено.
 
@@ -27,6 +27,8 @@ Smart Telescope UX, ширша unattended-observatory automation та one-button
 
 ## P1
 
+- **Sky Map navigation — ✅ MVP**: v0.2.10.51 додав offline left-side map з catalogue targets, pan/zoom/search і telescope/solved/FOV overlays. v0.2.10.52 додає вибір довільної видимої точки неба з тим самим Slew/Sync/Scheduler contract. Catalogue-object → Scheduler transfer уже підтверджений у працюючому GUI; free-point UI/HIL smoke ще треба швидко перевірити. Full planetarium/Smart Telescope presentation лишається later scope.
+- **Sky Map framing — ✅ implemented / HIL pending**: measured solved rectangle, predicted main/guide footprints, Scheduler-synchronized mosaic grid та optional Stellarium Remote Control export є у v0.2.10.53. Full planetarium/Smart Telescope presentation лишається для 1.0.
 - Filter wheel, rotator, dome/roof, weather/safety, power/switch, cover/calibrator, GPS/time — ⏳.
 - ASTAP — 🟡; astrometry.net production adapter — ⏳.
 - Durable mixed-mode scheduler — 🟡 supervised DSO executor / ⏳ durable + planetary: v0.2.10.46 вже виконує slew → solve/recenter → autofocus → FITS/RAW × N і periodic recenter/autofocus; v0.2.10.47 додає planetary SER, full-frame acquisition, ROI tracking/provenance та опційний calibrated mount recenter; далі temperature focus, constraints, checkpoints/restart, meridian flip, weather/recovery. Повна модель — `SCHEDULER.md`.

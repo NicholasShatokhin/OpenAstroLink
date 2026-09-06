@@ -1,4 +1,4 @@
-## v0.2.10.51 execution order
+## v0.2.10.53 execution order
 
 Cross-platform build qualification is no longer the primary blocker: Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node builds are confirmed. The nearest Beta work is now deliberately narrow:
 
@@ -10,10 +10,11 @@ Cross-platform build qualification is no longer the primary blocker: Windows x64
 
 Smart Telescope UX, broader unattended-observatory automation and productized one-button workflows remain OAL 1.0 scope.
 
-# OpenAstroLink roadmap — implementation status after v0.2.10.51
+# OpenAstroLink roadmap — implementation status after v0.2.10.52
 
 Legend: ✅ done; 🟡 partial/HIL pending; ⏳ not done.
 
+- **Sky Map framing — ✅ implemented / HIL pending**: measured solved rectangle, predicted main/guide footprints, Scheduler-synchronized mosaic grid and optional Stellarium Remote Control export are in v0.2.10.53. Keep full planetarium/Smart Telescope presentation for 1.0.
 ## P0 — must be closed before OAL can be called a robust modern observatory protocol
 
 ### 1. Capabilities, identity and discovery — 🟡
@@ -55,7 +56,7 @@ Simulator and many structural checks exist. Build the black-box public suite for
 ## P1 — after P0 core semantics stabilize
 ### Sky Map navigation — ✅ MVP
 
-v0.2.10.51 adds the offline left-side navigation map: bright stars/selected DSOs, horizon projection, pan/zoom/search, telescope/solved/FOV overlays and controller-backed mount actions. Real-mount UI smoke remains part of Beta qualification; full planetarium/Smart Telescope presentation remains later scope.
+v0.2.10.51 introduced the offline left-side navigation map: bright stars/selected DSOs, horizon projection, pan/zoom/search, telescope/solved/FOV overlays and controller-backed mount actions. v0.2.10.52 adds arbitrary visible-sky point selection with the same Slew/Sync/Scheduler contract. Catalogue-object → Scheduler transfer is confirmed in the running GUI; free-point UI/HIL smoke remains. Full planetarium/Smart Telescope presentation remains later scope.
 
 
 ### Device profiles — ⏳

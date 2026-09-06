@@ -13,7 +13,7 @@ need(Path('src/core/observatory_controller.h'),'startStellariumServer','stellari
 need(Path('src/oal/oal_server.cpp'),'integrations/stellarium','scope","mount-position-and-goto')
 need(Path('src/node/main.cpp'),'stellarium-port','startStellariumServer')
 need(Path('src/gui/main_window.cpp'),'Stellarium Telescope Control bridge')
-need(Path('docs/STELLARIUM.md'),'`10000`','telescope position','GOTO')
+need(Path('docs/STELLARIUM.md'),'`10000`','reports active OAL mount RA/Dec','GOTO','Remote Control footprint export')
 if errs:
     print('Stellarium bridge check: FAIL'); [print(' -',x) for x in errs]; sys.exit(1)
 print('Stellarium bridge check: PASS')

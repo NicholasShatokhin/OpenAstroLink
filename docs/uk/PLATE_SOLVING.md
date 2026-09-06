@@ -1,7 +1,7 @@
 # Plate solving — адаптивний режим для міського неба
 
 
-> **Поточний реліз:** v0.2.10.51. Adaptive/node-local plate solving лишається реалізованим і використовується scheduler/mosaic workflows.
+> **Поточний реліз:** v0.2.10.53. Adaptive/node-local plate solving лишається реалізованим і використовується scheduler/mosaic workflows.
 
 Цей документ описує node-local pipeline v0.2.10.17 для міської засвітки, малих сенсорів і монтувань, де один кадр 10–15 с уже дає витягнуті зорі.
 
@@ -108,3 +108,8 @@ GUI має окрему **Adaptive base exposure** (типово 1.5 с), том
 ### Пам’ять DSLR та експозиція adaptive solve (v0.2.10.32)
 
 Запитаний adaptive bin є **ефективним bin для solver**. Якщо камера ігнорує апаратний binning, node одразу зменшує кожен operational-кадр перед збереженням його для adaptive stack. Це не дозволяє накопичувати в пам’яті кілька повнорозмірних RGB-прев’ю DSLR. Capture-фаза також має обмежений wall-clock budget, а наступна коротка витримка вибирається за фоном/p99/saturation/кількістю зір; gain/ISO автоматично не змінюється.
+
+## Solved camera footprint — v0.2.10.53
+
+Successful main-camera solve тепер також публікує `lastSolvedFrame`. Center дорівнює solve center, position angle — `SolveResult.rotationDeg`, а angular width/height обчислюються як solver pixel scale × actual solved image dimensions. Цей measured footprint доступний у node state/events і використовується Sky Map та optional Stellarium frame export.
+
