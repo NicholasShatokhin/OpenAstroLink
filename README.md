@@ -1,3 +1,17 @@
+## v0.2.10.55 — high-rate binary Live View and Dual Live
+
+- Live View capture is no longer capped at 30 FPS: `captureFpsLimit=0` means camera maximum and preview has an independent 60 FPS default.
+- Raw SER recording is acquisition-first; preview is latest-only/droppable and JPEG/UI work is moved off the acquisition path.
+- Remote preview uses binary **OALV v1** on WebSocket `/video`; JSON state/events stay on `/events`.
+- Main and guide cameras can run independent simultaneous Live View operations, with a Dual Live alignment workspace and per-camera capture/preview/drop telemetry.
+- QHY and ZWO ASI reuse native live buffers and support selectable 8/16-bit Live View transfer depth.
+- v0.2.10.54 Wi-Fi manual-slew, scene-AF and sparse auto-exposure fixes remain in this release and still require repeat HIL.
+- Direct-MC mount geometry v9 is unchanged.
+
+## v0.2.10.54 — HIL focus/exposure and direct Wi-Fi manual-slew hardening
+
+2026-09-06 HIL confirms arbitrary Sky Map GOTO and target transfer into Scheduler. Scene autofocus, still-image histogram auto-exposure and manual UDP/11880 slew now carry a dedicated reliability pass. HIL-qualified mount geometry v9 is unchanged.
+
 ## v0.2.10.53 — measured/planned camera footprints and Stellarium framing export
 
 - Sky Map stores and renders an exact rotated **last solved camera frame** from plate-solve center, pixel scale, image dimensions and solver PA.
@@ -87,7 +101,7 @@ Qt/OpenCV/QHY/ZWO are resolved where deterministic distribution is available. Ca
 - QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
 - Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
 
-**Current package: v0.2.10.53 — cross-platform build-qualified native-first Beta foundation with offline free-point Sky Map navigation and HIL-qualified direct-MC v9 mount geometry**
+**Current package: v0.2.10.55 — cross-platform build-qualified native-first Beta foundation with offline free-point Sky Map navigation and HIL-qualified direct-MC v9 mount geometry**
 
 ## v0.2.10.46 — ObservationPlan and supervised DSO executor
 

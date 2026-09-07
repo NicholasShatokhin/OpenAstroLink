@@ -1,3 +1,17 @@
+## v0.2.10.55 — high-rate binary Live View та Dual Live
+
+- Live View більше не обмежений 30 FPS: `captureFpsLimit=0` означає camera maximum, а preview має незалежний default 60 FPS.
+- Raw SER recording стоїть перед preview processing; preview latest-only/droppable, а JPEG/UI робота винесена з acquisition path.
+- Remote preview використовує binary **OALV v1** через WebSocket `/video`; JSON state/events залишаються на `/events`.
+- Main і guide cameras можуть одночасно мати незалежні Live View operations; є Dual Live alignment workspace та окремі capture/preview/drop telemetry.
+- QHY і ZWO ASI повторно використовують native live buffers і підтримують 8/16-bit Live View transfer depth.
+- Fixes v0.2.10.54 для Wi-Fi manual slew, scene AF і sparse auto-exposure включені й усе ще потребують repeat HIL.
+- Direct-MC mount geometry v9 не змінювалася.
+
+## v0.2.10.54 — HIL autofocus/exposure та hardening ручного руху direct Wi-Fi
+
+За результатами HIL 2026-09-06: free-point Sky Map GOTO і передача target у Scheduler підтверджені; scene autofocus, histogram auto-exposure та ручний UDP/11880 slew отримали окремий reliability pass. Поточна mount geometry v9 не змінювалася.
+
 ## v0.2.10.53 — measured/planned camera footprints і Stellarium framing export
 
 - Sky Map зберігає й малює точну повернуту **last solved camera frame** з plate-solve center, pixel scale, dimensions кадру та solver PA.
@@ -87,7 +101,7 @@ Qt/OpenCV/QHY/ZWO автоматизовані там, де є детермін�
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.53 — cross-platform build-qualified native-first Beta foundation з offline free-point Sky Map navigation і HIL-qualified direct-MC v9 mount geometry**
+**Поточний пакет: v0.2.10.55 — cross-platform build-qualified native-first Beta foundation з offline free-point Sky Map navigation і HIL-qualified direct-MC v9 mount geometry**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

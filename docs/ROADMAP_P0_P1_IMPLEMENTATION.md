@@ -1,4 +1,9 @@
-## v0.2.10.53 execution order
+
+### v0.2.10.55 immediate gate
+
+High-rate Live View / Dual Live HIL comes before further autofocus tuning because the same camera data plane is reused by alignment, guiding setup and planetary work. Qualification target: >60 FPS where hardware permits, independent preview throttling, zero recording drops, and simultaneous main+guide streaming.
+
+## v0.2.10.55 execution order
 
 Cross-platform build qualification is no longer the primary blocker: Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node builds are confirmed. The nearest Beta work is now deliberately narrow:
 

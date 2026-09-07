@@ -38,6 +38,8 @@ private:
     bool axisCommand(char opcode,int axis,const QByteArray &payload={},QString *error=nullptr);
     bool readAxis(int axis,qint32 &position,bool &running,bool &gotoMode,bool &initialized,QString *error=nullptr);
     bool stopAxis(int axis,QString *error=nullptr);
+    bool instantStopAxis(int axis,QString *error=nullptr);
+    bool confirmedStopAxis(int axis,int timeoutMs=700,QString *error=nullptr);
     bool waitStopped(int axis,int timeoutMs,QString *error=nullptr);
     bool gotoAxisDelta(int axis,double deltaDeg,QString *error=nullptr);
     bool setManualRate(int axis,int direction,int rateLevel,QString *error=nullptr);
@@ -66,5 +68,6 @@ private:
     bool parked_{false};
     QString alignmentSource_;
     QString homeAlignmentNote_;
+    int manualDirection1_{0}, manualDirection2_{0}, manualRate1_{0}, manualRate2_{0};
 };
 }

@@ -144,7 +144,8 @@ bool decodeNativeCameraFrame(const std::shared_ptr<OalDriverPluginLoader> &loade
     if(cvType<0){if(error)*error="Unsupported native camera pixel format";return false;}
     const size_t elem=CV_ELEM_SIZE(cvType),minStride=size_t(w)*elem,stride=native.strideBytes?size_t(native.strideBytes):minStride;
     if(stride<minStride||native.bytes.size()<qsizetype(stride*size_t(h))){if(error)*error="Native camera frame buffer is shorter than declared geometry";return false;}
-    frame.image=cv::Mat(h,w,cvType,native.bytes.data(),stride).clone();
+    frame.nativeBacking=std::move(native.bytes);
+    frame.image=cv::Mat(h,w,cvType,frame.nativeBacking.data(),stride);
     frame.id=native.frameId.isEmpty()?QString("native-%1").arg(token):native.frameId;
     frame.capturedUtc=native.capturedUnixNs>0?QDateTime::fromMSecsSinceEpoch(native.capturedUnixNs/1000000,Qt::UTC):QDateTime::currentDateTimeUtc();
     frame.exposureSec=native.exposureSec>0.0?native.exposureSec:r.exposureSec;frame.gain=int(native.gain);
@@ -180,7 +181,7 @@ bool NativeOalCamera::nativeLiveSupported() const {
     return capabilities(nullptr).value("camera").toObject().value("streaming").toObject().value("supported").toBool(false);
 }
 bool NativeOalCamera::startNativeLive(const LiveViewRequest &r,QString *error){
-    QJsonObject req{{"exposureSec",r.exposureSec},{"gain",r.gain},{"offset",r.offset},{"binX",r.binX},{"binY",r.binY},{"targetFps",r.targetFps}};
+    QJsonObject req{{"exposureSec",r.exposureSec},{"gain",r.gain},{"offset",r.offset},{"binX",r.binX},{"binY",r.binY},{"targetFps",r.captureFpsLimit>0.0?r.captureFpsLimit:r.targetFps},{"captureFpsLimit",r.captureFpsLimit},{"bitsPerSample",r.bitsPerSample}};
     if(r.roi.width>0&&r.roi.height>0)req["roi"]=QJsonObject{{"x",r.roi.x},{"y",r.roi.y},{"width",r.roi.width},{"height",r.roi.height}};
     if(!invokeOk("camera.liveStart",req,nullptr,error))return false;liveRequest_=r;return true;
 }

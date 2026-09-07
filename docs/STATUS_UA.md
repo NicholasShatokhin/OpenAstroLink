@@ -1,25 +1,15 @@
-# Оновлення стану — v0.2.10.53
+# Оновлення стану — v0.2.10.55
 
+## v0.2.10.55 — high-rate streaming / Dual Live pass
 
-## v0.2.10.53 — Sky Map camera footprints і Stellarium framing
+- ✅ Windows x64, native Linux x86_64 та Raspberry Pi ARM64 builds були qualified до цього source pass; сам v0.2.10.55 ще потребує одного physical build після пакування.
+- ✅ Sky Map arbitrary-point GOTO та Sky Map -> Scheduler HIL-підтверджені.
+- ✅ QHY still FITS, QHY native Live View, Gemini focuser motion/cancel restore та SER -> AutoStakkert HIL-підтверджені.
+- 🟡 Fixes v0.2.10.54 для Wi-Fi manual-slew reliability, scene autofocus convergence та sparse-scene auto-exposure потребують repeat HIL.
+- 🆕 Live acquisition більше не має 30 FPS cap; capture і preview limits незалежні, preview droppable, raw SER пишеться до preview work.
+- 🆕 Remote Live View використовує binary OALV v1 `/video`, JSON events залишаються на `/events`.
+- 🆕 Main і guide cameras можуть одночасно мати незалежні Live View operations з Dual Live telemetry.
+- ⏳ >=60 FPS, 5-10 хв SER без record drops та simultaneous main+guide HIL — найближчі streaming gates.
+- 🔒 Direct-MC mount geometry v9 frozen і незмінна.
 
-- Plate solve тепер публікує stateful measured `lastSolvedFrame` geometry (J2000 center, angular size, PA, solved image dimensions).
-- Sky Map окремо малює measured solved, predicted main і predicted guide camera rectangles.
-- Mosaic planner overlay використовує Scheduler rows/columns/overlap/rotation; main PA синхронізований із Scheduler.
-- Один вибраний OAL footprint можна передати в optional Stellarium Remote Control rectangular FOV marker; Telescope Control TCP лишається position/GOTO only.
-- Mount direct-MC v9 geometry не змінювалася.
-
-## v0.2.10.52 — Sky Map free-point targeting
-
-Offline Sky Map тепер дозволяє вибрати довільну видиму sky position, а не лише catalogue entries. Click усередині horizon circle інвертується у Az/Alt і один раз переводиться у J2000 через existing coordinate path; selection показується жовтим marker `Target`. Slew, Sync, double-click GOTO і transfer у Scheduler використовують той самий selected-coordinate contract. Catalogue targets мають click priority. Користувач уже підтвердив перенесення catalogue-object coordinate із Sky Map у Scheduler у працюючому GUI. Direct-MC mount geometry v9 лишається frozen і не змінена.
-
-
-**Build foundation:** Windows x64 ✅, Linux x86_64 ✅, Raspberry Pi/Linux ARM64 cross node+probe+native drivers ✅, macOS presets/bootstrap 🟡 physical build pending. Native OAL drivers — default; INDI — opt-in.
-
-**Mount:** direct-MC coordinate model v9 HIL-підтверджений і frozen. Тимчасовий driver-level 15°/`maxNativeGotoDeg` qualification gate видалений. Core/profile sky-safety лишається user-controlled; raw-axis motion має явний mechanical guard.
-
-**Наступна Beta-кваліфікація:** HIL autofocus → auto-exposure → scheduler → mosaic → Polar Alignment. Smart Telescope UX — OAL 1.0.
-
-> Канонічне українське дзеркало повного status-документа: [`docs/uk/STATUS.md`](uk/STATUS.md).
-
-Цей файл лишається короткою compatibility-точкою для старих посилань.
+Див. `RELEASE_0.2.10.55.md` та `HIGH_RATE_STREAMING.md`.

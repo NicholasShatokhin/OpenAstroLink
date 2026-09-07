@@ -1,4 +1,4 @@
-# Site snapshot — v0.2.10.53
+# Site snapshot — v0.2.10.55
 
 Містить новий розділ offline Sky Map navigation.
 

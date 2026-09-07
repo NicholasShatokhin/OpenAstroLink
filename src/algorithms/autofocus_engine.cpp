@@ -28,8 +28,8 @@ static cv::Mat grayFixed8(const cv::Mat &src) {
 
 static cv::Mat sceneCrop(const cv::Mat &src) {
     if (src.empty()) return {};
-    const int w = std::max(32, int(std::lround(src.cols * 0.78)));
-    const int h = std::max(32, int(std::lround(src.rows * 0.78)));
+    const int w = std::max(32, int(std::lround(src.cols * 0.92)));
+    const int h = std::max(32, int(std::lround(src.rows * 0.92)));
     const int x = std::max(0, (src.cols - w) / 2);
     const int y = std::max(0, (src.rows - h) / 2);
     return src(cv::Rect(x, y, std::min(w, src.cols - x), std::min(h, src.rows - y)));
@@ -39,6 +39,7 @@ struct FrameLevels {
     double p50{0.0};
     double p95{0.0};
     double p99{0.0};
+    double p995{0.0};
     double highClip{0.0};
 };
 
@@ -63,7 +64,7 @@ static FrameLevels frameLevels(const cv::Mat &src) {
         for (int i = 0; i < 256; ++i) { acc += hist[std::size_t(i)]; if (acc > target) return double(i) / 255.0; }
         return 1.0;
     };
-    out.p50 = pct(0.50); out.p95 = pct(0.95); out.p99 = pct(0.99);
+    out.p50 = pct(0.50); out.p95 = pct(0.95); out.p99 = pct(0.99); out.p995 = pct(0.995);
     out.highClip = double(hist[254] + hist[255]) / double(total);
     return out;
 }
@@ -122,17 +123,51 @@ static double sceneFocusScore(const cv::Mat &im) {
     if (std::max(f.cols, f.rows) > 1200) { const double k = 1200.0 / double(std::max(f.cols, f.rows)); cv::resize(f, f, {}, k, k, cv::INTER_AREA); }
 
     const FrameLevels lv = frameLevels(gray);
-    if (lv.p99 < 0.015 || lv.highClip > 0.20) return 0.0;
+    if (lv.p995 < 0.012 || lv.highClip > 0.30) return 0.0;
 
-    cv::Mat smooth; cv::GaussianBlur(f, smooth, {0, 0}, 0.85);
-    cv::Mat gx, gy, mag; cv::Sobel(smooth, gx, CV_32F, 1, 0, 3); cv::Sobel(smooth, gy, CV_32F, 0, 1, 3); cv::magnitude(gx, gy, mag);
-    cv::Scalar meanMag, stdMag; cv::meanStdDev(mag, meanMag, stdMag);
-    cv::Mat lap; cv::Laplacian(smooth, lap, CV_32F, 3); cv::Scalar meanLap, stdLap; cv::meanStdDev(lap, meanLap, stdLap);
+    // A global whole-frame Sobel average was too easily diluted by the dark
+    // background of a sparse daylight/Moon target (and could be dominated by a
+    // fixed window/edge).  Measure physical-scale high-frequency structure per
+    // tile, reject flat/dark tiles, and aggregate the strongest useful quarter.
+    // Exposure is fixed for the entire sweep, so this remains a true
+    // contrast-detect focus metric rather than an auto-stretched image score.
+    cv::Mat smooth; cv::GaussianBlur(f, smooth, {0, 0}, 0.90);
+    cv::Mat gx, gy, mag, lap;
+    cv::Sobel(smooth, gx, CV_32F, 1, 0, 3);
+    cv::Sobel(smooth, gy, CV_32F, 0, 1, 3);
+    cv::magnitude(gx, gy, mag);
+    cv::Laplacian(smooth, lap, CV_32F, 3);
 
-    // Tenengrad-like edge energy + Laplacian spread.  Since illumination is
-    // fixed across the focus sweep, a local maximum is meaningful; absolute
-    // score magnitude is not used as a universal threshold.
-    return 1.0e4 * (meanMag[0] + 0.55 * stdMag[0] + 0.35 * stdLap[0]);
+    constexpr int tilesX = 6, tilesY = 4;
+    std::vector<double> tileScores;
+    tileScores.reserve(tilesX * tilesY);
+    for (int ty = 0; ty < tilesY; ++ty) {
+        const int y0 = ty * smooth.rows / tilesY;
+        const int y1 = (ty + 1) * smooth.rows / tilesY;
+        for (int tx = 0; tx < tilesX; ++tx) {
+            const int x0 = tx * smooth.cols / tilesX;
+            const int x1 = (tx + 1) * smooth.cols / tilesX;
+            if (x1 - x0 < 8 || y1 - y0 < 8) continue;
+            const cv::Rect r(x0, y0, x1 - x0, y1 - y0);
+            cv::Scalar meanI, stdI, meanMag, stdMag, meanLap, stdLap;
+            cv::meanStdDev(smooth(r), meanI, stdI);
+            // Reject tiles that contain essentially no scene information. A
+            // moderately dark but structured silhouette remains eligible.
+            if (meanI[0] < 0.0035 && stdI[0] < 0.0060) continue;
+            if (meanI[0] > 0.985 && stdI[0] < 0.0100) continue;
+            cv::meanStdDev(mag(r), meanMag, stdMag);
+            cv::meanStdDev(lap(r), meanLap, stdLap);
+            const double textureWeight = std::clamp(stdI[0] / 0.020, 0.25, 1.0);
+            const double raw = meanMag[0] + 0.60 * stdMag[0] + 0.38 * stdLap[0];
+            if (raw > 0.0 && std::isfinite(raw)) tileScores.push_back(raw * textureWeight);
+        }
+    }
+    if (tileScores.empty()) return 0.0;
+    std::sort(tileScores.begin(), tileScores.end(), std::greater<double>());
+    const std::size_t keep = std::clamp<std::size_t>((tileScores.size() + 3) / 4, 2, 6);
+    double sum = 0.0;
+    for (std::size_t i = 0; i < std::min(keep, tileScores.size()); ++i) sum += tileScores[i];
+    return 1.0e4 * sum / double(std::min(keep, tileScores.size()));
 }
 
 double AutofocusEngine::score(const cv::Mat &im, AutofocusMode mode, bool autoRoi, int *detectedStars) {
@@ -178,22 +213,26 @@ std::vector<FocusSample> AutofocusEngine::scan(ICamera &cam, IFocuser &foc, cons
 }
 
 static double meterSceneExposure(ICamera &cam, AutofocusRequest &effective, const AutofocusEngine::Cancellation &cancel, const AutofocusEngine::FrameProgress &frameCb) {
-    double exposure = std::clamp(effective.exposureSec, 0.00005, 10.0);
-    for (int attempt = 0; attempt < 5; ++attempt) {
+    // Scene AF does not need a photographically pretty frame. It needs enough
+    // unsaturated structure for a repeatable contrast metric.  The old meter
+    // watched global P50/P95, so a small bright target on a black field drove
+    // 0.05 -> 0.2 -> 0.8 -> 3.2 -> 10 s even when the target was already very
+    // usable.  Meter the bright tail instead and cap acquisition latency.
+    double exposure = std::clamp(effective.exposureSec, 0.00005, 2.0);
+    for (int attempt = 0; attempt < 4; ++attempt) {
         if (cancel && cancel()) break;
         ExposureRequest req; req.exposureSec = exposure; req.gain = std::max(0, effective.gain); req.saveRaw = false;
         CameraFrame f; QString err; if (!cam.capture(req, f, &err) || f.image.empty()) break;
         if (frameCb) frameCb(f, -1);
         const FrameLevels lv = frameLevels(sceneCrop(f.image));
-        // AF wants texture with headroom, not a photographic "pretty" exposure.
-        // A p95 around 55% leaves plenty of linear range for edge measurement.
-        if (lv.highClip <= 0.01 && lv.p95 >= 0.18 && lv.p95 <= 0.82 && lv.p50 >= 0.02) break;
-        double factor = std::pow(0.55 / std::max(0.01, lv.p95), 0.78);
-        if (lv.highClip > 0.01 || lv.p99 > 0.96) factor = std::min(factor, 0.32);
-        if (lv.p95 < 0.06) factor = std::max(factor, 2.0);
-        factor = std::clamp(factor, 0.20, 4.0);
-        const double next = std::clamp(exposure * factor, 0.00005, 10.0);
-        if (std::abs(next / exposure - 1.0) < 0.08) break;
+        const double controlled = (lv.highClip > 0.006 || lv.p995 > 0.97) ? std::max(0.004, lv.p99) : std::max(0.004, lv.p995);
+        if (lv.highClip <= 0.006 && controlled >= 0.16 && controlled <= 0.88) break;
+        double factor = std::pow(0.58 / controlled, 0.62);
+        if (lv.highClip > 0.010 || lv.p995 > 0.98) factor = std::min(factor, 0.55);
+        if (controlled < 0.07) factor = std::max(factor, 1.70);
+        factor = std::clamp(factor, 0.45, 2.50);
+        const double next = std::clamp(exposure * factor, 0.00005, 2.0);
+        if (std::abs(next / exposure - 1.0) < 0.10) break;
         exposure = next;
     }
     effective.exposureSec = exposure;
@@ -234,69 +273,110 @@ AutofocusResult AutofocusEngine::run(ICamera &cam, IFocuser &foc, const Autofocu
     // is a safe failure and returns to the original focus instead of leaving the
     // focuser at the end of a blind sweep.
     if (effective.mode == AutofocusMode::Scene) {
+        // Two frames are enough to estimate repeatability for scene contrast;
+        // using the UI default of three at every point made a near-focused run
+        // need ~40 captures.  Keep the user setting for star/planet modes.
+        AutofocusRequest sceneReq = effective;
+        sceneReq.framesPerPosition = std::clamp(effective.framesPerPosition, 1, 2);
         std::vector<FocusSample> samples;
         auto sampleAt = [&](int p) -> FocusSample {
-            auto v = scan(cam, foc, effective, std::max(0, p), std::max(0, p), coarseStep, cb, cancel, frameCb);
-            if (v.empty()) return FocusSample{std::max(0, p), 0.0, 0.0, 0};
+            p = std::clamp(p, 0, std::numeric_limits<int>::max());
+            auto v = scan(cam, foc, sceneReq, p, p, 1, cb, cancel, frameCb);
+            if (v.empty()) return FocusSample{p, 0.0, 0.0, 0};
             samples.push_back(v.front()); return v.front();
         };
+        auto uncertainty = [](const FocusSample &a, const FocusSample &b) {
+            const double scale = std::max({1.0, std::abs(a.score), std::abs(b.score)});
+            return std::max(0.020 * scale, 1.6 * (a.spread + b.spread));
+        };
+        auto clearlyBetter = [&](const FocusSample &a, const FocusSample &b) {
+            return a.score > b.score + uncertainty(a, b);
+        };
+        auto clearlyWorse = [&](const FocusSample &a, const FocusSample &b) {
+            return a.score + uncertainty(a, b) < b.score;
+        };
+        auto chooseBest = [&](const FocusSample &seed) {
+            FocusSample best = seed;
+            for (const auto &s : samples) if (clearlyBetter(s, best)) best = s;
+            return best;
+        };
+        auto settleAt = [&](const FocusSample &candidate, const FocusSample &center, const QString &reason) -> AutofocusResult {
+            FocusSample chosen = candidate;
+            if (!clearlyBetter(candidate, center)) chosen = center;
+            if (!foc.moveAbsolute(chosen.position, &err) || !waitForFocuserIdle(foc, cancel, err)) return failAndRestore(err, samples);
+            if (cancel && cancel()) return cancelAndRestore(samples);
+
+            // Verify a proposed move at the final position.  If the apparent
+            // improvement does not repeat, retain the already-good starting
+            // focus rather than chasing metric noise.
+            if (chosen.position != center.position) {
+                FocusSample verify = sampleAt(chosen.position);
+                if (cancel && cancel()) return cancelAndRestore(samples);
+                if (!clearlyBetter(verify, center)) {
+                    if (!foc.moveAbsolute(center.position, &err) || !waitForFocuserIdle(foc, cancel, err)) return failAndRestore(err, samples);
+                    chosen = center;
+                    out.message = QString("Scene autofocus: candidate peak was not repeatable; retained starting focus %1 (AF exposure %2 s)").arg(center.position).arg(effective.exposureSec, 0, 'g', 5);
+                } else {
+                    chosen = verify;
+                    out.message = reason.arg(chosen.position).arg(effective.exposureSec, 0, 'g', 5);
+                }
+            } else {
+                out.message = QString("Scene autofocus: starting focus %1 is already within the repeatable local maximum; no unnecessary move (AF exposure %2 s)").arg(center.position).arg(effective.exposureSec, 0, 'g', 5);
+            }
+            out.success = true; out.bestPosition = chosen.position; out.bestScore = chosen.score; out.samples = samples;
+            return out;
+        };
+
         const int minPos = std::max(0, originalPosition - half), maxPos = originalPosition + half;
         const FocusSample center = sampleAt(originalPosition);
         if (cancel && cancel()) return cancelAndRestore(samples);
-        if (center.score <= 0.0) return failAndRestore(QString("No usable scene contrast at the starting position (AF metered exposure %1 s)").arg(effective.exposureSec, 0, 'g', 5), samples);
+        if (center.score <= 0.0) return failAndRestore(QString("No usable scene structure at the starting position (AF metered exposure %1 s)").arg(effective.exposureSec, 0, 'g', 5), samples);
 
         const FocusSample left = originalPosition - coarseStep >= minPos ? sampleAt(originalPosition - coarseStep) : center;
         const FocusSample right = originalPosition + coarseStep <= maxPos ? sampleAt(originalPosition + coarseStep) : center;
         if (cancel && cancel()) return cancelAndRestore(samples);
 
-        constexpr double meaningfulGain = 1.012; // ignore ~1% metric/noise wander
-        FocusSample best = center;
-        if (left.score > best.score * meaningfulGain) best = left;
-        if (right.score > best.score * meaningfulGain) best = right;
+        const bool leftBetter = left.position != center.position && clearlyBetter(left, center);
+        const bool rightBetter = right.position != center.position && clearlyBetter(right, center);
 
-        // If the current position is already a local maximum, keep it (or only
-        // fine-tune nearby).  This is the crucial fail-safe missing in v0.47.
-        if (best.position == center.position) {
-            const int fineHalf = std::max(fineStep * 4, coarseStep);
-            auto fine = scan(cam, foc, effective, std::max(minPos, originalPosition - fineHalf), std::min(maxPos, originalPosition + fineHalf), fineStep, cb, cancel, frameCb);
-            samples.insert(samples.end(), fine.begin(), fine.end());
-            if (cancel && cancel()) return cancelAndRestore(samples);
-            for (const auto &s : fine) if (s.score > best.score * 1.003) best = s;
-            if (!foc.moveAbsolute(best.position, &err) || !waitForFocuserIdle(foc, cancel, err)) return failAndRestore(err, samples);
-            out.success = true; out.bestPosition = best.position; out.bestScore = best.score; out.samples = samples;
-            out.message = QString("Scene autofocus: starting focus was already near the local contrast maximum; settled at %1 (AF exposure %2 s)").arg(best.position).arg(effective.exposureSec, 0, 'g', 5);
-            return out;
+        if (!leftBetter && !rightBetter) {
+            // Center is already competitive.  A compact ±2*fine refinement is
+            // enough; v0.2.10.53 scanned ±coarse at every fine step here.
+            for (int d : {-2, -1, 1, 2}) {
+                const int p = originalPosition + d * fineStep;
+                if (p >= minPos && p <= maxPos) sampleAt(p);
+                if (cancel && cancel()) return cancelAndRestore(samples);
+            }
+            const FocusSample best = chooseBest(center);
+            return settleAt(best, center, QString("Scene autofocus completed with a repeatable compact local peak at %1 (AF exposure %2 s)"));
         }
 
+        FocusSample best = leftBetter && (!rightBetter || clearlyBetter(left, right)) ? left : right;
         const int direction = best.position > originalPosition ? +1 : -1;
-        int p = best.position + direction * coarseStep;
-        int worse = 0;
-        while (p >= minPos && p <= maxPos && !(cancel && cancel())) {
-            FocusSample s = sampleAt(p);
-            if (s.score > best.score * 1.004) { best = s; worse = 0; }
-            else if (s.score < best.score * 0.996) { ++worse; }
-            else { ++worse; }
-            if (worse >= 2) break;
-            p += direction * coarseStep;
+        bool bracketed = false;
+        // At most four additional coarse probes: quick enough for daylight
+        // alignment while still able to find a peak within a useful range.
+        for (int probe = 0; probe < 4; ++probe) {
+            const int p = best.position + direction * coarseStep;
+            if (p < minPos || p > maxPos) break;
+            const FocusSample s = sampleAt(p);
+            if (cancel && cancel()) return cancelAndRestore(samples);
+            if (clearlyBetter(s, best)) { best = s; continue; }
+            if (clearlyWorse(s, best) || !clearlyBetter(s, best)) { bracketed = true; break; }
         }
-        if (cancel && cancel()) return cancelAndRestore(samples);
+        if (!bracketed) return failAndRestore(QString("Scene focus peak was not bracketed inside ±%1 steps; starting focus retained").arg(half), samples);
 
-        // A best score at the permitted boundary means the peak was never
-        // bracketed.  Do not "trust" the last position and defocus the scope.
-        if (best.position <= minPos + coarseStep / 2 || best.position >= maxPos - coarseStep / 2) {
-            return failAndRestore(QString("Scene focus peak was not bracketed inside ±%1 steps (best metric kept improving toward the boundary); increase range only if needed").arg(half), samples);
+        // Five-point refinement around the bracketed coarse best, rather than a
+        // broad eleven-point fine sweep.
+        for (int d : {-2, -1, 0, 1, 2}) {
+            const int p = best.position + d * fineStep;
+            if (p < minPos || p > maxPos) continue;
+            if (d == 0) continue; // already sampled at the coarse best
+            sampleAt(p);
+            if (cancel && cancel()) return cancelAndRestore(samples);
         }
-
-        const int fineHalf = std::max(coarseStep, fineStep * 5);
-        auto fine = scan(cam, foc, effective, std::max(minPos, best.position - fineHalf), std::min(maxPos, best.position + fineHalf), fineStep, cb, cancel, frameCb);
-        samples.insert(samples.end(), fine.begin(), fine.end());
-        if (cancel && cancel()) return cancelAndRestore(samples);
-        for (const auto &s : fine) if (s.score > best.score) best = s;
-        if (best.score < center.score * 1.008) return failAndRestore("Scene focus metric did not improve enough to justify moving away from the original focus", samples);
-        if (!foc.moveAbsolute(best.position, &err) || !waitForFocuserIdle(foc, cancel, err)) return failAndRestore(err, samples);
-        out.success = true; out.bestPosition = best.position; out.bestScore = best.score; out.samples = samples;
-        out.message = QString("Scene autofocus completed with a bracketed local contrast peak at %1 (AF exposure %2 s)").arg(best.position).arg(effective.exposureSec, 0, 'g', 5);
-        return out;
+        best = chooseBest(best);
+        return settleAt(best, center, QString("Scene autofocus completed with a bracketed repeatable local peak at %1 (AF exposure %2 s)"));
     }
 
     auto coarse = scan(cam, foc, effective, std::max(0, originalPosition - half), originalPosition + half, coarseStep, cb, cancel, frameCb);

@@ -6,7 +6,8 @@ enum CONTROL_ID {
     CONTROL_EXPOSURE = 1,
     CONTROL_GAIN = 2,
     CONTROL_OFFSET = 3,
-    CAM_COLOR = 4
+    CAM_COLOR = 4,
+    CONTROL_TRANSFERBIT = 5
 };
 static constexpr std::uint32_t QHYCCD_SUCCESS = 0;
 static constexpr std::uint32_t QHYCCD_ERROR = 0xffffffffu;
@@ -27,6 +28,7 @@ std::uint32_t GetQHYCCDParamMinMaxStep(qhyccd_handle *, CONTROL_ID, double *, do
 double GetQHYCCDParam(qhyccd_handle *, CONTROL_ID);
 std::uint32_t SetQHYCCDParam(qhyccd_handle *, CONTROL_ID, double);
 std::uint32_t SetQHYCCDBinMode(qhyccd_handle *, std::uint32_t, std::uint32_t);
+std::uint32_t SetQHYCCDBitsMode(qhyccd_handle *, std::uint32_t);
 std::uint32_t SetQHYCCDResolution(qhyccd_handle *, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
 std::uint32_t ExpQHYCCDSingleFrame(qhyccd_handle *);
 std::uint32_t GetQHYCCDMemLength(qhyccd_handle *);

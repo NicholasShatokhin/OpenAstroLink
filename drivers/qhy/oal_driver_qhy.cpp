@@ -39,6 +39,7 @@ struct CameraState {
     double lastOffset{-1.0};
     int streamMode{0};
     bool liveActive{false};
+    std::vector<unsigned char> liveBuffer;
     int healthFailures{0};
     // CFA metadata remains raw; preview debayer is performed by OAL Core and
     // can be disabled or overridden by the user. Keep this table deliberately
@@ -104,7 +105,7 @@ void closeCamera(CameraState &c){
         else if(c.streamMode==0)CancelQHYCCDExposingAndReadout(c.handle);
         CloseQHYCCD(c.handle);c.handle=nullptr;
     }
-    c.connected=false;c.liveActive=false;c.streamMode=0;c.healthFailures=0;
+    c.connected=false;c.liveActive=false;c.liveBuffer.clear();c.streamMode=0;c.healthFailures=0;
     c.sensorW=c.sensorH=c.nativeBpp=0;c.lastExposureUs=c.lastGain=c.lastOffset=-1.0;
 }
 bool openCameraMode(CameraState &c,int streamMode,std::string &err){
@@ -251,9 +252,12 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
         if(objectNumber(r,"roi","width",rv)) w=std::clamp(int(rv),1,bw-x);
         if(objectNumber(r,"roi","height",rv)) h=std::clamp(int(rv),1,bh-y);
         rc=SetQHYCCDResolution(c->handle,x,y,w,h);if(!qok(rc))return fail("QHY_ERROR",rcError("SetQHYCCDResolution(live)",rc));
+        const int requestedBits=number(r,"bitsPerSample",8)>8?16:8;
+        if(qok(IsQHYCCDControlAvailable(c->handle,CONTROL_TRANSFERBIT))){const auto bitsRc=SetQHYCCDBitsMode(c->handle,requestedBits);if(!qok(bitsRc))return fail("QHY_BITS_FAILED",rcError("SetQHYCCDBitsMode(live)",bitsRc));}
         std::string ctl;double actualExposureUs=number(r,"exposureSec",0.001)*1e6,actualGain=number(r,"gain",0),actualOffset=number(r,"offset",0);
         if(!setOptional(*c,CONTROL_EXPOSURE,actualExposureUs,ctl,&actualExposureUs)||!setOptional(*c,CONTROL_GAIN,actualGain,ctl,&actualGain)||!setOptional(*c,CONTROL_OFFSET,actualOffset,ctl,&actualOffset))return fail("QHY_CONTROL_ERROR",ctl);
         rc=BeginQHYCCDLive(c->handle);if(!qok(rc))return fail("QHY_LIVE_START_FAILED",rcError("BeginQHYCCDLive",rc));
+        const auto liveLength=GetQHYCCDMemLength(c->handle);if(liveLength)c->liveBuffer.resize(liveLength);
         c->liveActive=true;c->abortRequested=false;c->lastExposureUs=actualExposureUs;c->lastGain=actualGain;c->lastOffset=actualOffset;
         log(1,"native live stream started: exposureUs="+std::to_string(actualExposureUs)+" gain="+std::to_string(actualGain)+" bin="+std::to_string(binX)+"x"+std::to_string(binY));
         return ok("{\"state\":\"live\"}");
@@ -261,7 +265,7 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
     if(m=="camera.liveFrame"){
         std::lock_guard<std::mutex> op(c->operationMutex);if(!c->liveActive)return fail("LIVE_NOT_ACTIVE","QHY live stream is not active");
         const int timeoutMs=std::clamp(int(number(r,"timeoutMs",2000)),250,10000);const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs);
-        const auto length=GetQHYCCDMemLength(c->handle);if(!length)return fail("QHY_ERROR","GetQHYCCDMemLength returned zero in live mode");std::vector<unsigned char> bytes(length);std::uint32_t fw=0,fh=0,bpp=0,channels=0;std::uint32_t rc=QHYCCD_ERROR;
+        const auto length=GetQHYCCDMemLength(c->handle);if(!length)return fail("QHY_ERROR","GetQHYCCDMemLength returned zero in live mode");if(c->liveBuffer.size()!=length)c->liveBuffer.resize(length);auto &bytes=c->liveBuffer;std::uint32_t fw=0,fh=0,bpp=0,channels=0;std::uint32_t rc=QHYCCD_ERROR;
         while(std::chrono::steady_clock::now()<deadline&&!c->abortRequested){rc=GetQHYCCDLiveFrame(c->handle,&fw,&fh,&bpp,&channels,bytes.data());if(qok(rc))break;std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         if(c->abortRequested) return fail("CANCELLED","QHY live stream cancelled");
         if(!qok(rc)) return fail("LIVE_FRAME_TIMEOUT","QHY live stream produced no frame before timeout");
@@ -271,7 +275,7 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
     if(m=="camera.liveStop"){
         std::lock_guard<std::mutex> op(c->operationMutex);std::string err;std::string warning;
         if(c->liveActive){const auto stopRc=StopQHYCCDLive(c->handle);if(!qok(stopRc))warning=rcError("StopQHYCCDLive",stopRc);c->liveActive=false;}
-        c->abortRequested=false;
+        c->liveBuffer.clear();c->abortRequested=false;
         if(!reopenCameraMode(*c,0,err)){c->connected=false;event(dev,"device.disconnected","{\"reason\":\"QHY failed to restore single-frame mode after Live View\"}");return fail("QHY_SINGLE_MODE_RESTORE_FAILED",err);}
         if(!qok(SetQHYCCDBinMode(c->handle,1,1))||!qok(SetQHYCCDResolution(c->handle,0,0,c->sensorW,c->sensorH))){c->connected=false;event(dev,"device.disconnected","{\"reason\":\"QHY single-frame geometry restore failed\"}");return fail("QHY_SINGLE_MODE_RESTORE_FAILED","Could not restore QHY full-frame 1x1 geometry");}
         log(1,"native live stream stopped; single-frame mode restored"+(warning.empty()?std::string():"; warning: "+warning));return ok("{\"state\":\"single-frame\"}");

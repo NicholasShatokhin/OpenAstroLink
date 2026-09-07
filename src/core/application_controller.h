@@ -66,6 +66,7 @@ public:
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
     QString startGuideCapture(const ExposureRequest &request,QString *error=nullptr) override;
     QString startLiveView(const LiveViewRequest &request,QString *error=nullptr) override;
+    QString startGuideLiveView(const LiveViewRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     QString startAdaptiveSolve(const AdaptiveSolveRequest &request,QString *error=nullptr) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
@@ -149,6 +150,8 @@ private:
     bool ensureMountBackendSiteTime(QString *error=nullptr);
     void commitCapturedFrame(const CameraFrame &frame,bool emitFullState=true,bool verbose=true);
     void publishOperationalPreview(const CameraFrame &frame,const QString &purpose);
+    QString startLiveViewForCamera(const QString &role,const std::shared_ptr<ICamera> &camera,const LiveViewRequest &request,QString *error);
+    void publishLivePreview(const QString &role,const CameraFrame &frame,const QJsonObject &stats);
     void scheduleCanonHotplugRediscovery(quint64 generation);
     bool nativeDriverHasCachedDevice(const QString &driverId) const;
     void scheduleSessionStep();

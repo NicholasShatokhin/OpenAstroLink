@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.53
+  version: 0.2.10.55
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -208,7 +208,9 @@ paths:
       responses: { '202': { $ref: '#/components/responses/Success' } }
   /cameras/{id}/live-view:
     post:
-      summary: Start continuous node-local operational preview (cancel the returned operation to stop)
+      summary: Start high-rate Live View for camera role `main` or `guide` (cancel the returned operation to stop)
+      description: |
+        Acquisition and preview rates are independent. `captureFpsLimit: 0` means consume frames as fast as the camera/SDK can deliver them; `previewFpsLimit: 0` means preview as fast as the preview pipeline can deliver. Raw SER recording is performed in the acquisition path before droppable preview processing. Remote Live View pixels are delivered on the WebSocket `/video` path as OALV v1 binary JPEG packets; JSON events/state remain on `/events`.
       parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
       requestBody:
         content:
@@ -216,16 +218,43 @@ paths:
             schema:
               type: object
               properties:
-                exposureSec: { type: number, minimum: 0.0001, maximum: 10, default: 0.05 }
+                exposureSec: { type: number, minimum: 0.00001, maximum: 10, default: 0.05 }
                 gain: { type: integer, minimum: 0, default: 100 }
                 offset: { type: integer, minimum: 0, default: 0 }
-                binX: { type: integer, minimum: 1, maximum: 4, default: 2 }
-                binY: { type: integer, minimum: 1, maximum: 4, default: 2 }
-                targetFps: { type: number, minimum: 0.2, maximum: 30, default: 5 }
+                binX: { type: integer, minimum: 1, maximum: 4, default: 1 }
+                binY: { type: integer, minimum: 1, maximum: 4, default: 1 }
+                targetFps:
+                  type: number
+                  deprecated: true
+                  description: Legacy alias for captureFpsLimit. New clients should not use it.
+                captureFpsLimit:
+                  type: number
+                  minimum: 0
+                  maximum: 1000
+                  default: 0
+                  description: Camera acquisition limit in frames/s. Zero means camera maximum.
+                previewFpsLimit:
+                  type: number
+                  minimum: 0
+                  maximum: 240
+                  default: 60
+                  description: Independent droppable preview limit. Zero means preview as fast as possible.
+                bitsPerSample:
+                  type: integer
+                  enum: [8, 16]
+                  default: 8
+                  description: Native Live View transfer depth request. 8-bit is the high-rate default; science FITS/RAW policy is unaffected.
+                previewMaxWidth:
+                  type: integer
+                  minimum: 0
+                  maximum: 8192
+                  default: 1280
+                  description: Preview-only downscale width. Zero keeps full width. Raw/SER frames are not resized.
+                previewJpegQuality: { type: integer, minimum: 40, maximum: 95, default: 82 }
                 debayer:
                   type: boolean
                   default: false
-                  description: Preview-only software debayer. Science FITS/RAW remains unchanged.
+                  description: Preview-only software debayer. Science FITS/RAW and SER remain raw/undebayered.
                 bayerPattern:
                   type: string
                   enum: [AUTO, RGGB, BGGR, GRBG, GBRG]
@@ -234,7 +263,7 @@ paths:
                 recordSer:
                   type: boolean
                   default: false
-                  description: Record raw pre-debayer Live View frames to uncompressed SER and write a same-basename human-readable .txt metadata sidecar.
+                  description: Record every acquired pre-preview raw frame to uncompressed SER and write a same-basename metadata sidecar.
                 serPath:
                   type: string
                   description: Optional node-local SER output path; defaults under Pictures/OpenAstroLink/SER.

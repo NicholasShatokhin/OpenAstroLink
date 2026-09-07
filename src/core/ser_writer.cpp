@@ -80,8 +80,10 @@ bool SerWriter::writeSidecar(QString *error) const{
     t<<"EndUTC="<<endUtc_.toUTC().toString(Qt::ISODateWithMs)<<"\n";
     t<<"DurationSec="<<QString::number(durationSec,'f',3)<<"\n";
     t<<"Frames="<<frameCount_<<"\n";
-    t<<"TargetFPS="<<QString::number(request_.targetFps,'f',3)<<"\n";
-    t<<"MeasuredFPS="<<QString::number(actualFps,'f',3)<<"\n";
+    const double captureLimit=request_.captureFpsLimit>0.0?request_.captureFpsLimit:request_.targetFps;
+    t<<"CaptureFPSLimit="<<(captureLimit>0.0?QString::number(captureLimit,'f',3):QString("MAX"))<<"\n";
+    t<<"PreviewFPSLimit="<<(request_.previewFpsLimit>0.0?QString::number(request_.previewFpsLimit,'f',3):QString("MAX"))<<"\n";
+    t<<"MeasuredRecordFPS="<<QString::number(actualFps,'f',3)<<"\n";
     t<<"Width="<<width_<<"\nHeight="<<height_<<"\n";
     t<<"Channels="<<channels_<<"\nBitDepth="<<depthBits_<<"\nSERColorID="<<colorId_<<"\n";
     t<<"BayerEncoded="<<yn(bayerEncoded_)<<"\nBayerPattern="<<(bayerPattern_.isEmpty()?"NONE":bayerPattern_)<<"\n";
@@ -91,6 +93,8 @@ bool SerWriter::writeSidecar(QString *error) const{
     t<<"GainRequested="<<request_.gain<<"\nGainActualFirstFrame="<<actualGain_<<"\n";
     t<<"OffsetRequested="<<request_.offset<<"\nOffsetActualFirstFrame="<<actualOffset_<<"\n";
     t<<"BinRequested="<<request_.binX<<"x"<<request_.binY<<"\nBinActual="<<actualBinX_<<"x"<<actualBinY_<<"\n";
+    t<<"LiveBitsRequested="<<request_.bitsPerSample<<"\nSERDepthBits="<<depthBits_<<"\n";
+    t<<"PreviewMaxWidth="<<request_.previewMaxWidth<<"\nPreviewJpegQuality="<<request_.previewJpegQuality<<"\n";
     t<<"OpticalProfile="<<profile_.name<<"\nOpticalDesign="<<profile_.opticalDesign<<"\n";
     t<<"ApertureMm="<<QString::number(profile_.apertureMm,'f',3)<<"\n";
     t<<"FocalLengthMm="<<QString::number(profile_.focalLengthMm,'f',3)<<"\n";

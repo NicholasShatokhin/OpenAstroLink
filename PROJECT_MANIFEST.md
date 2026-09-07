@@ -1,9 +1,18 @@
-## v0.2.10.53
+## v0.2.10.55
 
-- Package: `0.2.10.53-sky-map-framing`
-- Core version: `0.2.10.53`
-- Adds stateful measured solved frame geometry, main/guide predicted footprints, Scheduler-synchronized mosaic planner overlay and optional Stellarium Remote Control rectangular-FOV export.
-- Direct-MC mount geometry v9 remains unchanged.
+- Package: `0.2.10.55-high-rate-dual-live`
+- Core version: `0.2.10.55`
+- High-rate Live View: independent capture/preview FPS (`0 = MAX`), default 60 FPS preview, 8/16-bit native transfer selection, preview-only downscale/JPEG.
+- OALV v1 binary `/video` data plane with JSON `/events` control/state separation.
+- Simultaneous main + guide Live View with independent locks and Dual Live telemetry.
+- SER recording is fed before preview work; preview is latest-only/droppable.
+- 2026-09-06 HIL confirms free-point Sky Map GOTO, Scheduler transfer, QHY Live/Still capture and basic Gemini focuser motion.
+- Direct UDP/11880 manual slew is hardened with instant-stop, retries and running/stopped verification; current axis inversion is visible in Mount-tab checkboxes.
+- Sky Map selection copies its J2000 target into the Mount tab.
+- Scene autofocus uses a fast bright-tail meter, robust tiled contrast, repeatability gating and compact refinement/final verification.
+- Still auto-exposure uses sparse-bright P99.5 control, smooth clipping response, log-space crossing bisection and gain-change reset.
+- Live-preview cache race and false bright-target detection from drawn overlays are fixed.
+- Direct-MC mount geometry v9 is unchanged.
 
 ## v0.2.10.52
 
@@ -32,7 +41,7 @@
 - `scripts/build_windows.ps1` loads `vcvars64` automatically and locates Ninja from `PATH` or the Visual Studio CMake-tools installation. Raw presets should be run from an x64 MSVC Developer Command Prompt.
 - Raspberry Pi cross presets hosted on Windows remain GNU/Ninja and are unchanged.
 
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.53
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.55
 
 ## v0.2.10.49
 

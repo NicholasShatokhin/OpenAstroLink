@@ -29,7 +29,7 @@ checks = {
     'QHY live stop not routed through abortExposure': '!camera_->backendName().startsWith("native:oal.qhy/")' in app,
     'NativeOalCamera live API exists': all(x in backend_h for x in ('nativeLiveSupported','startNativeLive','nextNativeLiveFrame','stopNativeLive')),
     'native frame decoding reused for live': 'decodeNativeCameraFrame' in backend_cpp and 'allowScienceSave' in backend_cpp,
-    'daylight safe defaults': 'liveExposure_=dspin(0.0001,10.0,0.001,4)' in gui and 'liveGain_=ispin(0,102400,0)' in gui,
+    'daylight safe defaults': 'liveExposure_=dspin(0.00001,10.0,0.001,5)' in gui and 'liveGain_=ispin(0,102400,0)' in gui,
     'white-frame guidance is quality-only': 'Valid camera frame — exposure-quality warning' in gui and 'NOT a camera or transport error' in gui,
     'remote capture forwards saveRaw': '{"saveRaw",r.saveRaw}' in remote,
     'remote capture forwards savePath': 'q["savePath"]=r.savePath' in remote,

@@ -1,4 +1,9 @@
-## Current deployment policy — v0.2.10.53
+
+## High-rate camera data plane — v0.2.10.55
+
+Live camera pixels use a recording-first pipeline and a separate binary OALV `/video` WebSocket path; normal JSON control/state remains on `/events`. Main and guide camera operations own distinct locks and can run simultaneously. Preview is latest-only/droppable; SER is fed before preview transforms. See `HIGH_RATE_STREAMING.md`.
+
+## Current deployment policy — v0.2.10.55
 
 Native OAL drivers are the primary execution path on Windows, Linux, Raspberry Pi and macOS. INDI is not part of the default runtime and is enabled only as a compatibility adapter when needed. Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node builds are now confirmed; macOS remains build-configured but physically unqualified.
 

@@ -1,8 +1,17 @@
-## v0.2.10.53
+## v0.2.10.55
 
-- Package: `0.2.10.53-sky-map-framing`
-- Core version: `0.2.10.53`
-- Додає stateful measured solved frame geometry, main/guide predicted footprints, Scheduler-synchronized mosaic planner overlay та optional Stellarium Remote Control rectangular-FOV export.
+- Package: `0.2.10.55-high-rate-dual-live`
+- Core version: `0.2.10.55`
+- High-rate Live View: independent capture/preview FPS (`0 = MAX`), default 60 FPS preview, 8/16-bit native transfer selection, preview-only downscale/JPEG.
+- OALV v1 binary `/video` data plane з окремим JSON `/events` control/state.
+- Одночасний main + guide Live View з independent locks та Dual Live telemetry.
+- SER recording отримує frame до preview work; preview latest-only/droppable.
+- HIL 2026-09-06 підтвердив free-point Sky Map GOTO, transfer у Scheduler, QHY Live/Still та базовий Gemini focuser motion.
+- Hardened direct UDP/11880 manual slew: instant-stop, retries, running/stopped verification; current axis inversion visible у Mount tab checkboxes.
+- Sky Map selection копіює J2000 target у Mount tab.
+- Scene autofocus: fast bright-tail meter, robust tiled contrast, repeatability gate, compact refinement/final verification.
+- Still auto-exposure: sparse-bright P99.5 controller, smooth clipping response, log-space crossing bisection, gain-change reset.
+- Live preview cache race та false bright-target від drawn overlays виправлені.
 - Direct-MC mount geometry v9 не змінена.
 
 ## v0.2.10.52
@@ -32,7 +41,7 @@
 - `scripts/build_windows.ps1` сам завантажує `vcvars64` і знаходить Ninja у `PATH` або в Visual Studio CMake tools. Сирий preset запускайте з x64 MSVC Developer Command Prompt.
 - Windows-hosted Raspberry Pi cross presets залишаються GNU/Ninja і не змінювались.
 
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.53
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.55
 
 ## v0.2.10.49
 

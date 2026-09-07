@@ -30,6 +30,7 @@ struct CameraState {
     ASI_IMG_TYPE liveFormat{ASI_IMG_RAW8};
     double liveExposureSec{0.0};
     double liveGain{0.0};
+    std::vector<unsigned char> liveBuffer;
     std::mutex operationMutex;
 };
 
@@ -130,7 +131,7 @@ std::string controlRange(CameraState *c, ASI_CONTROL_TYPE type, const char *unit
 bool start(void *, const char *) { return true; }
 void stop(void *) {
     std::lock_guard<std::mutex> lock(state.mutex);
-    for (auto &kv : state.cameras) if (kv.second->connected) { ASIStopExposure(kv.first); ASIStopVideoCapture(kv.first); ASICloseCamera(kv.first); kv.second->connected=false; }
+    for (auto &kv : state.cameras) if (kv.second->connected) { ASIStopExposure(kv.first); ASIStopVideoCapture(kv.first); ASICloseCamera(kv.first); kv.second->connected=false; kv.second->liveBuffer.clear(); }
 }
 const char *manifest(void *) {
     return copyString(R"({"driverId":"oal.zwo.asi","name":"OpenAstroLink native ZWO ASI camera driver","version":"0.2.10.47","abiVersion":2,"threadModel":"per-device-serial","transport":"ZWO ASI SDK"})");
@@ -173,7 +174,7 @@ const char *invoke(void *, const char *device, const char *method, const char *r
     if(m=="device.disconnect") {
         c->cancelRequested=true; ASIStopExposure(c->cameraId); ASIStopVideoCapture(c->cameraId); std::lock_guard<std::mutex> guard(c->operationMutex);
         if(c->connected) ASICloseCamera(c->cameraId);
-        c->connected=false; c->liveActive=false; event(dev,"device.disconnected"); return ok();
+        c->connected=false; c->liveActive=false; c->liveBuffer.clear(); event(dev,"device.disconnected"); return ok();
     }
     if(!c->connected)return fail("DEVICE_DISCONNECTED","ZWO ASI camera is not connected");
     if(m=="camera.abortExposure") { c->cancelRequested=true; const auto rc=ASIStopExposure(c->cameraId); return (rc==ASI_SUCCESS||rc==ASI_ERROR_INVALID_SEQUENCE)?ok():fail("ASI_ERROR",errText(rc)); }
@@ -187,19 +188,20 @@ const char *invoke(void *, const char *device, const char *method, const char *r
         if(objectNumber(r,"roi","width",rv)) w=std::max(1,int(rv));
         if(objectNumber(r,"roi","height",rv)) h=std::max(1,int(rv));
         w=std::min(w,int(c->info.MaxWidth)/bin-x);h=std::min(h,int(c->info.MaxHeight)/bin-y);
-        ASI_IMG_TYPE fmt=ASI_IMG_RAW8; bool raw8=false; for(auto f:c->info.SupportedVideoFormat){if(f==ASI_IMG_END)break;if(f==ASI_IMG_RAW8){raw8=true;break;}} if(!raw8)fmt=preferredImageType(c->info,8);
+        const int requestedBits=number(r,"bitsPerSample",8)>8?16:8;ASI_IMG_TYPE fmt=preferredImageType(c->info,requestedBits);
+        if(fmt==ASI_IMG_END&&requestedBits>8)fmt=preferredImageType(c->info,8);
         if(fmt==ASI_IMG_END)return fail("UNSUPPORTED_PIXEL_FORMAT","No ASI format available for Live View");
         auto rc=ASISetROIFormat(c->cameraId,w,h,bin,fmt); if(rc!=ASI_SUCCESS)return fail("ASI_ROI_FAILED",errText(rc));
         rc=ASISetStartPos(c->cameraId,x,y); if(rc!=ASI_SUCCESS && (x||y))return fail("ASI_ROI_FAILED",errText(rc));
         std::string e; const double expSec=std::max(0.000001,number(r,"exposureSec",0.001)); const long expUs=long(std::llround(expSec*1e6));
         const long gain=long(number(r,"gain",0)); if(!setControl(c->cameraId,ASI_EXPOSURE,expUs,e)||!setControl(c->cameraId,ASI_GAIN,gain,e))return fail("ASI_CONTROL_FAILED",e);
         rc=ASIStartVideoCapture(c->cameraId); if(rc!=ASI_SUCCESS)return fail("ASI_LIVE_START_FAILED",errText(rc));
-        c->liveActive=true;c->liveWidth=w;c->liveHeight=h;c->liveFormat=fmt;c->liveExposureSec=expSec;c->liveGain=gain;
+        c->liveActive=true;c->liveWidth=w;c->liveHeight=h;c->liveFormat=fmt;c->liveExposureSec=expSec;c->liveGain=gain;const int bytesPerPixel=fmt==ASI_IMG_RGB24?3:(fmt==ASI_IMG_RAW16?2:1);c->liveBuffer.resize(std::size_t(w)*std::size_t(h)*std::size_t(bytesPerPixel));
         return ok("{\"state\":\"live\"}");
     }
     if(m=="camera.liveFrame") {
         std::lock_guard<std::mutex> guard(c->operationMutex); if(!c->liveActive)return fail("LIVE_NOT_ACTIVE","ASI Live View is not active");
-        const int bytesPerPixel=c->liveFormat==ASI_IMG_RGB24?3:(c->liveFormat==ASI_IMG_RAW16?2:1); const long bytes=long(c->liveWidth)*long(c->liveHeight)*bytesPerPixel; std::vector<unsigned char> buffer; buffer.resize(static_cast<std::size_t>(bytes));
+        const int bytesPerPixel=c->liveFormat==ASI_IMG_RGB24?3:(c->liveFormat==ASI_IMG_RAW16?2:1); const long bytes=long(c->liveWidth)*long(c->liveHeight)*bytesPerPixel;if(c->liveBuffer.size()!=static_cast<std::size_t>(bytes))c->liveBuffer.resize(static_cast<std::size_t>(bytes));auto &buffer=c->liveBuffer;
         const int timeoutMs=std::clamp(int(number(r,"timeoutMs",2000)),100,10000); const auto rc=ASIGetVideoData(c->cameraId,buffer.data(),bytes,timeoutMs); if(rc!=ASI_SUCCESS)return fail("LIVE_FRAME_TIMEOUT",errText(rc));
         const auto ns=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); const std::string frameId="zwo-live-"+std::to_string(c->cameraId)+"-"+std::to_string(ns);
         std::uint32_t pf=OAL_PIXEL_UNKNOWN; std::uint32_t channels=1,bits=8; if(c->liveFormat==ASI_IMG_RGB24){pf=OAL_PIXEL_RGB8;channels=3;} else if(c->liveFormat==ASI_IMG_RAW16){pf=c->info.IsColorCam?OAL_PIXEL_BAYER16:OAL_PIXEL_MONO16;bits=16;} else {pf=c->info.IsColorCam?OAL_PIXEL_BAYER8:OAL_PIXEL_MONO8;}
@@ -208,7 +210,7 @@ const char *invoke(void *, const char *device, const char *method, const char *r
         const auto token=host.publishFrame?host.publishFrame(host.hostContext,"oal.zwo.asi",dev.c_str(),&f):0;if(!token)return fail("FRAME_PUBLISH_FAILED","OAL host rejected ASI live frame");return ok("{\"frameToken\":"+std::to_string(token)+",\"frameId\":"+quote(frameId)+"}");
     }
     if(m=="camera.liveStop") {
-        std::lock_guard<std::mutex> guard(c->operationMutex); if(c->liveActive){const auto rc=ASIStopVideoCapture(c->cameraId); if(rc!=ASI_SUCCESS&&rc!=ASI_ERROR_INVALID_SEQUENCE)return fail("ASI_LIVE_STOP_FAILED",errText(rc));} c->liveActive=false;c->cancelRequested=false;return ok("{\"state\":\"single-frame\"}");
+        std::lock_guard<std::mutex> guard(c->operationMutex); if(c->liveActive){const auto rc=ASIStopVideoCapture(c->cameraId); if(rc!=ASI_SUCCESS&&rc!=ASI_ERROR_INVALID_SEQUENCE)return fail("ASI_LIVE_STOP_FAILED",errText(rc));} c->liveActive=false;c->liveBuffer.clear();c->cancelRequested=false;return ok("{\"state\":\"single-frame\"}");
     }
     if(m=="camera.capture") {
         std::lock_guard<std::mutex> guard(c->operationMutex); c->cancelRequested=false; if(c->liveActive){ASIStopVideoCapture(c->cameraId);c->liveActive=false;}

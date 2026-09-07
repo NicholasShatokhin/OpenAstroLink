@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -166,6 +167,10 @@ struct ExposureRequest {
 struct CameraFrame {
     QString id;
     cv::Mat image;
+    // Optional ownership for native-driver buffers. cv::Mat may point directly
+    // into this implicitly-shared QByteArray so the native live path avoids a
+    // second full-frame copy after the ABI host has accepted the driver frame.
+    QByteArray nativeBacking;
     QDateTime capturedUtc;
     double exposureSec{0.0};
     int gain{0};
@@ -314,7 +319,19 @@ struct LiveViewRequest {
     int offset{0};
     int binX{1};
     int binY{1};
-    double targetFps{5.0};
+    // Legacy compatibility alias. New clients should use captureFpsLimit and
+    // previewFpsLimit independently. A capture limit of 0 means: consume the
+    // native camera stream as fast as the camera/USB path can deliver it.
+    double targetFps{0.0};
+    double captureFpsLimit{0.0};
+    double previewFpsLimit{60.0};
+    int previewJpegQuality{82};
+    // Native live readout depth. 8-bit is the high-rate default for planetary
+    // preview/SER; 16-bit remains selectable when dynamic range matters more.
+    int bitsPerSample{8};
+    // Remote preview can be downscaled independently of raw acquisition/SER.
+    // 0 keeps full width; 1280 is a practical default for 60 FPS LAN preview.
+    int previewMaxWidth{1280};
     // Preview-only color reconstruction. Science frames remain untouched.
     // AUTO uses driver-published CFA metadata; explicit patterns make the
     // feature camera-vendor-neutral even when a driver cannot identify CFA.
@@ -560,7 +577,7 @@ inline QJsonObject observationBlockToJson(const ObservationBlock &b) {
     }else if(b.mode==ObservationMode::PlanetarySer){
         const auto &p=b.planetary;
         root["planetary"]=QJsonObject{{"serRuns",p.serRuns},{"durationSec",p.durationSec},{"pauseSec",p.pauseSec},{"trackingRate",trackingRateName(p.trackingRate)},
-            {"stream",QJsonObject{{"exposureSec",p.stream.exposureSec},{"gain",p.stream.gain},{"offset",p.stream.offset},{"binX",p.stream.binX},{"binY",p.stream.binY},{"targetFps",p.stream.targetFps},{"debayer",p.stream.debayer},{"bayerPattern",bayerPatternName(p.stream.bayerPattern)}}},
+            {"stream",QJsonObject{{"exposureSec",p.stream.exposureSec},{"gain",p.stream.gain},{"offset",p.stream.offset},{"binX",p.stream.binX},{"binY",p.stream.binY},{"targetFps",p.stream.targetFps},{"captureFpsLimit",p.stream.captureFpsLimit},{"previewFpsLimit",p.stream.previewFpsLimit},{"bitsPerSample",p.stream.bitsPerSample},{"previewMaxWidth",p.stream.previewMaxWidth},{"previewJpegQuality",p.stream.previewJpegQuality},{"debayer",p.stream.debayer},{"bayerPattern",bayerPatternName(p.stream.bayerPattern)}}},
             {"roi",QJsonObject{{"x",p.roiX},{"y",p.roiY},{"width",p.roiWidth},{"height",p.roiHeight}}},
             {"autofocus",QJsonObject{{"beforeFirstRun",p.autofocus.beforeFirstRun},{"everyNRuns",p.autofocus.everyNRuns},
                                       {"rangeSteps",p.autofocus.request.rangeSteps},{"coarseStep",p.autofocus.request.coarseStep},{"fineStep",p.autofocus.request.fineStep},
@@ -597,7 +614,7 @@ inline ObservationBlock observationBlockFromJson(const QJsonObject &o) {
         const auto a=d.value("autofocus").toObject();if(!a.isEmpty()){b.dso.autofocus.beforeFirstFrame=a.value("beforeFirstFrame").toBool(b.dso.autofocus.beforeFirstFrame);b.dso.autofocus.everyNFrames=std::max(0,a.value("everyNFrames").toInt(b.dso.autofocus.everyNFrames));const QString m=a.value("mode").toString("stars").toLower();b.dso.autofocus.request.mode=m=="planet"?AutofocusMode::Planet:m=="scene"?AutofocusMode::Scene:m=="bahtinov"?AutofocusMode::Bahtinov:AutofocusMode::Stars;b.dso.autofocus.request.rangeSteps=a.value("rangeSteps").toInt(b.dso.autofocus.request.rangeSteps);b.dso.autofocus.request.coarseStep=a.value("coarseStep").toInt(b.dso.autofocus.request.coarseStep);b.dso.autofocus.request.fineStep=a.value("fineStep").toInt(b.dso.autofocus.request.fineStep);b.dso.autofocus.request.framesPerPosition=a.value("framesPerPosition").toInt(b.dso.autofocus.request.framesPerPosition);b.dso.autofocus.request.settleMs=a.value("settleMs").toInt(b.dso.autofocus.request.settleMs);b.dso.autofocus.request.exposureSec=a.value("exposureSec").toDouble(b.dso.autofocus.request.exposureSec);b.dso.autofocus.request.gain=a.value("gain").toInt(b.dso.autofocus.request.gain);b.dso.autofocus.request.minStars=a.value("minStars").toInt(b.dso.autofocus.request.minStars);}
     }else if(b.mode==ObservationMode::PlanetarySer){
         const auto p=o.value("planetary").toObject();b.planetary.serRuns=std::max(1,p.value("serRuns").toInt(b.planetary.serRuns));b.planetary.durationSec=std::max(0.1,p.value("durationSec").toDouble(b.planetary.durationSec));b.planetary.pauseSec=std::max(0.0,p.value("pauseSec").toDouble(b.planetary.pauseSec));b.planetary.trackingRate=trackingRateFromString(p.value("trackingRate").toString("sidereal"));
-        const auto st=p.value("stream").toObject();if(!st.isEmpty()){b.planetary.stream.exposureSec=st.value("exposureSec").toDouble(b.planetary.stream.exposureSec);b.planetary.stream.gain=st.value("gain").toInt(b.planetary.stream.gain);b.planetary.stream.offset=st.value("offset").toInt(b.planetary.stream.offset);b.planetary.stream.binX=st.value("binX").toInt(b.planetary.stream.binX);b.planetary.stream.binY=st.value("binY").toInt(b.planetary.stream.binY);b.planetary.stream.targetFps=st.value("targetFps").toDouble(b.planetary.stream.targetFps);b.planetary.stream.debayer=st.value("debayer").toBool(b.planetary.stream.debayer);b.planetary.stream.bayerPattern=bayerPatternFromString(st.value("bayerPattern").toString("AUTO"));}
+        const auto st=p.value("stream").toObject();if(!st.isEmpty()){b.planetary.stream.exposureSec=st.value("exposureSec").toDouble(b.planetary.stream.exposureSec);b.planetary.stream.gain=st.value("gain").toInt(b.planetary.stream.gain);b.planetary.stream.offset=st.value("offset").toInt(b.planetary.stream.offset);b.planetary.stream.binX=st.value("binX").toInt(b.planetary.stream.binX);b.planetary.stream.binY=st.value("binY").toInt(b.planetary.stream.binY);b.planetary.stream.targetFps=st.value("targetFps").toDouble(b.planetary.stream.targetFps);b.planetary.stream.captureFpsLimit=st.value("captureFpsLimit").toDouble(b.planetary.stream.captureFpsLimit);b.planetary.stream.previewFpsLimit=st.value("previewFpsLimit").toDouble(b.planetary.stream.previewFpsLimit);b.planetary.stream.bitsPerSample=st.value("bitsPerSample").toInt(b.planetary.stream.bitsPerSample);b.planetary.stream.previewMaxWidth=st.value("previewMaxWidth").toInt(b.planetary.stream.previewMaxWidth);b.planetary.stream.previewJpegQuality=st.value("previewJpegQuality").toInt(b.planetary.stream.previewJpegQuality);b.planetary.stream.debayer=st.value("debayer").toBool(b.planetary.stream.debayer);b.planetary.stream.bayerPattern=bayerPatternFromString(st.value("bayerPattern").toString("AUTO"));}
         const auto roi=p.value("roi").toObject();b.planetary.roiX=roi.value("x").toInt();b.planetary.roiY=roi.value("y").toInt();b.planetary.roiWidth=roi.value("width").toInt();b.planetary.roiHeight=roi.value("height").toInt();
         const auto a=p.value("autofocus").toObject();if(!a.isEmpty()){b.planetary.autofocus.beforeFirstRun=a.value("beforeFirstRun").toBool(b.planetary.autofocus.beforeFirstRun);b.planetary.autofocus.everyNRuns=std::max(0,a.value("everyNRuns").toInt(b.planetary.autofocus.everyNRuns));b.planetary.autofocus.request.mode=AutofocusMode::Planet;b.planetary.autofocus.request.rangeSteps=a.value("rangeSteps").toInt(b.planetary.autofocus.request.rangeSteps);b.planetary.autofocus.request.coarseStep=a.value("coarseStep").toInt(b.planetary.autofocus.request.coarseStep);b.planetary.autofocus.request.fineStep=a.value("fineStep").toInt(b.planetary.autofocus.request.fineStep);b.planetary.autofocus.request.framesPerPosition=a.value("framesPerPosition").toInt(b.planetary.autofocus.request.framesPerPosition);b.planetary.autofocus.request.settleMs=a.value("settleMs").toInt(b.planetary.autofocus.request.settleMs);b.planetary.autofocus.request.exposureSec=a.value("exposureSec").toDouble(b.planetary.autofocus.request.exposureSec);b.planetary.autofocus.request.gain=a.value("gain").toInt(b.planetary.autofocus.request.gain);}
         const auto tr=p.value("tracking").toObject();if(!tr.isEmpty()){b.planetary.tracking.allowRoiShift=tr.value("allowRoiShift").toBool(b.planetary.tracking.allowRoiShift);b.planetary.tracking.roiShiftThresholdPx=std::max(4,tr.value("roiShiftThresholdPx").toInt(b.planetary.tracking.roiShiftThresholdPx));b.planetary.tracking.mountCorrections=tr.value("mountCorrections").toBool(b.planetary.tracking.mountCorrections);b.planetary.tracking.mountCorrectionThresholdPx=std::max(b.planetary.tracking.roiShiftThresholdPx+4,tr.value("mountCorrectionThresholdPx").toInt(b.planetary.tracking.mountCorrectionThresholdPx));b.planetary.tracking.autoCalibrateMount=tr.value("autoCalibrateMount").toBool(b.planetary.tracking.autoCalibrateMount);b.planetary.tracking.calibrationArcsec=std::max(1.0,tr.value("calibrationArcsec").toDouble(b.planetary.tracking.calibrationArcsec));b.planetary.tracking.maxMountCorrectionArcsec=std::max(1.0,tr.value("maxMountCorrectionArcsec").toDouble(b.planetary.tracking.maxMountCorrectionArcsec));b.planetary.tracking.mountSettleMs=std::max(0,tr.value("mountSettleMs").toInt(b.planetary.tracking.mountSettleMs));b.planetary.tracking.lostTargetFrames=std::max(1,tr.value("lostTargetFrames").toInt(b.planetary.tracking.lostTargetFrames));}

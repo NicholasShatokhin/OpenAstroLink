@@ -41,6 +41,8 @@
 #include <QFileInfo>
 #include <QSysInfo>
 #include <QStandardPaths>
+#include <QtConcurrent>
+#include <atomic>
 #include <opencv2/imgproc.hpp>
 #ifdef OAS_HAVE_POSITIONING
 #include <QGeoPositionInfoSource>
@@ -975,63 +977,63 @@ QString ApplicationController::startGuideCapture(const ExposureRequest&r,QString
     });
     emit logMessage(QString("Guide exposure operation accepted: %1 (%2 s)").arg(id).arg(r.exposureSec,0,'f',4));return id;
 }
-QString ApplicationController::startLiveView(const LiveViewRequest&request,QString*error){
-    if(!camera_){if(error)*error="No camera connected";return{};}
-    // Do not use repeated still captures as a fake live view on a DSLR: that
-    // would actuate the shutter continuously. Canon gets a dedicated EVF path
-    // in a later driver revision.
-    if(camera_->backendName().startsWith("native:oal.canon/")){if(error)*error="Canon live view requires the EDSDK EVF transport; repeated still captures are intentionally disabled to protect the shutter. Use QHY/ASI for finder alignment in this release.";return{};}
-    LiveViewRequest r=request;r.exposureSec=std::clamp(r.exposureSec,0.0001,10.0);r.gain=std::max(0,r.gain);r.offset=std::max(0,r.offset);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);r.targetFps=std::clamp(r.targetFps,0.2,30.0);if(r.roi.width<0||r.roi.height<0)r.roi={};if(r.recordSer&&r.serPath.trimmed().isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();r.serPath=QDir(base).filePath(QString("OpenAstroLink/SER/Live_%1.ser").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")));}
-    // CFA pixels must remain on their native 1x1 lattice for software debayer.
-    // Drivers that already return RGB are harmlessly passed through, but forcing
-    // 1x1 here keeps raw QHY/ZWO previews color-correct across vendors.
-    if(r.debayer&&(r.binX!=1||r.binY!=1)){r.binX=r.binY=1;emit logMessage("Live View debayer enabled: forcing 1x1 readout so the Bayer mosaic remains valid");}
-    auto cam=camera_;const QString liveCameraBackend=cam->backendName(),liveCameraName=cam->displayName();
-    const QString id=operations_.submit("camera.live-view",{"camera"},true,[this,cam,r,liveCameraBackend,liveCameraName](OperationContext&ctx){
-        OperationOutcome out;int frames=0;QElapsedTimer elapsed;elapsed.start();std::unique_ptr<SerWriter> ser;auto appendSer=[&](const CameraFrame&raw,QString&err){if(!r.recordSer)return true;if(!ser){ser=std::make_unique<SerWriter>();if(!ser->open(r.serPath,raw,profile_,r,liveCameraBackend,liveCameraName,&err))return false;const QString sidecar=ser->sidecarPath();QMetaObject::invokeMethod(this,[this,path=r.serPath,sidecar](){emit logMessage("SER recording started: "+path+"; metadata sidecar: "+sidecar);},Qt::QueuedConnection);}return ser->append(raw,&err);};auto closeSer=[&](){if(!ser)return;QString ce;const quint32 n=ser->frameCount();const QString path=ser->path(),sidecar=ser->sidecarPath();ser->close(&ce);QMetaObject::invokeMethod(this,[this,path,sidecar,n,ce](){emit logMessage(QString("SER recording finished: %1 frames → %2; metadata → %3%4").arg(n).arg(path).arg(sidecar).arg(ce.isEmpty()?QString():QString(" — WARNING: "+ce)));},Qt::QueuedConnection);ser.reset();};
-        const qint64 targetPeriodMs=qint64(std::lround(1000.0/r.targetFps));
-        // QHY has a real SDK streaming mode. Use it instead of repeated
-        // ExpQHYCCDSingleFrame/GetQHYCCDSingleFrame calls; HIL showed that
-        // short repeated single-frame cycles can wedge the QHY5III462C and
-        // poison the next normal exposure. The driver restores single-frame
-        // mode on stop.
-        auto native=std::dynamic_pointer_cast<NativeOalCamera>(cam);
-        const bool nativeStream=native&&native->nativeLiveSupported();
-        if(nativeStream){
-            QString startError;if(!native->startNativeLive(r,&startError)){out.problem={{"code","LIVE_VIEW_START_FAILED"},{"message",startError}};return out;}
-            const auto stopStream=[&](){QString stopError;if(!native->stopNativeLive(&stopError)&&!stopError.isEmpty())QMetaObject::invokeMethod(this,[this,stopError](){emit logMessage("Live View cleanup warning: "+stopError);},Qt::QueuedConnection);};
-            while(!ctx.isCancellationRequested()){
-                QElapsedTimer cycle;cycle.start();CameraFrame frame;QString err;
-                const int timeoutMs=int(std::clamp<qint64>(qint64(std::ceil(r.exposureSec*3000.0))+1000,1000,5000));
-                if(!native->nextNativeLiveFrame(frame,timeoutMs,&err)){if(ctx.isCancellationRequested()){stopStream();closeSer();out.cancelled=true;return out;}stopStream();closeSer();out.problem={{"code","LIVE_VIEW_FRAME_FAILED"},{"message",err}};return out;}
-                if(ctx.isCancellationRequested()){stopStream();closeSer();out.cancelled=true;return out;}
-                QString serError;if(!appendSer(frame,serError)){stopStream();closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}
-                QString previewNote;if(!processLivePreview(frame,r,&previewNote)){stopStream();closeSer();out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
-                frame.id="live-"+frame.id;frame.scienceFilePath.clear();++frames;
-                QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame,false,false);},Qt::BlockingQueuedConnection);
-                const double actualFps=elapsed.elapsed()>0?1000.0*double(frames)/double(elapsed.elapsed()):0.0;
-                ctx.reportProgress(0.0,"live",{{"frames",frames},{"actualFps",actualFps},{"targetFps",r.targetFps},{"frameId",frame.id},{"transport","native-stream"}});
-                qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}
-            }
+void ApplicationController::publishLivePreview(const QString&role,const CameraFrame&frame,const QJsonObject&stats){
+    CameraFrame f=frame;f.scienceFilePath.clear();QImage image=toQImage(f.image);if(image.isNull())return;
+    const int maxWidth=stats.value("previewMaxWidth").toInt(0);if(maxWidth>0&&image.width()>maxWidth)image=image.scaledToWidth(maxWidth,Qt::FastTransformation);
+    if(oalWsServer_&&oalWsServer_->hasVideoClients())oalWsServer_->offerVideoFrame(role,image,stats,stats.value("jpegQuality").toInt(82));
+    QMetaObject::invokeMethod(this,[this,role,f,image,stats](){
+        if(role=="guide")lastGuideFrame_=f;
+        else {previousFrame_=lastFrame_;lastFrame_=f;previewFrameCache_.push_back(f);while(previewFrameCache_.size()>8)previewFrameCache_.pop_front();emit frameCaptured(image,f.id);}
+        emit videoFrameCaptured(image,role,stats);
+    },Qt::QueuedConnection);
+}
+
+QString ApplicationController::startLiveViewForCamera(const QString&role,const std::shared_ptr<ICamera>&selectedCamera,const LiveViewRequest&request,QString*error){
+    if(!selectedCamera){if(error)*error=role=="guide"?"No guide camera connected":"No camera connected";return{};}
+    if(selectedCamera->backendName().startsWith("native:oal.canon/")){if(error)*error="Canon live view requires the EDSDK EVF transport; repeated still captures are intentionally disabled to protect the shutter. Use QHY/ASI for finder alignment in this release.";return{};}
+    LiveViewRequest r=request;
+    r.exposureSec=std::clamp(r.exposureSec,0.00001,10.0);r.gain=std::max(0,r.gain);r.offset=std::max(0,r.offset);r.binX=std::clamp(r.binX,1,4);r.binY=std::clamp(r.binY,1,4);
+    // targetFps is retained only for old API clients. New clients set an
+    // independent camera capture limit and a droppable preview limit.
+    if(r.captureFpsLimit<=0.0&&r.targetFps>0.0)r.captureFpsLimit=r.targetFps;
+    r.captureFpsLimit=std::clamp(r.captureFpsLimit,0.0,1000.0);r.previewFpsLimit=std::clamp(r.previewFpsLimit,0.0,240.0);r.previewJpegQuality=std::clamp(r.previewJpegQuality,40,95);r.bitsPerSample=r.bitsPerSample>8?16:8;r.previewMaxWidth=std::clamp(r.previewMaxWidth,0,8192);
+    if(r.roi.width<0||r.roi.height<0)r.roi={};
+    if(r.recordSer&&r.serPath.trimmed().isEmpty()){QString base=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);if(base.isEmpty())base=QDir::homePath();r.serPath=QDir(base).filePath(QString("OpenAstroLink/SER/Live_%1_%2.ser").arg(role,QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz")));}
+    if(r.debayer&&(r.binX!=1||r.binY!=1)){r.binX=r.binY=1;emit logMessage(QString("%1 Live View debayer enabled: forcing 1x1 readout so the Bayer mosaic remains valid").arg(role));}
+    const auto cam=selectedCamera;const QString backend=cam->backendName(),cameraName=cam->displayName();const QString resource=role=="guide"?"camera.guide":"camera";const QString kind=role=="guide"?"camera.guide.live-view":"camera.live-view";
+    const QString id=operations_.submit(kind,{resource},true,[this,cam,r,backend,cameraName,role](OperationContext&ctx){
+        OperationOutcome out;quint64 captureFrames=0,recordFrames=0,previewFrames=0,previewSkipped=0;QElapsedTimer elapsed;elapsed.start();QElapsedTimer reportTimer;reportTimer.start();std::unique_ptr<SerWriter> ser;auto previewBusy=std::make_shared<std::atomic_bool>(false);
+        auto appendSer=[&](const CameraFrame&raw,QString&err){if(!r.recordSer)return true;if(!ser){ser=std::make_unique<SerWriter>();if(!ser->open(r.serPath,raw,profile_,r,backend,cameraName,&err))return false;const QString sidecar=ser->sidecarPath();QMetaObject::invokeMethod(this,[this,path=r.serPath,sidecar,role](){emit logMessage(QString("%1 SER recording started: %2; metadata sidecar: %3").arg(role,path,sidecar));},Qt::QueuedConnection);}if(!ser->append(raw,&err))return false;++recordFrames;return true;};
+        auto closeSer=[&](){if(!ser)return;QString ce;const quint32 n=ser->frameCount();const QString path=ser->path(),sidecar=ser->sidecarPath();ser->close(&ce);QMetaObject::invokeMethod(this,[this,path,sidecar,n,ce,role](){emit logMessage(QString("%1 SER recording finished: %2 frames → %3; metadata → %4%5").arg(role).arg(n).arg(path,sidecar).arg(ce.isEmpty()?QString():QString(" — WARNING: "+ce)));},Qt::QueuedConnection);ser.reset();};
+        const qint64 capturePeriodUs=r.captureFpsLimit>0.0?qint64(std::llround(1000000.0/r.captureFpsLimit)):0;
+        const qint64 previewPeriodUs=r.previewFpsLimit>0.0?qint64(std::llround(1000000.0/r.previewFpsLimit)):0;
+        qint64 lastPreviewUs=-previewPeriodUs;
+        auto maybePreview=[&](const CameraFrame&raw)->bool{
+            const qint64 nowUs=elapsed.nsecsElapsed()/1000;const bool due=previewPeriodUs<=0||nowUs-lastPreviewUs>=previewPeriodUs;if(!due){++previewSkipped;return true;}
+            // Preview conversion/debayer/JPEG is deliberately decoupled from
+            // acquisition. One preview task per camera role may be in flight;
+            // if it is still busy, this preview frame is dropped while raw/SER
+            // capture continues at camera speed.
+            if(previewBusy->exchange(true)){++previewSkipped;return true;}
+            CameraFrame preview=raw;preview.id=QString("live-%1-%2").arg(role,preview.id);preview.scienceFilePath.clear();++previewFrames;lastPreviewUs=nowUs;
+            const double seconds=std::max(0.001,double(elapsed.elapsed())/1000.0);const double captureFps=double(captureFrames)/seconds;const double recordFps=r.recordSer?double(recordFrames)/seconds:0.0;const double previewFps=double(previewFrames)/seconds;
+            QJsonObject stats{{"frameId",preview.id},{"role",role},{"sequence",qint64(captureFrames)},{"capturedUtc",preview.capturedUtc.toString(Qt::ISODateWithMs)},{"width",preview.image.cols},{"height",preview.image.rows},{"exposureSec",preview.exposureSec},{"gain",preview.gain},{"captureFps",captureFps},{"recordFps",recordFps},{"previewFps",previewFps},{"captureFpsLimit",r.captureFpsLimit},{"previewFpsLimit",r.previewFpsLimit},{"previewDropped",qint64(previewSkipped)},{"recordDropped",0},{"jpegQuality",r.previewJpegQuality},{"bitsPerSample",r.bitsPerSample},{"previewMaxWidth",r.previewMaxWidth},{"transport","oalv1-jpeg"}};
+            QPointer<ApplicationController> self(this);QtConcurrent::run([self,preview=std::move(preview),r,role,stats,previewBusy]() mutable {QString note;if(processLivePreview(preview,r,&note)){if(self)self->publishLivePreview(role,preview,stats);}else if(self)QMetaObject::invokeMethod(self.data(),[self,note,role](){if(self)emit self->logMessage(QString("%1 Live View preview processing warning: %2").arg(role,note));},Qt::QueuedConnection);previewBusy->store(false);});return true;
+        };
+        auto report=[&](const QString&transport){if(reportTimer.elapsed()<250)return;reportTimer.restart();const double seconds=std::max(0.001,double(elapsed.elapsed())/1000.0);ctx.reportProgress(0.0,"live",{{"role",role},{"frames",qint64(captureFrames)},{"captureFps",double(captureFrames)/seconds},{"recordFps",r.recordSer?double(recordFrames)/seconds:0.0},{"previewFps",double(previewFrames)/seconds},{"captureFpsLimit",r.captureFpsLimit},{"previewFpsLimit",r.previewFpsLimit},{"previewDropped",qint64(previewSkipped)},{"recordDropped",0},{"transport",transport}});};
+        auto throttleCapture=[&](qint64 cycleUs){if(capturePeriodUs<=0)return;qint64 sleepUs=capturePeriodUs-cycleUs;while(sleepUs>0&&!ctx.isCancellationRequested()){const unsigned long slice=unsigned(std::min<qint64>(sleepUs,2000));QThread::usleep(slice);sleepUs-=slice;}};
+        auto native=std::dynamic_pointer_cast<NativeOalCamera>(cam);const bool nativeStream=native&&native->nativeLiveSupported();
+        if(nativeStream){QString startError;if(!native->startNativeLive(r,&startError)){out.problem={{"code","LIVE_VIEW_START_FAILED"},{"message",startError}};return out;}const auto stopStream=[&](){QString stopError;if(!native->stopNativeLive(&stopError)&&!stopError.isEmpty())QMetaObject::invokeMethod(this,[this,stopError,role](){emit logMessage(QString("%1 Live View cleanup warning: %2").arg(role,stopError));},Qt::QueuedConnection);};
+            while(!ctx.isCancellationRequested()){QElapsedTimer cycle;cycle.start();CameraFrame frame;QString err;const int timeoutMs=int(std::clamp<qint64>(qint64(std::ceil(r.exposureSec*3000.0))+1000,250,5000));if(!native->nextNativeLiveFrame(frame,timeoutMs,&err)){if(ctx.isCancellationRequested()){stopStream();closeSer();out.cancelled=true;return out;}stopStream();closeSer();out.problem={{"code","LIVE_VIEW_FRAME_FAILED"},{"message",err}};return out;}if(ctx.isCancellationRequested()){stopStream();closeSer();out.cancelled=true;return out;}++captureFrames;QString serError;if(!appendSer(frame,serError)){stopStream();closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}if(!maybePreview(frame)){stopStream();closeSer();return out;}report("native-stream");throttleCapture(cycle.nsecsElapsed()/1000);}
             stopStream();closeSer();out.cancelled=true;return out;
         }
-        ThreadMarshalledCamera proxy(this,cam);
-        while(!ctx.isCancellationRequested()){
-            QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.offset=r.offset;e.binX=r.binX;e.binY=r.binY;e.roi=r.roi;e.saveRaw=false;CameraFrame frame;QString err;
-            if(!proxy.capture(e,frame,&err)){if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}closeSer();out.problem={{"code","LIVE_VIEW_CAPTURE_FAILED"},{"message",err}};return out;}
-            if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}
-            QString serError;if(!appendSer(frame,serError)){closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}
-            QString previewNote;if(!processLivePreview(frame,r,&previewNote)){closeSer();out.problem={{"code","LIVE_VIEW_DEBAYER_FAILED"},{"message",previewNote}};return out;}
-            frame.id="live-"+frame.id;frame.scienceFilePath.clear();++frames;
-            QMetaObject::invokeMethod(this,[this,frame](){commitCapturedFrame(frame,false,false);},Qt::BlockingQueuedConnection);
-            const double actualFps=elapsed.elapsed()>0?1000.0*double(frames)/double(elapsed.elapsed()):0.0;
-            ctx.reportProgress(0.0,"live",{{"frames",frames},{"actualFps",actualFps},{"targetFps",r.targetFps},{"frameId",frame.id},{"transport","repeated-capture"}});
-            qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}
-        }
-        closeSer();out.cancelled=true;return out;
+        ThreadMarshalledCamera proxy(this,cam);while(!ctx.isCancellationRequested()){QElapsedTimer cycle;cycle.start();ExposureRequest e;e.exposureSec=r.exposureSec;e.gain=r.gain;e.offset=r.offset;e.binX=r.binX;e.binY=r.binY;e.roi=r.roi;e.saveRaw=false;CameraFrame frame;QString err;if(!proxy.capture(e,frame,&err)){if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}closeSer();out.problem={{"code","LIVE_VIEW_CAPTURE_FAILED"},{"message",err}};return out;}if(ctx.isCancellationRequested()){closeSer();out.cancelled=true;return out;}++captureFrames;QString serError;if(!appendSer(frame,serError)){closeSer();out.problem={{"code","SER_WRITE_FAILED"},{"message",serError}};return out;}if(!maybePreview(frame)){closeSer();return out;}report("repeated-capture");throttleCapture(cycle.nsecsElapsed()/1000);}closeSer();out.cancelled=true;return out;
     });
-    emit logMessage(QString("Live View operation accepted: %1 — %2 s, gain %3, offset %4, target %5 fps, debayer=%6 %7").arg(id).arg(r.exposureSec,0,'g',5).arg(r.gain).arg(r.offset).arg(r.targetFps,0,'g',3).arg(r.debayer?"ON":"OFF").arg(bayerPatternName(r.bayerPattern))+(r.recordSer?QString(" SER=%1").arg(r.serPath):QString()));return id;
+    emit logMessage(QString("%1 Live View accepted: %2 — exposure %3 s, capture limit %4 fps, preview limit %5 fps, gain %6, bin %7x%8, %9-bit%10").arg(role,id).arg(r.exposureSec,0,'g',5).arg(r.captureFpsLimit<=0?QString("MAX"):QString::number(r.captureFpsLimit,'g',4)).arg(r.previewFpsLimit<=0?QString("MAX"):QString::number(r.previewFpsLimit,'g',4)).arg(r.gain).arg(r.binX).arg(r.binY).arg(r.bitsPerSample).arg(r.recordSer?QString(" SER=%1").arg(r.serPath):QString()));return id;
 }
+
+QString ApplicationController::startLiveView(const LiveViewRequest&request,QString*error){return startLiveViewForCamera("main",camera_,request,error);}
+QString ApplicationController::startGuideLiveView(const LiveViewRequest&request,QString*error){return startLiveViewForCamera("guide",guideCamera_,request,error);}
 SolveResult ApplicationController::solveLast(const SolveHint&h){if(lastFrame_.image.empty()){lastSolve_={};lastSolve_.message="No captured frame";}else lastSolve_=solver_->solve(lastFrame_,profile_,h);if(auto sf=solvedSkyFrame(lastFrame_,lastSolve_);sf.valid)lastSolvedFrame_=sf;auto j=solveEventJson(lastSolve_,lastSolvedFrame_);QJsonArray stars;for(const auto&s:lastSolve_.imageStars)stars.append(QJsonObject{{"x",s.positionPx.x},{"y",s.positionPx.y},{"flux",s.flux},{"peak",s.peak},{"hfrPx",s.hfrPx}});j["imageStars"]=stars;emit solveCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("solveResult",j);emit logMessage(lastSolve_.message);emitState();return lastSolve_;}
 QString ApplicationController::startAdaptiveSolve(const AdaptiveSolveRequest&request,QString*error){
     if(!camera_){if(error)*error="No camera connected";return{};}
@@ -1110,7 +1112,7 @@ QString ApplicationController::startAutofocus(const AutofocusRequest&r,QString*e
     emit logMessage("Autofocus operation accepted: "+id);return id;
 }
 bool ApplicationController::cancelOperation(const QString&id,QString*error){
-    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningAdaptiveSolve=kind=="solver.adaptive"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";const bool runningLiveView=kind=="camera.live-view"&&before.value("state").toString()=="running";const bool runningPolar=kind=="polar.align"&&before.value("state").toString()=="running";
+    const auto before=operations_.operationJson(id);const QString kind=before.value("kind").toString();const bool runningExposure=kind=="camera.exposure"&&before.value("state").toString()=="running";const bool runningAdaptiveSolve=kind=="solver.adaptive"&&before.value("state").toString()=="running";const bool runningGuideExposure=kind=="camera.guide.exposure"&&before.value("state").toString()=="running";const bool runningLiveView=kind=="camera.live-view"&&before.value("state").toString()=="running";const bool runningGuideLiveView=kind=="camera.guide.live-view"&&before.value("state").toString()=="running";const bool runningPolar=kind=="polar.align"&&before.value("state").toString()=="running";
     if(!operations_.cancel(id,error))return false;
     if(runningExposure&&camera_&&camera_->canAbortExposure()){QString abortError;if(!camera_->abortExposure(&abortError)&&!abortError.isEmpty())emit logMessage("Exposure abort warning: "+abortError);}
     else if(runningExposure&&camera_)emit logMessage("Exposure cancellation requested; this camera backend cannot interrupt an in-progress capture, so the frame will be discarded when readout returns");
@@ -1122,6 +1124,7 @@ bool ApplicationController::cancelOperation(const QString&id,QString*error){
     // Let its worker leave the frame loop and call StopQHYCCDLive itself; using
     // CancelQHYCCDExposingAndReadout here corrupts the subsequent still mode.
     if(runningLiveView&&camera_&&!camera_->backendName().startsWith("native:oal.qhy/")&&camera_->canAbortExposure())camera_->abortExposure(nullptr);
+    if(runningGuideLiveView&&guideCamera_&&!guideCamera_->backendName().startsWith("native:oal.qhy/")&&guideCamera_->canAbortExposure())guideCamera_->abortExposure(nullptr);
     return true;
 }
 QJsonObject ApplicationController::operation(const QString&id,QString*error)const{auto o=operations_.operationJson(id);if(o.isEmpty()&&error)*error="Operation not found";return o;}
@@ -1493,37 +1496,38 @@ void ApplicationController::startCurrentPlanetarySer(){
     const auto tracking=block->planetary.tracking;const auto calibration=planetaryMountCalibration_;const TrackingRate trackingRate=block->planetary.trackingRate;const double duration=block->planetary.durationSec;const TelescopeProfile profile=profile_;const QString backend=cam->backendName(),cameraName=cam->displayName();
     QStringList resources{"camera"};if(tracking.mountCorrections&&mount)resources<<"mount";
     const QString id=operations_.submit("camera.planetary-ser",resources,true,[this,cam,mount,request,tracking,calibration,trackingRate,duration,profile,backend,cameraName,sensorW,sensorH](OperationContext&ctx)mutable{
-        OperationOutcome out;ThreadMarshalledCamera camera(this,cam);std::unique_ptr<ThreadMarshalledMount> mnt;if(mount)mnt=std::make_unique<ThreadMarshalledMount>(this,mount);PlanetDetector detector;SerWriter ser;QElapsedTimer elapsed;elapsed.start();int lost=0;quint32 frames=0;cv::Rect roi=request.roi;int lastMountFrame=-100000;
+        OperationOutcome out;ThreadMarshalledCamera camera(this,cam);std::unique_ptr<ThreadMarshalledMount> mnt;if(mount)mnt=std::make_unique<ThreadMarshalledMount>(this,mount);PlanetDetector detector;SerWriter ser;QElapsedTimer elapsed;elapsed.start();int lost=0;quint32 frames=0;cv::Rect roi=request.roi;qint64 lastMountCorrectionMs=-100000,lastAnalysisMs=-100000;quint64 previewFrames=0,previewSkipped=0;auto previewBusy=std::make_shared<std::atomic_bool>(false);const qint64 previewPeriodUs=request.previewFpsLimit>0.0?qint64(std::llround(1000000.0/request.previewFpsLimit)):0;qint64 lastPreviewUs=-previewPeriodUs;
         auto native=std::dynamic_pointer_cast<NativeOalCamera>(cam);const bool nativeStream=native&&native->nativeLiveSupported();bool streamStarted=false;
         auto startStream=[&](QString &err){if(!nativeStream)return true;request.roi=roi;if(!native->startNativeLive(request,&err))return false;streamStarted=true;return true;};
         auto stopStream=[&](){if(nativeStream&&streamStarted){QString e;native->stopNativeLive(&e);streamStarted=false;if(!e.isEmpty())QMetaObject::invokeMethod(this,[this,e](){emit logMessage("Planetary stream restart warning: "+e);},Qt::QueuedConnection);}};
         auto waitMountIdle=[&](QString &err){if(!mnt)return false;for(int i=0;i<600;++i){if(ctx.isCancellationRequested()){mnt->abortMotion(nullptr);return false;}MountStatus s;if(!mnt->status(s,&err))return false;if(!s.slewing)return true;QThread::msleep(100);}err="Planetary correction slew timeout";return false;};
         QString err;if(!startStream(err)){out.problem={{"code","PLANETARY_STREAM_START_FAILED"},{"message",err}};return out;}
-        const qint64 targetPeriodMs=qint64(std::lround(1000.0/std::clamp(request.targetFps,0.2,200.0)));
+        const double requestedCaptureFps=request.captureFpsLimit>0.0?request.captureFpsLimit:request.targetFps;const qint64 targetPeriodMs=requestedCaptureFps>0.0?qint64(std::lround(1000.0/std::clamp(requestedCaptureFps,0.2,1000.0))):0;
         while(!ctx.isCancellationRequested()&&elapsed.elapsed()<qint64(duration*1000.0)){
             QElapsedTimer cycle;cycle.start();CameraFrame raw;
             if(nativeStream){const int timeoutMs=int(std::clamp<qint64>(qint64(std::ceil(request.exposureSec*3000.0))+1000,1000,5000));if(!native->nextNativeLiveFrame(raw,timeoutMs,&err)){stopStream();ser.close(nullptr);out.problem={{"code","PLANETARY_FRAME_FAILED"},{"message",err}};return out;}}
             else {ExposureRequest er;er.exposureSec=request.exposureSec;er.gain=request.gain;er.offset=request.offset;er.binX=request.binX;er.binY=request.binY;er.roi=roi;er.saveRaw=false;if(!camera.capture(er,raw,&err)){ser.close(nullptr);out.problem={{"code","PLANETARY_FRAME_FAILED"},{"message",err}};return out;}}
             if(!ser.isOpen()){request.roi=roi;if(!ser.open(request.serPath,raw,profile,request,backend,cameraName,&err)){stopStream();out.problem={{"code","SER_WRITE_FAILED"},{"message",err}};return out;}}
             if(!ser.append(raw,&err)){stopStream();ser.close(nullptr);out.problem={{"code","SER_WRITE_FAILED"},{"message",err}};return out;}frames=ser.frameCount();
-            const auto det=detector.detect(raw.image);if(!det.found){++lost;if(lost>=tracking.lostTargetFrames){stopStream();ser.close(nullptr);out.problem={{"code","PLANET_LOST"},{"message",QString("Planet was not detected for %1 consecutive SER frames").arg(lost)}};return out;}}
+            if(elapsed.elapsed()-lastAnalysisMs>=50){lastAnalysisMs=elapsed.elapsed();const auto det=detector.detect(raw.image);if(!det.found){++lost;if(lost>=tracking.lostTargetFrames){stopStream();ser.close(nullptr);out.problem={{"code","PLANET_LOST"},{"message",QString("Planet was not detected for %1 consecutive tracking samples").arg(lost)}};return out;}}
             else{
                 lost=0;const cv::Point2d global{roi.x+det.centroidPx.x,roi.y+det.centroidPx.y};const cv::Point2d localError{det.centroidPx.x-0.5*roi.width,det.centroidPx.y-0.5*roi.height};
                 cv::Rect proposed=roi;if(tracking.allowRoiShift&&std::hypot(localError.x,localError.y)>=tracking.roiShiftThresholdPx)proposed=centeredPlanetaryRoi(global,roi.width,roi.height,sensorW,sensorH);
                 const cv::Point2d sensorError{global.x-0.5*sensorW,global.y-0.5*sensorH};
-                const bool mountDue=tracking.mountCorrections&&mnt&&calibration.valid&&std::hypot(sensorError.x,sensorError.y)>=tracking.mountCorrectionThresholdPx&&int(frames)-lastMountFrame>=std::max(10,int(request.targetFps*2.0));
+                const bool mountDue=tracking.mountCorrections&&mnt&&calibration.valid&&std::hypot(sensorError.x,sensorError.y)>=tracking.mountCorrectionThresholdPx&&elapsed.elapsed()-lastMountCorrectionMs>=2000;
                 if(mountDue){
                     const double a=calibration.pixelsPerArcsec(0,0),b=calibration.pixelsPerArcsec(0,1),c=calibration.pixelsPerArcsec(1,0),d=calibration.pixelsPerArcsec(1,1),detm=a*d-b*c;
                     if(std::abs(detm)>1e-8){const double wantX=-sensorError.x,wantY=-sensorError.y;double raArc=(d*wantX-b*wantY)/detm,decArc=(-c*wantX+a*wantY)/detm;const double mag=std::hypot(raArc,decArc);if(mag>tracking.maxMountCorrectionArcsec){const double k=tracking.maxMountCorrectionArcsec/mag;raArc*=k;decArc*=k;}
-                        stopStream();MountStatus ms;if(mnt->status(ms,&err)&&ms.coordinateValid){auto t=convertEquatorialFrame(ms.coordinate,EquatorialFrame::J2000);const double cosDec=std::max(0.1,std::abs(std::cos(t.decDeg*3.14159265358979323846/180.0)));t.raDeg=std::fmod(t.raDeg+raArc/(3600.0*cosDec)+360.0,360.0);t.decDeg=std::clamp(t.decDeg+decArc/3600.0,-89.9,89.9);if(mnt->slewTo(t,&err)&&waitMountIdle(err)){mnt->setTracking(true,trackingRate,nullptr);if(tracking.mountSettleMs>0)QThread::msleep(unsigned(tracking.mountSettleMs));roi=centeredPlanetaryRoi({0.5*sensorW,0.5*sensorH},roi.width,roi.height,sensorW,sensorH);QJsonObject extra{{"type","mount-correction"},{"raArcsec",raArc},{"decArcsec",decArc},{"sensorErrorX",sensorError.x},{"sensorErrorY",sensorError.y}};ser.appendRoiEvent(frames,roi,"mount-correction",extra,nullptr);lastMountFrame=int(frames);request.roi=roi;if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}
+                        stopStream();MountStatus ms;if(mnt->status(ms,&err)&&ms.coordinateValid){auto t=convertEquatorialFrame(ms.coordinate,EquatorialFrame::J2000);const double cosDec=std::max(0.1,std::abs(std::cos(t.decDeg*3.14159265358979323846/180.0)));t.raDeg=std::fmod(t.raDeg+raArc/(3600.0*cosDec)+360.0,360.0);t.decDeg=std::clamp(t.decDeg+decArc/3600.0,-89.9,89.9);if(mnt->slewTo(t,&err)&&waitMountIdle(err)){mnt->setTracking(true,trackingRate,nullptr);if(tracking.mountSettleMs>0)QThread::msleep(unsigned(tracking.mountSettleMs));roi=centeredPlanetaryRoi({0.5*sensorW,0.5*sensorH},roi.width,roi.height,sensorW,sensorH);QJsonObject extra{{"type","mount-correction"},{"raArcsec",raArc},{"decArcsec",decArc},{"sensorErrorX",sensorError.x},{"sensorErrorY",sensorError.y}};ser.appendRoiEvent(frames,roi,"mount-correction",extra,nullptr);lastMountCorrectionMs=elapsed.elapsed();request.roi=roi;if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}
                             else {QMetaObject::invokeMethod(this,[this,err](){emit logMessage("Planetary mount correction skipped after failure: "+err);},Qt::QueuedConnection);request.roi=roi;if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}}
                         else {request.roi=roi;if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}
                     }
                 } else if(proposed!=roi){stopStream();roi=proposed;request.roi=roi;QJsonObject extra{{"type","roi-shift"},{"centroidGlobalX",global.x},{"centroidGlobalY",global.y}};ser.appendRoiEvent(frames,roi,"tracker-shift",extra,nullptr);if(!startStream(err)){ser.close(nullptr);out.problem={{"code","PLANETARY_STREAM_RESTART_FAILED"},{"message",err}};return out;}}
                 ctx.reportProgress(std::clamp(double(elapsed.elapsed())/(duration*1000.0),0.0,0.99),"planetary.recording",{{"frames",int(frames)},{"centroidX",det.centroidPx.x},{"centroidY",det.centroidPx.y},{"roiX",roi.x},{"roiY",roi.y},{"roiWidth",roi.width},{"roiHeight",roi.height},{"serPath",request.serPath}});
             }
-            CameraFrame preview=raw;QString note;processLivePreview(preview,request,&note);preview.id="live-"+preview.id;preview.scienceFilePath.clear();QMetaObject::invokeMethod(this,[this,preview](){commitCapturedFrame(preview,false,false);},Qt::BlockingQueuedConnection);
-            if(!nativeStream){qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}}
+            }
+            const qint64 nowUs=elapsed.nsecsElapsed()/1000;if(previewPeriodUs<=0||nowUs-lastPreviewUs>=previewPeriodUs){if(!previewBusy->exchange(true)){CameraFrame preview=raw;preview.id="live-main-"+preview.id;preview.scienceFilePath.clear();++previewFrames;lastPreviewUs=nowUs;const double sec=std::max(0.001,double(elapsed.elapsed())/1000.0);QJsonObject stats{{"frameId",preview.id},{"role","main"},{"sequence",qint64(frames)},{"capturedUtc",preview.capturedUtc.toString(Qt::ISODateWithMs)},{"width",preview.image.cols},{"height",preview.image.rows},{"exposureSec",preview.exposureSec},{"gain",preview.gain},{"captureFps",double(frames)/sec},{"recordFps",double(frames)/sec},{"previewFps",double(previewFrames)/sec},{"previewDropped",qint64(previewSkipped)},{"recordDropped",0},{"jpegQuality",request.previewJpegQuality},{"bitsPerSample",request.bitsPerSample},{"previewMaxWidth",request.previewMaxWidth},{"transport","oalv1-jpeg-planetary"}};QPointer<ApplicationController> self(this);QtConcurrent::run([self,preview=std::move(preview),request,stats,previewBusy]() mutable {QString note;if(processLivePreview(preview,request,&note)){if(self)self->publishLivePreview("main",preview,stats);}previewBusy->store(false);});}else ++previewSkipped;}else ++previewSkipped;
+            if(!nativeStream&&targetPeriodMs>0){qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}}
         }
         stopStream();if(ctx.isCancellationRequested()){ser.close(nullptr);out.cancelled=true;return out;}if(!ser.close(&err)){out.problem={{"code","SER_FINALIZE_FAILED"},{"message",err}};return out;}
         out.success=true;out.result=QJsonObject{{"serPath",request.serPath},{"metadataPath",QFileInfo(request.serPath).absolutePath()+"/"+QFileInfo(request.serPath).completeBaseName()+".txt"},{"roiProvenancePath",QFileInfo(request.serPath).absolutePath()+"/"+QFileInfo(request.serPath).completeBaseName()+".roi.jsonl"},{"frames",int(frames)},{"finalRoi",QJsonObject{{"x",roi.x},{"y",roi.y},{"width",roi.width},{"height",roi.height}}}};ctx.reportProgress(1.0,"completed");return out;

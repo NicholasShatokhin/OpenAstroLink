@@ -51,6 +51,7 @@ public:
     // Continuous operational preview. The core owns the camera resource until
     // the returned operation is cancelled. Live frames are never science-saved.
     virtual QString startLiveView(const LiveViewRequest &request, QString *error = nullptr) = 0;
+    virtual QString startGuideLiveView(const LiveViewRequest &request, QString *error = nullptr) = 0;
     virtual SolveResult solveLast(const SolveHint &hint = {}) = 0;
     virtual QString startAdaptiveSolve(const AdaptiveSolveRequest &request, QString *error = nullptr) = 0;
     virtual AutofocusResult autofocus(const AutofocusRequest &request) = 0;
@@ -134,6 +135,8 @@ public:
 signals:
     void logMessage(const QString &message);
     void frameCaptured(const QImage &image, const QString &frameId);
+    // High-rate droppable preview transport. role is "main" or "guide".
+    void videoFrameCaptured(const QImage &image, const QString &role, const QJsonObject &stats);
     void solveCompleted(const QJsonObject &result);
     void autofocusProgress(const QJsonObject &sample);
     void autofocusCompleted(const QJsonObject &result);

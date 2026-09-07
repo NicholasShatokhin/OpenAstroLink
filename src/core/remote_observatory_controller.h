@@ -44,6 +44,7 @@ public:
     QString startCapture(const ExposureRequest &request,QString *error=nullptr) override;
     QString startGuideCapture(const ExposureRequest &request,QString *error=nullptr) override;
     QString startLiveView(const LiveViewRequest &request,QString *error=nullptr) override;
+    QString startGuideLiveView(const LiveViewRequest &request,QString *error=nullptr) override;
     SolveResult solveLast(const SolveHint &hint={}) override;
     QString startAdaptiveSolve(const AdaptiveSolveRequest &request,QString *error=nullptr) override;
     AutofocusResult autofocus(const AutofocusRequest &request) override;
@@ -107,6 +108,7 @@ public:
 
 private slots:
     void onWsText(const QString &message);
+    void onWsBinary(const QByteArray &message);
 
 private:
     QUrl api(const QString &path) const;
@@ -131,8 +133,10 @@ private:
     mutable QStringList solverBackends_;
     mutable bool metadataLoaded_{false};
     QWebSocket ws_;
+    QWebSocket videoWs_;
     QTimer wsReconnect_;
     QUrl wsUrl_;
+    QUrl videoWsUrl_;
     CameraFrame previousFrame_;
     CameraFrame lastFrame_;
     CameraFrame lastGuideFrame_;
