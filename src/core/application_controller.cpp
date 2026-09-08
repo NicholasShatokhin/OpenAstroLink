@@ -41,7 +41,7 @@
 #include <QFileInfo>
 #include <QSysInfo>
 #include <QStandardPaths>
-#include <QtConcurrent>
+#include <QThreadPool>
 #include <atomic>
 #include <opencv2/imgproc.hpp>
 #ifdef OAS_HAVE_POSITIONING
@@ -524,12 +524,18 @@ bool ApplicationController::loadNeuralModel(const QString&p,QString*e){if(!ensur
 bool ApplicationController::connectCamera(const QString&b,const QString&e,QString*err){
     if(!ensureResourcesAvailable({"camera"},err))return false;
     QString note;auto d=makeCameraDevice(driverLoader_,b,e,err,&note);if(!d)return false;
+    // Native backend keys include the concrete driver/device identity. Opening
+    // that same physical camera as both Main and Guide can make one Live
+    // operation stop/reconfigure the other even though OAL has separate role
+    // locks. Reject that ambiguous assignment before touching the vendor SDK.
+    if(guideCamera_&&d->backendName().startsWith("native:")&&d->backendName()==guideCamera_->backendName()){if(err)*err="The same native camera cannot be assigned to both Main and Guide. Select two different physical cameras for Dual Live.";return false;}
     if(!d->connectDevice(err))return false;camera_=std::move(d);settings_.saveCameraBinding({camera_->backendName(),e,true});
     if(!note.isEmpty())emit logMessage(note);emit logMessage("Main camera connected: "+camera_->displayName());emitState();return true;
 }
 bool ApplicationController::connectGuideCamera(const QString&b,const QString&e,QString*err){
     if(!ensureResourcesAvailable({"camera.guide"},err))return false;
     QString note;auto d=makeCameraDevice(driverLoader_,b,e,err,&note);if(!d)return false;
+    if(camera_&&d->backendName().startsWith("native:")&&d->backendName()==camera_->backendName()){if(err)*err="The same native camera cannot be assigned to both Main and Guide. Select two different physical cameras for Dual Live.";return false;}
     if(!d->connectDevice(err))return false;guideCamera_=std::move(d);settings_.saveGuideCameraBinding({guideCamera_->backendName(),e,true});
     if(!note.isEmpty())emit logMessage(note);emit logMessage("Guide camera connected: "+guideCamera_->displayName());emitState();return true;
 }
@@ -979,12 +985,17 @@ QString ApplicationController::startGuideCapture(const ExposureRequest&r,QString
 }
 void ApplicationController::publishLivePreview(const QString&role,const CameraFrame&frame,const QJsonObject&stats){
     CameraFrame f=frame;f.scienceFilePath.clear();QImage image=toQImage(f.image);if(image.isNull())return;
+    QJsonObject publishedStats=stats;const int sourceWidth=image.width(),sourceHeight=image.height();
     const int maxWidth=stats.value("previewMaxWidth").toInt(0);if(maxWidth>0&&image.width()>maxWidth)image=image.scaledToWidth(maxWidth,Qt::FastTransformation);
-    if(oalWsServer_&&oalWsServer_->hasVideoClients())oalWsServer_->offerVideoFrame(role,image,stats,stats.value("jpegQuality").toInt(82));
-    QMetaObject::invokeMethod(this,[this,role,f,image,stats](){
+    // OALV width/height describe the encoded JPEG payload. Preserve the
+    // pre-transport dimensions separately so a remote client never has to
+    // guess whether the header refers to raw acquisition or preview pixels.
+    publishedStats["sourceWidth"]=sourceWidth;publishedStats["sourceHeight"]=sourceHeight;publishedStats["width"]=image.width();publishedStats["height"]=image.height();
+    if(oalWsServer_&&oalWsServer_->hasVideoClients())oalWsServer_->offerVideoFrame(role,image,publishedStats,publishedStats.value("jpegQuality").toInt(82));
+    QMetaObject::invokeMethod(this,[this,role,f,image,publishedStats](){
         if(role=="guide")lastGuideFrame_=f;
         else {previousFrame_=lastFrame_;lastFrame_=f;previewFrameCache_.push_back(f);while(previewFrameCache_.size()>8)previewFrameCache_.pop_front();emit frameCaptured(image,f.id);}
-        emit videoFrameCaptured(image,role,stats);
+        emit videoFrameCaptured(image,role,publishedStats);
     },Qt::QueuedConnection);
 }
 
@@ -1018,7 +1029,7 @@ QString ApplicationController::startLiveViewForCamera(const QString&role,const s
             CameraFrame preview=raw;preview.id=QString("live-%1-%2").arg(role,preview.id);preview.scienceFilePath.clear();++previewFrames;lastPreviewUs=nowUs;
             const double seconds=std::max(0.001,double(elapsed.elapsed())/1000.0);const double captureFps=double(captureFrames)/seconds;const double recordFps=r.recordSer?double(recordFrames)/seconds:0.0;const double previewFps=double(previewFrames)/seconds;
             QJsonObject stats{{"frameId",preview.id},{"role",role},{"sequence",qint64(captureFrames)},{"capturedUtc",preview.capturedUtc.toString(Qt::ISODateWithMs)},{"width",preview.image.cols},{"height",preview.image.rows},{"exposureSec",preview.exposureSec},{"gain",preview.gain},{"captureFps",captureFps},{"recordFps",recordFps},{"previewFps",previewFps},{"captureFpsLimit",r.captureFpsLimit},{"previewFpsLimit",r.previewFpsLimit},{"previewDropped",qint64(previewSkipped)},{"recordDropped",0},{"jpegQuality",r.previewJpegQuality},{"bitsPerSample",r.bitsPerSample},{"previewMaxWidth",r.previewMaxWidth},{"transport","oalv1-jpeg"}};
-            QPointer<ApplicationController> self(this);QtConcurrent::run([self,preview=std::move(preview),r,role,stats,previewBusy]() mutable {QString note;if(processLivePreview(preview,r,&note)){if(self)self->publishLivePreview(role,preview,stats);}else if(self)QMetaObject::invokeMethod(self.data(),[self,note,role](){if(self)emit self->logMessage(QString("%1 Live View preview processing warning: %2").arg(role,note));},Qt::QueuedConnection);previewBusy->store(false);});return true;
+            QPointer<ApplicationController> self(this);QThreadPool::globalInstance()->start([self,preview=std::move(preview),r,role,stats,previewBusy]() mutable {QString note;if(processLivePreview(preview,r,&note)){if(self)self->publishLivePreview(role,preview,stats);}else if(self)QMetaObject::invokeMethod(self.data(),[self,note,role](){if(self)emit self->logMessage(QString("%1 Live View preview processing warning: %2").arg(role,note));},Qt::QueuedConnection);previewBusy->store(false);});return true;
         };
         auto report=[&](const QString&transport){if(reportTimer.elapsed()<250)return;reportTimer.restart();const double seconds=std::max(0.001,double(elapsed.elapsed())/1000.0);ctx.reportProgress(0.0,"live",{{"role",role},{"frames",qint64(captureFrames)},{"captureFps",double(captureFrames)/seconds},{"recordFps",r.recordSer?double(recordFrames)/seconds:0.0},{"previewFps",double(previewFrames)/seconds},{"captureFpsLimit",r.captureFpsLimit},{"previewFpsLimit",r.previewFpsLimit},{"previewDropped",qint64(previewSkipped)},{"recordDropped",0},{"transport",transport}});};
         auto throttleCapture=[&](qint64 cycleUs){if(capturePeriodUs<=0)return;qint64 sleepUs=capturePeriodUs-cycleUs;while(sleepUs>0&&!ctx.isCancellationRequested()){const unsigned long slice=unsigned(std::min<qint64>(sleepUs,2000));QThread::usleep(slice);sleepUs-=slice;}};
@@ -1526,7 +1537,7 @@ void ApplicationController::startCurrentPlanetarySer(){
                 ctx.reportProgress(std::clamp(double(elapsed.elapsed())/(duration*1000.0),0.0,0.99),"planetary.recording",{{"frames",int(frames)},{"centroidX",det.centroidPx.x},{"centroidY",det.centroidPx.y},{"roiX",roi.x},{"roiY",roi.y},{"roiWidth",roi.width},{"roiHeight",roi.height},{"serPath",request.serPath}});
             }
             }
-            const qint64 nowUs=elapsed.nsecsElapsed()/1000;if(previewPeriodUs<=0||nowUs-lastPreviewUs>=previewPeriodUs){if(!previewBusy->exchange(true)){CameraFrame preview=raw;preview.id="live-main-"+preview.id;preview.scienceFilePath.clear();++previewFrames;lastPreviewUs=nowUs;const double sec=std::max(0.001,double(elapsed.elapsed())/1000.0);QJsonObject stats{{"frameId",preview.id},{"role","main"},{"sequence",qint64(frames)},{"capturedUtc",preview.capturedUtc.toString(Qt::ISODateWithMs)},{"width",preview.image.cols},{"height",preview.image.rows},{"exposureSec",preview.exposureSec},{"gain",preview.gain},{"captureFps",double(frames)/sec},{"recordFps",double(frames)/sec},{"previewFps",double(previewFrames)/sec},{"previewDropped",qint64(previewSkipped)},{"recordDropped",0},{"jpegQuality",request.previewJpegQuality},{"bitsPerSample",request.bitsPerSample},{"previewMaxWidth",request.previewMaxWidth},{"transport","oalv1-jpeg-planetary"}};QPointer<ApplicationController> self(this);QtConcurrent::run([self,preview=std::move(preview),request,stats,previewBusy]() mutable {QString note;if(processLivePreview(preview,request,&note)){if(self)self->publishLivePreview("main",preview,stats);}previewBusy->store(false);});}else ++previewSkipped;}else ++previewSkipped;
+            const qint64 nowUs=elapsed.nsecsElapsed()/1000;if(previewPeriodUs<=0||nowUs-lastPreviewUs>=previewPeriodUs){if(!previewBusy->exchange(true)){CameraFrame preview=raw;preview.id="live-main-"+preview.id;preview.scienceFilePath.clear();++previewFrames;lastPreviewUs=nowUs;const double sec=std::max(0.001,double(elapsed.elapsed())/1000.0);QJsonObject stats{{"frameId",preview.id},{"role","main"},{"sequence",qint64(frames)},{"capturedUtc",preview.capturedUtc.toString(Qt::ISODateWithMs)},{"width",preview.image.cols},{"height",preview.image.rows},{"exposureSec",preview.exposureSec},{"gain",preview.gain},{"captureFps",double(frames)/sec},{"recordFps",double(frames)/sec},{"previewFps",double(previewFrames)/sec},{"previewDropped",qint64(previewSkipped)},{"recordDropped",0},{"jpegQuality",request.previewJpegQuality},{"bitsPerSample",request.bitsPerSample},{"previewMaxWidth",request.previewMaxWidth},{"transport","oalv1-jpeg-planetary"}};QPointer<ApplicationController> self(this);QThreadPool::globalInstance()->start([self,preview=std::move(preview),request,stats,previewBusy]() mutable {QString note;if(processLivePreview(preview,request,&note)){if(self)self->publishLivePreview("main",preview,stats);}previewBusy->store(false);});}else ++previewSkipped;}else ++previewSkipped;
             if(!nativeStream&&targetPeriodMs>0){qint64 sleepMs=targetPeriodMs-cycle.elapsed();while(sleepMs>0&&!ctx.isCancellationRequested()){const int slice=int(std::min<qint64>(sleepMs,25));QThread::msleep(slice);sleepMs-=slice;}}
         }
         stopStream();if(ctx.isCancellationRequested()){ser.close(nullptr);out.cancelled=true;return out;}if(!ser.close(&err)){out.problem={{"code","SER_FINALIZE_FAILED"},{"message",err}};return out;}
@@ -1680,12 +1691,17 @@ QJsonObject ApplicationController::cameraStatusJson()const{QJsonObject j{{"conne
 bool ApplicationController::frameById(const QString&id,CameraFrame&frame,QString*error)const{if(!lastFrame_.image.empty()&&(id==lastFrame_.id||id=="latest")){frame=lastFrame_;return true;}if(!lastGuideFrame_.image.empty()&&(id==lastGuideFrame_.id||id=="latest-guide")){frame=lastGuideFrame_;return true;}for(auto it=previewFrameCache_.rbegin();it!=previewFrameCache_.rend();++it)if(it->id==id){frame=*it;return true;}if(!previousFrame_.image.empty()&&id==previousFrame_.id){frame=previousFrame_;return true;}if(error)*error="Frame is no longer available in the in-memory preview cache";return false;}
 QJsonObject ApplicationController::stateJson()const{auto strings=[](const QStringList&xs){QJsonArray a;for(const auto&x:xs)a.append(x);return a;};QJsonObject j{{"timestampUtc",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"devices",devicesJson()},{"backends",QJsonObject{{"camera",strings(cameraBackends())},{"mount",strings(mountBackends())},{"focuser",strings(focuserBackends())},{"solver",strings(solverBackends())}}},{"solve",solveToJson(lastSolve_)},{"lastSolvedFrame",skyFrameToJson(lastSolvedFrame_)},{"session",sessionJson(scheduler_.status())},{"operations",operations_.operationsJson(true)},{"resourceLocks",operations_.locksJson()},{"stellarium",QJsonObject{{"running",stellariumRunning()},{"port",int(stellariumPort())}}}};if(!lastFrame_.image.empty())j["lastFrame"]=QJsonObject{{"frameId",lastFrame_.id},{"capturedUtc",lastFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastFrame_.image.cols},{"height",lastFrame_.image.rows},{"exposureSec",lastFrame_.exposureSec},{"gain",lastFrame_.gain},{"binX",lastFrame_.binX},{"binY",lastFrame_.binY},{"role","main"}};if(!lastGuideFrame_.image.empty())j["lastGuideFrame"]=QJsonObject{{"frameId",lastGuideFrame_.id},{"capturedUtc",lastGuideFrame_.capturedUtc.toString(Qt::ISODateWithMs)},{"width",lastGuideFrame_.image.cols},{"height",lastGuideFrame_.image.rows},{"exposureSec",lastGuideFrame_.exposureSec},{"gain",lastGuideFrame_.gain},{"binX",lastGuideFrame_.binX},{"binY",lastGuideFrame_.binY},{"role","guide"}};MountStatus m;if(mountStatus(m,nullptr)){QJsonObject mj{{"raDeg",m.coordinate.raDeg},{"decDeg",m.coordinate.decDeg},{"coordinateFrame",equatorialFrameName(m.coordinate.frame)},{"coordinateValid",m.coordinateValid},{"tracking",m.tracking},{"slewing",m.slewing},{"parked",m.parked},{"pierSide",m.pierSide},{"geometryType",m.geometryType}};if(m.axes.valid){mj["axis1Deg"]=m.axes.axis1Deg;mj["axis2Deg"]=m.axes.axis2Deg;mj["axesValid"]=true;}else mj["axesValid"]=false;if(!m.diagnostics.isEmpty())mj["diagnostics"]=m.diagnostics;j["mount"]=mj;}FocuserStatus f;if(focuserStatus(f,nullptr)){QJsonObject fj{{"position",f.position},{"moving",f.moving}};if(f.temperatureC)fj["temperatureC"]=*f.temperatureC;j["focuser"]=fj;}auto g=guiding_.status();j["guiding"]=QJsonObject{{"active",g.active},{"raErrorArcsec",g.raErrorArcsec},{"decErrorArcsec",g.decErrorArcsec},{"rmsArcsec",g.rmsArcsec}};return j;}
 QJsonObject ApplicationController::nodeInfoJson()const{
+    QJsonObject webrtc{{"available",false},{"signalingPath","/webrtc"},{"payload","OALV v1/JPEG in OALW v1 DataChannel fragments"},{"channels",QJsonArray{"oalv-main","oalv-guide"}}};
+#ifdef OAS_HAVE_WEBRTC
+    const QString ice=qEnvironmentVariable("OAL_WEBRTC_ICE_SERVERS").trimmed();webrtc["available"]=true;webrtc["iceConfigured"]=!ice.isEmpty();webrtc["partialReliabilityMs"]=150;webrtc["fragmentPayloadBytes"]=48*1024;
+#endif
     return {{"nodeId",QCoreApplication::applicationName()+"@"+QSysInfo::machineHostName()},
             {"version",QString::fromLatin1(OAS_VERSION)},
             {"httpRunning",bool(oalServer_&&oalServer_->isRunning())},
             {"httpPort",oalServer_?int(oalServer_->port()):0},
             {"wsRunning",bool(oalWsServer_&&oalWsServer_->isRunning())},
             {"wsPort",settings_.wsPort()},
+            {"webrtc",webrtc},
             {"nativeDriverCount",driverLoader_?int(driverLoader_->drivers().size()):0},
             {"controlExecution","node-local"}};
 }

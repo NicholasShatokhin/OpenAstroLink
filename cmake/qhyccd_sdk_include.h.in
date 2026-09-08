@@ -5,4 +5,14 @@
 // cause MSVC's own <cstdint> to resolve to the QHY compatibility header instead of
 // the CRT header.  Include qhyccd.h by its configured absolute path so QHY sibling
 // headers remain discoverable without polluting the standard-library include path.
+#ifdef _MSC_VER
+#pragma warning(push)
+// QHY SDK 26.06.04 defines QHY26800A_MAX_WIDTH twice in qhyccdcamdef.h.
+// Keep vendor-only C4005 noise out of OpenAstroLink builds without globally
+// disabling macro-redefinition diagnostics for our own source.
+#pragma warning(disable: 4005)
+#endif
 #include "@OAL_QHYCCD_HEADER@"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

@@ -1,5 +1,8 @@
 # OpenAstroLink scheduler and autonomous acquisition specification
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 **Canonical language:** English  
 **Target:** staged delivery from the first supervised beta through OAL 1.0  
 **Implementation status:** v0.2.10.50 retains a mixed DSO/planetary/mosaic node executor with a persistent per-block observing calendar. Each `ObservationBlock` can carry its own `startAtUtc`, optional `parkAfter` / `autoUnparkBefore`, and the node persists the plan, armed state and next-block cursor. DSO blocks execute `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`; planetary blocks execute `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`; mosaic blocks generate sky tiles from optical-profile FOV and reuse the DSO executor per tile. A process restart between blocks resumes at the first unfinished block; a restart inside a block restarts that block. Mid-frame/SER checkpoints, weather/roof safety, meridian recovery and full unattended OAL 1.0 hardening remain planned.
@@ -308,3 +311,8 @@ The first supervised beta may expose scheduler building blocks before all of the
 ## Optional Polar Alignment motion constraint
 
 Polar Alignment does not require a restricted sky region. By default the workflow may use the normal mount-accessible sky, subject to the mount/backend hard limits. Observatories with balconies, roofs, walls, trees or other obstructions can enable `TelescopeProfile.polarMotionLimits`. When enabled, OAL samples each planned RA-slew path in Az/Alt and rejects the motion before it starts if any sampled point leaves the configured allowed region.
+
+
+## Sky Map integration checkpoint
+
+Sky Map target → Scheduler coordinate transfer is physically confirmed in the running GUI. Full autonomous mixed-block/session HIL remains pending.

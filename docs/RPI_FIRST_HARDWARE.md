@@ -1,5 +1,8 @@
 # Raspberry Pi 4 first-hardware path — v0.2.10.5 native observatory pack
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 
 > **Current release:** v0.2.10.53. Raspberry Pi 4 and Pi 5 are treated as the generic Linux `aarch64` target; the ARM64 node/probe/native-driver build is confirmed, while Pi 5 physical runtime/HIL remains pending.
 

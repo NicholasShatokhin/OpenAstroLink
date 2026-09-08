@@ -1,96 +1,118 @@
 # OpenAstroLink / OpenAstroSuite — handoff у новий чат
 
-**Authoritative snapshot:** v0.2.10.55
+**Authoritative snapshot:** v0.2.10.58-buildfix9  
+**Дата snapshot:** 2026-09-08  
+**Правило repository:** дерево `repository/` у FULL HANDOFF package є authoritative. Не відновлювати код зі старих фрагментів чату, якщо repository уже містить новішу реалізацію.
+
+## Поточна qualification boundary — 2026-09-08
+
+Точний v0.2.10.58-buildfix9 Windows x64/MSVC tree **fresh-build qualified** з увімкненим libdatachannel/WebRTC, WebRTC runtime staging, corrected ZWO EAF import linkage та AMD64 Canon EDSDK import/runtime pairing. Camera/WebRTC HIL ще не qualified: потрібен node-registry retest `oal.canon`/`oal.zwo.eaf`, потім QHY high-rate, WebRTC fallback і Dual-Live HIL. Повний список — `CURRENT_CHECKLIST.md`.
 
 
-## v0.2.10.55 checkpoint — high-rate streaming
+## Обов'язковий порядок читання
 
-- Прибрано старий 30 FPS Live View cap; capture і preview rates незалежні (`0 = MAX`).
-- Raw SER append виконується до droppable preview processing.
-- Remote Live View використовує OALV v1 binary `/video`; JSON events — `/events`.
-- Main і guide cameras можуть стрімити одночасно з independent resource locks та Dual Live telemetry.
-- QHY/ZWO native live buffers повторно використовуються; є 8-bit high-rate і selectable 16-bit Live View.
-- Потрібен repeat HIL для >=60 FPS, zero-record-drop SER та Dual Live.
-- Fixes v0.2.10.54 для Wi-Fi manual-slew / scene AF / sparse exposure не закриті до repeat HIL.
-- Mount geometry v9 frozen.
+1. `CURRENT_STATUS_UA.md`
+2. `START_HERE_UA.md`
+3. `docs/uk/CURRENT_CHECKLIST.md`
+4. `docs/uk/RELEASE_0.2.10.58.md`
+5. `docs/uk/NEW_CHAT_HANDOFF.md`
+6. `docs/uk/MOUNT_GEOMETRY.md`
+7. `docs/uk/HIGH_RATE_STREAMING.md`
+8. `docs/uk/WEBRTC_STREAMING.md`
+9. `docs/uk/VALIDATION.md`
+10. `docs/uk/ROADMAP_P0_P1_IMPLEMENTATION.md`
+11. `PROJECT_MANIFEST_UA.md`
 
-## Не починати історію проєкту заново
+## Не починати вже вирішену історію заново
 
-Продовжувати з поточного repository. Не перевиводити direct-MC mount geometry і не повертатися до pre-v9 polarity hypotheses без нових HIL-доказів.
+Проблема direct-MC mount geometry вирішена на поточному рівні доказів. Coordinate model **v9** HIL-підтверджена на реальному Sky-Watcher/EQDrive hardware з `Axis1Sign=+1`, `Axis2Sign=-1`. Native serial EQDrive і direct SynScan/EQDrive Wi-Fi використовують одну Core geometry/GOTO planning. Не змінювати geometry, axis meaning, Home/Park conventions, polarity або serial/Wi-Fi parity без нових суперечливих HIL-доказів.
 
-## Frozen current state
+Прихований driver-level 15° GOTO qualification gate видалений у v0.2.10.50. Це не видаляє окрему operator-controlled sky-safety policy або raw-axis mechanical guard.
 
-- Mount coordinate model **v9** HIL-підтверджений на реальному EQDrive/Sky-Watcher hardware.
-- Qualified mapping: `Axis1Sign=+1`, `Axis2Sign=-1`.
-- Native EQDrive serial і direct SynScan/EQDrive Wi-Fi використовують одну Core geometry/GOTO planning.
-- Mechanical Home/Park лишається підготовленою polar Home pose з чинними v9 conventions.
-- v0.2.10.50 видаляє **лише** тимчасовий прихований EQDrive `maxNativeGotoDeg` qualification gate. **Geometry, polarity, Home/Park і transport-direction logic не змінені.**
-- Core/profile `maxGotoSkyDeltaDeg` safety лишається operator-controlled; raw-axis `maxAxisDeltaDeg` — явний guard.
+## Platform/build state
 
-## Build foundation тепер кваліфікована
+- Windows x64/MSVC 2022 + Ninja: попередній full observatory build підтверджений.
+- Native Linux x86_64: попередній full observatory build підтверджений, включно з per-user Qt bootstrap на Jammy.
+- Linux/WSL → Raspberry Pi ARM64: попередній full node/probe/native-driver cross-build підтверджений до 100%.
+- ARM64 vendor matrix підтверджена: QHYCCD 26.06.04, Canon EDSDK ARM64, ZWO ASI/EAF ARM64, Gemini, Sky-Watcher, EQDrive.
+- Pi 5 використовує generic `aarch64`; physical Pi 5 qualification pending.
+- macOS Intel/Apple Silicon presets/bootstrap реалізовані; physical Mac build/sign/runtime pending.
+- Native drivers — default; INDI лишається optional і OFF by default.
 
-- Windows x64 / MSVC 2022 + Ninja: успішний full observatory build.
-- Native Linux x86_64: успішний observatory build, включно з automatic per-user Qt bootstrap на Jammy.
-- Linux/WSL → AArch64 Raspberry Pi: 100% build для node, hardware probe і native drivers.
-- Підтверджені ARM64 vendor paths: QHYCCD 26.06.04, Canon EDSDK, ZWO ASI, ZWO EAF, плюс source-native Gemini/Sky-Watcher/EQDrive.
-- Raspberry Pi 5 використовує той самий generic `aarch64` target. Physical Pi 5 runtime/HIL ще pending.
-- macOS Apple Silicon/Intel presets/bootstrap є; physical Mac qualification pending.
+Важлива qualification boundary: точний v0.2.10.58-buildfix9 Windows x64/MSVC tree уже **fresh-build qualified** з libdatachannel/WebRTC, WebRTC runtime staging, corrected ZWO EAF import linkage та AMD64 Canon EDSDK import/runtime pairing. OALV `/video` лишається fallback, SER — upstream. **Camera/WebRTC HIL ще не qualified**: потрібен node-registry retest `oal.canon`/`oal.zwo.eaf`, потім QHY high-rate, WebRTC fallback і Dual-Live HIL.
 
-## Sky Map
+## HIL facts від 2026-09-06
 
-OpenAstroSuite v0.2.10.52 має lightweight offline Sky Map у лівій області: bright stars/selected DSOs, pan/zoom/search, live telescope і solved markers, приблизний main-camera FOV та controller-backed Slew/Sync/Abort/Park/Scheduler actions. v0.2.10.52 також дозволяє вибирати довільну видиму точку неба: click у порожнє місце переводиться через existing horizontal→J2000 path і використовує той самий GOTO/Scheduler contract. Catalogue-object → Scheduler transfer підтверджений у running GUI. Окремої mount geometry мапа не вводить.
+Підтверджено:
 
-## HIL findings 2026-09-06
+- Free-point Sky Map click → J2000 GOTO фізично рухає реальне монтування.
+- Sky Map target → Scheduler coordinate transfer працює.
+- QHY5III462C still FITS і native Live View працюють.
+- Gemini focuser motion/status працює; autofocus cancel повертає starting focus position.
+- SER успішно відкривається в AutoStakkert.
+- Mount GOTO abort працює.
 
-- Free-point Sky Map GOTO фізично працює; transfer target у Scheduler підтверджений.
-- Sky Map selection тепер також копіює той самий J2000 target у Mount-tab coordinates.
-- Direct Wi-Fi manual commands доходили до node, але physical press/release були intermittent; v0.2.10.54 harden-ить UDP start/instant-stop retries та post-condition checks.
-- Axis inversion відображається stateful checkboxes у Mount tab.
-- Scene autofocus control/cancel/restore працює, але optical convergence v0.2.10.53 була надто повільною/шумною. v0.2.10.54 використовує fast bright-tail metering, tiled contrast і repeatability gate.
-- Still auto-exposure HIL показав sparse-scene limit cycle ~0.64 с ↔ ~1.43 с. v0.2.10.54 використовує P99.5 bright-tail control, smooth highlight handling, crossing bisection та reset при gain change.
-- QHY Live/Still і базовий Gemini motion HIL-positive.
-- Mount geometry v9 лишається frozen.
+Observed failures, які сформували current code:
 
-## Driver policy
+- Manual direct-Wi-Fi slew міг проігнорувати press або продовжити рух після release, хоча node logs показували press/stop commands. Current code додає UDP retry, instant-stop, source validation, running/stopped post-condition checks і fail-safe stop.
+- Axis inversion раніше була непрозорою; current UI використовує stateful checkboxes.
+- Sky Map target тепер також заповнює J2000 target fields у Mount tab.
+- Scene AF був повільним і не сходився надійно навіть біля очевидного фокуса. Старий global meter міг пройти 0.05→0.2→0.8→3.2→10 s на sparse daylight scene. Current scene AF використовує bright-tail metering, tiled structure/contrast, compact near-focus search і repeatability-gated improvement.
+- Still auto-exposure oscillated на sparse bright scene. Виміряна sequence при gain 200 ходила приблизно між ~0.64 s та ~1.43 s; коротший frame мав корисний bright tail, довший уже кліпав його. Current code використовує sparse-scene P99.5 control, hysteresis/crossing logic і reset history при gain change.
+- Live preview мав race з малим in-memory HTTP cache. Current high-rate path замінює per-frame HTTP/PNG/base64 fetch на binary `/video` OALV streaming.
 
-Native OAL — reference/default path. Нормальна конфігурація має `OAS_ENABLE_INDI=OFF`. INDI вмикається лише явно через `*-indi-release` або `OAS_ENABLE_INDI=ON` для compatibility/unsupported hardware.
+## Camera data plane — current implementation
 
-## Dependency policy
+- Capture і preview FPS незалежні; `captureFpsLimit=0` означає camera maximum.
+- Preview default 60 FPS і latest-only/droppable.
+- QHY і ZWO native Live View reuse buffers.
+- Raw SER append відбувається до preview/debayer/JPEG/UI work.
+- JSON events/state лишаються на `/events`; pixels ідуть binary OALV v1 через `/video`.
+- Main і guide cameras мають окремі resource locks і можуть одночасно stream-ити у Dual Live.
+- GUI показує capture/record/preview FPS та preview/record drop telemetry.
+- Desired invariant: preview може drop-атися; recording не повинен тихо втрачати frames.
 
-Platform wrappers спочатку шукають існуючі dependencies і bootstrap-ять redistributable components, де це можливо. QHY/ZWO/Qt/OpenCV автоматизовані там, де source/download deterministic. Canon EDSDK — тільки local discovery/manual download.
+Immediate HIL: >=60 FPS там, де hardware дозволяє, 5–10 min zero-record-drop SER, потім simultaneous main+guide Dual Live без starvation mount/focuser/events.
 
-## Що вже є для наступної фази
+## Sky Map / framing state
 
-- Node-owned hardware/workflows; local/remote GUI.
-- HTTP + WebSocket state/control.
-- Async operations/resource locks.
-- Native QHY, Canon, ZWO ASI/EAF, Gemini, Sky-Watcher, EQDrive.
-- Live View, FITS/RAW, SER, histogram exposure assistant.
-- Реалізація scene/star autofocus.
-- Plate solving/adaptive urban solve.
-- Persistent per-block scheduler з DSO, planetary та mosaic execution.
-- Guided Polar Alignment з optional safe-region motion.
-- Stellarium live position/GOTO bridge.
+- Offline left-side Sky Map працює без Stellarium.
+- Можна обирати catalogue targets і довільні visible-sky points.
+- Free-point GOTO HIL-confirmed.
+- Target transfer у Scheduler HIL-confirmed.
+- Selected map coordinates у current code також заповнюють Mount target fields.
+- Після plate solve measured camera footprint можна малювати за solved center/scale/dimensions/PA.
+- Planned main/guide footprints і Scheduler mosaic grid можна малювати до solve.
+- Одну вибрану frame можна передати у rectangular FOV marker Stellarium Remote Control. Standard Stellarium Telescope Control лишається mount position/GOTO only.
+- Footprint/Stellarium export ще потребує end-to-end HIL.
 
-## Найближча Beta — порядок
+## Beta priorities — зберігати цей порядок, якщо новий blocker не змусить змінити його
 
-1. **HIL autofocus**: convergence, repeatability, backlash, cancel/failure rollback, final verification frame.
-2. **HIL auto-exposure**: convergence, lock, reacquisition після lighting change.
-3. **Scheduler HIL**: mixed blocks, cancellation, restart-at-block-boundary behavior.
-4. **Mosaic HIL**: FOV tile geometry, solve/recenter, serpentine traversal.
-5. **Polar Alignment HIL**: real-sky sampling і safe-region motion.
+1. Runtime registry retest buildfix9: `oal.canon` і `oal.zwo.eaf` без Win32 error 193.
+2. High-rate main stream + SER zero-drop HIL.
+3. Dual Live main+guide HIL.
+4. Direct-Wi-Fi manual slew repeat HIL.
+5. Scene autofocus repeat HIL; потім night star/HFR autofocus.
+6. Still auto-exposure repeat HIL.
+7. Scheduler end-to-end HIL.
+8. Mosaic HIL.
+9. Polar Alignment HIL.
+10. Full supervised night qualification.
 
-Smart Telescope UX у цю Beta не тягнути — це OAL 1.0.
+Не тягнути Smart Telescope UX, one-button observing або broad unattended-observatory automation у найближчу Beta; це OAL 1.0 work.
 
-## Далі читати
+## Working style для нового чату
 
-1. `START_HERE_UA.md`
-2. `docs/uk/STATUS.md`
-3. `docs/uk/MOUNT_GEOMETRY.md`
-4. `docs/uk/BUILD_PLATFORMS.md`
-5. `docs/uk/VALIDATION.md`
-6. `docs/uk/ROADMAP_P0_P1_IMPLEMENTATION.md`
-7. `PROJECT_MANIFEST_UA.md`
+- Коли defect локалізований, віддавати перевагу конкретним repository edits/patches, а не лише абстрактним порадам.
+- English лишається canonical documentation; українське mirror оновлювати одночасно.
+- При зміні milestone синхронізувати `CURRENT_STATUS`, `START_HERE`, `STATUS`, `NEW_CHAT_HANDOFF`, `VALIDATION`, `ROADMAP`, release notes і `site/`.
+- Чітко розрізняти implemented/static-tested, physically build-qualified і HIL-qualified.
+- Не вважати GitHub новішим за supplied repository, якщо користувач явно не сказав, що вони synchronized.
 
-### Sky Map framing v0.2.10.53
-Offline Sky Map тепер має measured `lastSolvedFrame` geometry, predicted main/guide profile footprints, Scheduler-synchronized mosaic planner grid і client-side export однієї вибраної рамки у rectangular FOV marker Stellarium Remote Control. Standard Stellarium Telescope Control лишається mount position/GOTO only. Mount v9 geometry не змінена.
+### WebRTC v1
+`/webrtc` signaling; `oalv-main` + `oalv-guide` DataChannel; OALW v1 fragments несуть OALV/JPEG; `/video` — per-role fallback. RTP codecs ще не реалізовані.
+
+### 2026-09-07 buildfix8 vendor-runtime ABI note
+Exact v0.2.10.58 Windows build уже успішний з WebRTC, node/OpenCV Live View стартує. Canon EDSDK і ZWO EAF plugin loads дали `ERROR_BAD_EXE_FORMAT`; buildfix8 перевіряє реальну PE Machine architecture, видаляє stale runtime duplicates і додає `scripts/repair_windows_vendor_runtime.cmd`. Перед QHY/WebRTC throughput HIL треба повторно перевірити ці два plugins.
+
+- Windows buildfix9: Canon EDSDK import/runtime pair тепер перевіряється і за шляхом, і за PE machine; `EDSDK_64/Library/EDSDK.lib` жорстко прив'язана до sibling `EDSDK_64/Dll`. Runtime retest Canon/ZWO EAF ще pending.

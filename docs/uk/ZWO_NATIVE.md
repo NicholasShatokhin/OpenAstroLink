@@ -1,5 +1,8 @@
 # Нативні драйвери ZWO ASI та ZWO EAF
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 
 > **Поточний реліз:** v0.2.10.53. Native ZWO ASI/EAF лишаються default OAL drivers; ARM64 vendor libraries пройшли повний Raspberry Pi cross-build.
 
@@ -36,3 +39,8 @@ ZWO_EAF_ROOT=/path/to/sdk
 ## Потрібен HIL
 
 До production status потрібні тести на реальних ASI/EAF на Raspberry Pi: серії exposure, abort, ROI/binning, дві ASI одночасно, reconnect, EAF move/halt/limits/temp та повторюваність autofocus.
+
+## Windows EAF build/runtime qualification — 2026-09-08
+
+CMake тепер відхиляє staged `EAF_focuser-static.lib` для plugin driver і переходить на DLL import library `EAF_focuser.lib`, спарюючи same-architecture runtime DLL. Fresh buildfix9 configure/build PASS. Залишився node-registry load `oal.zwo.eaf`, після чого real EAF HIL.
+

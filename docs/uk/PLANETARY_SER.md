@@ -1,5 +1,8 @@
 # Planetary SER та автономні blocks — v0.2.10.47
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 
 > **Поточний реліз:** v0.2.10.53. Planetary SER лишається реалізованим; real-hardware hardening продовжується за Beta HIL plan.
 
@@ -18,3 +21,8 @@ OpenAstroLink v0.2.10.47 може напряму записувати Live View 
 - Поруч із кожним SER фіналізується `.txt` з тією самою базовою назвою. Sidecar містить requested та actual first-frame exposure/gain/offset/binning, target/measured FPS, dimensions/bit depth/SER color ID, CFA/Bayer, optical train, site, UTC start/end/duration та ознаку timestamp trailer — human-readable FireCapture-style provenance.
 
 Для QHY/ASI планетарний запис варто робити через native streaming. FITS still-image capture лишається окремим science workflow.
+
+
+## AutoStakkert interoperability checkpoint
+
+SER file, створений OpenAstroLink, успішно відкритий у AutoStakkert на real data. Для high-rate qualification лишається звірити frame count/telemetry та виконати 5–10 minute zero-record-drop run на новому streaming path.

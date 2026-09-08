@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.55 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.58 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,6 +25,8 @@ option(OAS_ENABLE_NATIVE_GEMINI "Build native OAL Gemini EAF driver" ON)
 option(OAS_ENABLE_NATIVE_SKYWATCHER "Build native OAL Sky-Watcher/SynScan mount driver" ON)
 option(OAS_ENABLE_NATIVE_EQDRIVE "Build native OAL EQDrive ASTEP mount driver" ON)
 option(OAS_ENABLE_ASCOM_CLASSIC "Build Windows Classic ASCOM compatibility helper/backend" ON)
+option(OAS_ENABLE_WEBRTC "Enable WebRTC DataChannel preview transport when libdatachannel is available" ON)
+option(OAS_REQUIRE_WEBRTC "Fail configuration if WebRTC was requested but libdatachannel is unavailable" OFF)
 option(OAS_BUILD_TESTS "Build lightweight tests" OFF)
 option(OAS_BUILD_NATIVE_REFERENCE_DRIVERS "Build ABI-v2 native OAL reference simulator" ON)
 option(OAS_BUILD_EXAMPLE_DRIVER "Build legacy ABI-v1 example plug-in" ON)
@@ -72,6 +74,59 @@ endif()
 message(STATUS
     "OAL build target: host=${CMAKE_HOST_SYSTEM_NAME}/${CMAKE_HOST_SYSTEM_PROCESSOR}; "
     "target=${CMAKE_SYSTEM_NAME}/${CMAKE_SYSTEM_PROCESSOR}; cross=${CMAKE_CROSSCOMPILING}")
+
+# On native Windows, bootstrap_native_dependencies.ps1 records the discovered
+# per-user dependency roots in .oal/native-deps-windows-x64.json.  Import that
+# record here as a fallback so raw `cmake --preset my-windows-observatory`
+# behaves like scripts/build_windows.ps1.  Explicit -D / preset values still
+# win; only empty/NOTFOUND cache entries are filled from the bootstrap record.
+# CMAKE_PREFIX_PATH is merged because LibDataChannelConfig.cmake may need the
+# sibling vcpkg package configs for OpenSSL, libjuice and usrsctp.
+if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
+    set(_oas_native_deps_record "${CMAKE_SOURCE_DIR}/.oal/native-deps-windows-x64.json")
+    if(EXISTS "${_oas_native_deps_record}")
+        file(READ "${_oas_native_deps_record}" _oas_native_deps_json)
+
+        string(JSON _oas_record_prefix ERROR_VARIABLE _oas_record_prefix_error
+            GET "${_oas_native_deps_json}" CMAKE_PREFIX_PATH)
+        if(_oas_record_prefix_error STREQUAL "NOTFOUND" AND _oas_record_prefix)
+            string(REPLACE "\\" "/" _oas_record_prefix_cmake "${_oas_record_prefix}")
+            set(_oas_merged_prefixes ${_oas_record_prefix_cmake} ${CMAKE_PREFIX_PATH})
+            list(REMOVE_DUPLICATES _oas_merged_prefixes)
+            set(CMAKE_PREFIX_PATH "${_oas_merged_prefixes}")
+        endif()
+
+        foreach(_oas_dep_key IN ITEMS
+            OpenCV_DIR
+            LibDataChannel_DIR
+            QHYCCD_INCLUDE_DIR QHYCCD_LIBRARY QHYCCD_RUNTIME_DIR QHYCCD_ROOT
+            ZWO_ASI_INCLUDE_DIR ZWO_ASI_LIBRARY ZWO_ASI_RUNTIME_DIR ZWO_ASI_ROOT
+            ZWO_EAF_INCLUDE_DIR ZWO_EAF_LIBRARY ZWO_EAF_RUNTIME_DIR ZWO_EAF_ROOT
+            CANON_EDSDK_INCLUDE_DIR CANON_EDSDK_LIBRARY CANON_EDSDK_RUNTIME_DIR CANON_EDSDK_ROOT)
+            string(JSON _oas_dep_value ERROR_VARIABLE _oas_dep_error
+                GET "${_oas_native_deps_json}" "${_oas_dep_key}")
+            if(_oas_dep_error STREQUAL "NOTFOUND" AND _oas_dep_value)
+                string(REPLACE "\\" "/" _oas_dep_value_cmake "${_oas_dep_value}")
+                if(NOT DEFINED ${_oas_dep_key} OR
+                   NOT "${${_oas_dep_key}}" OR
+                   "${${_oas_dep_key}}" MATCHES "-NOTFOUND$")
+                    if(_oas_dep_key MATCHES "_LIBRARY$")
+                        set(${_oas_dep_key} "${_oas_dep_value_cmake}" CACHE FILEPATH
+                            "Imported from OpenAstroLink native dependency record" FORCE)
+                    else()
+                        set(${_oas_dep_key} "${_oas_dep_value_cmake}" CACHE PATH
+                            "Imported from OpenAstroLink native dependency record" FORCE)
+                    endif()
+                endif()
+            endif()
+        endforeach()
+
+        if(LibDataChannel_DIR)
+            message(STATUS "OAL native dependency record: ${_oas_native_deps_record}")
+            message(STATUS "OAL native WebRTC package: ${LibDataChannel_DIR}")
+        endif()
+    endif()
+endif()
 
 # For native builds, prefer dependencies staged by scripts/bootstrap_native_dependencies.*
 # before falling back to system packages. This keeps raw `cmake --preset ...`
@@ -217,6 +272,25 @@ endif()
 find_package(OpenCV 4 REQUIRED COMPONENTS core imgproc imgcodecs videoio calib3d)
 find_package(Qt6 6.4 QUIET COMPONENTS Positioning)
 
+set(OAS_WEBRTC_TARGET "")
+set(OAS_WEBRTC_AVAILABLE OFF)
+if(OAS_ENABLE_WEBRTC)
+    find_package(LibDataChannel CONFIG QUIET)
+    if(TARGET LibDataChannel::LibDataChannel)
+        set(OAS_WEBRTC_TARGET LibDataChannel::LibDataChannel)
+    elseif(TARGET LibDataChannel::LibDataChannelStatic)
+        set(OAS_WEBRTC_TARGET LibDataChannel::LibDataChannelStatic)
+    endif()
+    if(OAS_WEBRTC_TARGET)
+        set(OAS_WEBRTC_AVAILABLE ON)
+        message(STATUS "OAL WebRTC preview transport: enabled (${OAS_WEBRTC_TARGET})")
+    elseif(OAS_REQUIRE_WEBRTC)
+        message(FATAL_ERROR "OAS_REQUIRE_WEBRTC=ON but libdatachannel was not found. Run scripts/bootstrap_native_dependencies.* or set LibDataChannel_DIR.")
+    else()
+        message(WARNING "libdatachannel was not found; building OALV WebSocket fallback only. WebRTC can be enabled later by installing libdatachannel >= 0.24 and reconfiguring.")
+    endif()
+endif()
+
 set(OAS_CORE_SOURCES
     src/core/observatory_controller.h
     src/core/application_controller.h
@@ -321,6 +395,10 @@ target_link_libraries(oas_core PUBLIC
     Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort Qt6::WebSockets Qt6::HttpServer Qt6::Concurrent
     ${OpenCV_LIBS}
 )
+if(OAS_WEBRTC_AVAILABLE)
+    target_compile_definitions(oas_core PUBLIC OAS_HAVE_WEBRTC=1)
+    target_link_libraries(oas_core PUBLIC ${OAS_WEBRTC_TARGET})
+endif()
 
 # Debian's OpenCV build carries a numerical dependency chain through
 # Armadillo/ARPACK/SuperLU to LAPACK and BLAS.  Native builds let the dynamic
@@ -439,6 +517,72 @@ function(oal_is_microsoft_crt_dll dll_path out_var)
     endif()
 endfunction()
 
+# Read the COFF Machine field directly from a Windows PE image.  This avoids
+# trusting SDK folder names such as x64/Release: several vendor archives contain
+# mixed-architecture DLLs under otherwise plausible directory names.
+function(oal_windows_pe_machine dll_path out_machine out_valid)
+    if(NOT EXISTS "${dll_path}")
+        set(${out_machine} "missing" PARENT_SCOPE)
+        set(${out_valid} FALSE PARENT_SCOPE)
+        return()
+    endif()
+    file(SIZE "${dll_path}" _oal_pe_size)
+    if(_oal_pe_size LESS 66)
+        set(${out_machine} "not-pe" PARENT_SCOPE)
+        set(${out_valid} FALSE PARENT_SCOPE)
+        return()
+    endif()
+    file(READ "${dll_path}" _oal_mz OFFSET 0 LIMIT 2 HEX)
+    string(TOLOWER "${_oal_mz}" _oal_mz)
+    if(NOT _oal_mz STREQUAL "4d5a")
+        set(${out_machine} "not-pe" PARENT_SCOPE)
+        set(${out_valid} FALSE PARENT_SCOPE)
+        return()
+    endif()
+    file(READ "${dll_path}" _oal_lfanew_le OFFSET 60 LIMIT 4 HEX)
+    string(SUBSTRING "${_oal_lfanew_le}" 0 2 _oal_lf_b0)
+    string(SUBSTRING "${_oal_lfanew_le}" 2 2 _oal_lf_b1)
+    string(SUBSTRING "${_oal_lfanew_le}" 4 2 _oal_lf_b2)
+    string(SUBSTRING "${_oal_lfanew_le}" 6 2 _oal_lf_b3)
+    math(EXPR _oal_pe_offset "0x${_oal_lf_b3}${_oal_lf_b2}${_oal_lf_b1}${_oal_lf_b0}")
+    math(EXPR _oal_machine_offset "${_oal_pe_offset} + 4")
+    math(EXPR _oal_machine_end "${_oal_machine_offset} + 2")
+    if(_oal_machine_end GREATER _oal_pe_size)
+        set(${out_machine} "truncated-pe" PARENT_SCOPE)
+        set(${out_valid} FALSE PARENT_SCOPE)
+        return()
+    endif()
+    file(READ "${dll_path}" _oal_machine_le OFFSET ${_oal_machine_offset} LIMIT 2 HEX)
+    string(TOLOWER "${_oal_machine_le}" _oal_machine_le)
+    if(_oal_machine_le STREQUAL "6486")
+        set(_oal_machine "AMD64")
+    elseif(_oal_machine_le STREQUAL "4c01")
+        set(_oal_machine "I386")
+    elseif(_oal_machine_le STREQUAL "64aa")
+        set(_oal_machine "ARM64")
+    elseif(_oal_machine_le STREQUAL "c401")
+        set(_oal_machine "ARMNT")
+    else()
+        set(_oal_machine "PE-${_oal_machine_le}")
+    endif()
+    set(${out_machine} "${_oal_machine}" PARENT_SCOPE)
+    set(${out_valid} TRUE PARENT_SCOPE)
+endfunction()
+
+function(oal_expected_windows_pe_machine out_machine)
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _oal_system_processor_lower)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND _oal_system_processor_lower MATCHES "^(amd64|x86_64|x64)$")
+        set(_oal_expected_machine "AMD64")
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 4 AND _oal_system_processor_lower MATCHES "^(x86|i[3-6]86)$")
+        set(_oal_expected_machine "I386")
+    elseif(_oal_system_processor_lower MATCHES "^(arm64|aarch64)$")
+        set(_oal_expected_machine "ARM64")
+    else()
+        set(_oal_expected_machine "")
+    endif()
+    set(${out_machine} "${_oal_expected_machine}" PARENT_SCOPE)
+endfunction()
+
 function(oal_stage_windows_runtime runtime_dir label)
     if(NOT WIN32 OR NOT runtime_dir OR NOT IS_DIRECTORY "${runtime_dir}")
         return()
@@ -449,27 +593,103 @@ function(oal_stage_windows_runtime runtime_dir label)
         return()
     endif()
 
+    oal_expected_windows_pe_machine(_oal_expected_machine)
+
     set(_oal_runtime_dlls)
     set(_oal_skipped_crt)
+    set(_oal_skipped_arch)
     foreach(_oal_dll IN LISTS _oal_runtime_candidates)
         oal_is_microsoft_crt_dll("${_oal_dll}" _oal_is_crt)
         if(_oal_is_crt)
             list(APPEND _oal_skipped_crt "${_oal_dll}")
-        else()
-            list(APPEND _oal_runtime_dlls "${_oal_dll}")
+            continue()
         endif()
+        oal_windows_pe_machine("${_oal_dll}" _oal_pe_machine _oal_pe_valid)
+        if(_oal_expected_machine AND _oal_pe_valid AND NOT "${_oal_pe_machine}" STREQUAL "${_oal_expected_machine}")
+            list(APPEND _oal_skipped_arch "${_oal_dll} (${_oal_pe_machine})")
+            message(WARNING "${label}: refusing wrong-architecture runtime DLL '${_oal_dll}' (${_oal_pe_machine}); target is ${_oal_expected_machine}")
+            continue()
+        elseif(NOT _oal_pe_valid)
+            list(APPEND _oal_skipped_arch "${_oal_dll} (${_oal_pe_machine})")
+            message(WARNING "${label}: refusing invalid/non-PE runtime file '${_oal_dll}'")
+            continue()
+        endif()
+        list(APPEND _oal_runtime_dlls "${_oal_dll}")
     endforeach()
 
-    # Build-tree execution must work without manually editing PATH.  Stage only
-    # vendor/device DLLs; Microsoft CRTs must come from the installed VC redist.
+    # Remove stale copies before staging. QLibrary may search the plugin's own
+    # directory before the executable directory, so one old x86 DLL under
+    # build/.../drivers is enough to produce ERROR_BAD_EXE_FORMAT (Win32 error 193)
+    # even when the correct x64 DLL exists beside the executable.
+    foreach(_oal_dll IN LISTS _oal_runtime_candidates)
+        get_filename_component(_oal_runtime_name "${_oal_dll}" NAME)
+        file(REMOVE "${CMAKE_BINARY_DIR}/${_oal_runtime_name}")
+        file(REMOVE "${OAL_DRIVER_BUILD_DIR}/${_oal_runtime_name}")
+    endforeach()
+
+    # Build-tree execution must work without manually editing PATH. Stage only
+    # same-architecture vendor/device DLLs; Microsoft CRTs come from VC redist.
     if(_oal_runtime_dlls)
         file(COPY ${_oal_runtime_dlls} DESTINATION "${CMAKE_BINARY_DIR}")
         file(COPY ${_oal_runtime_dlls} DESTINATION "${OAL_DRIVER_BUILD_DIR}")
+        install(FILES ${_oal_runtime_dlls} DESTINATION bin)
     endif()
     list(LENGTH _oal_runtime_dlls _oal_runtime_count)
     list(LENGTH _oal_skipped_crt _oal_skipped_count)
-    message(STATUS "${label}: staged ${_oal_runtime_count} vendor DLL(s); skipped ${_oal_skipped_count} Microsoft CRT/UCRT DLL(s)")
+    list(LENGTH _oal_skipped_arch _oal_arch_skipped_count)
+    if(_oal_runtime_count EQUAL 0 AND _oal_arch_skipped_count GREATER 0)
+        message(FATAL_ERROR
+            "${label}: runtime directory '${runtime_dir}' contains DLLs, but none match target PE machine '${_oal_expected_machine}'. "
+            "Refusing to create a build that will fail at runtime with Win32 error 193 (%1 is not a valid Win32 application).")
+    endif()
+    message(STATUS "${label}: staged ${_oal_runtime_count} same-architecture vendor DLL(s); skipped ${_oal_skipped_count} Microsoft CRT/UCRT DLL(s), ${_oal_arch_skipped_count} wrong/invalid architecture DLL(s)")
 endfunction()
+
+# libdatachannel is linked through an import library on Windows, so its runtime
+# DLLs are not copied automatically by the linker.  For build-tree execution and
+# cmake --install packages, stage the complete non-CRT runtime set from the
+# package prefix (datachannel.dll plus libjuice/OpenSSL transitive DLLs).  The
+# per-user vcpkg bootstrap installs these into <triplet>/bin while the CMake
+# package lives in <triplet>/share/libdatachannel.
+if(WIN32 AND OAS_WEBRTC_AVAILABLE AND LibDataChannel_DIR)
+    get_filename_component(_oas_webrtc_share_dir "${LibDataChannel_DIR}" DIRECTORY)
+    get_filename_component(_oas_webrtc_prefix "${_oas_webrtc_share_dir}" DIRECTORY)
+    set(_oas_webrtc_runtime_dir "${_oas_webrtc_prefix}/bin")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND IS_DIRECTORY "${_oas_webrtc_prefix}/debug/bin")
+        set(_oas_webrtc_runtime_dir "${_oas_webrtc_prefix}/debug/bin")
+    endif()
+
+    if(IS_DIRECTORY "${_oas_webrtc_runtime_dir}")
+        file(GLOB _oas_webrtc_runtime_candidates CONFIGURE_DEPENDS
+            "${_oas_webrtc_runtime_dir}/*.dll" "${_oas_webrtc_runtime_dir}/*.DLL")
+        set(_oas_webrtc_runtime_dlls)
+        set(_oas_webrtc_skipped_crt)
+        foreach(_oas_dll IN LISTS _oas_webrtc_runtime_candidates)
+            oal_is_microsoft_crt_dll("${_oas_dll}" _oas_is_crt)
+            if(_oas_is_crt)
+                list(APPEND _oas_webrtc_skipped_crt "${_oas_dll}")
+            else()
+                list(APPEND _oas_webrtc_runtime_dlls "${_oas_dll}")
+            endif()
+        endforeach()
+
+        if(_oas_webrtc_runtime_dlls)
+            file(COPY ${_oas_webrtc_runtime_dlls} DESTINATION "${CMAKE_BINARY_DIR}")
+            install(FILES ${_oas_webrtc_runtime_dlls} DESTINATION bin)
+        endif()
+        list(LENGTH _oas_webrtc_runtime_dlls _oas_webrtc_runtime_count)
+        list(LENGTH _oas_webrtc_skipped_crt _oas_webrtc_skipped_count)
+        message(STATUS
+            "WebRTC/libdatachannel: staged ${_oas_webrtc_runtime_count} runtime DLL(s) from ${_oas_webrtc_runtime_dir}; "
+            "skipped ${_oas_webrtc_skipped_count} Microsoft CRT/UCRT DLL(s)")
+    elseif(OAS_REQUIRE_WEBRTC)
+        message(FATAL_ERROR
+            "WebRTC is required but its Windows runtime directory was not found: ${_oas_webrtc_runtime_dir}. "
+            "Re-run scripts/bootstrap_native_dependencies.cmd or set LibDataChannel_DIR to the vcpkg package directory.")
+    else()
+        message(WARNING "WebRTC runtime directory was not found: ${_oas_webrtc_runtime_dir}")
+    endif()
+endif()
 
 if(OAS_BUILD_NATIVE_REFERENCE_DRIVERS)
     add_library(oal_driver_simulated SHARED drivers/reference_simulated/oal_driver_simulated.cpp)
@@ -606,8 +826,48 @@ if(OAS_ENABLE_NATIVE_ZWO_EAF)
         find_path(ZWO_EAF_INCLUDE_DIR EAF_focuser.h HINTS ${ZWO_EAF_ROOT} "${OAS_VENDOR_SDK_ROOT}/zwo/eaf" ENV ZWO_EAF_ROOT ENV ZWO_EAF_INCLUDE_DIR PATH_SUFFIXES include Include libasi REQUIRED)
     endif()
     if(NOT ZWO_EAF_LIBRARY)
-        find_library(ZWO_EAF_LIBRARY NAMES EAFFocuser EAFFocuser.bin HINTS ${ZWO_EAF_ROOT} "${OAS_VENDOR_SDK_ROOT}/zwo/eaf" ENV ZWO_EAF_ROOT
+        find_library(ZWO_EAF_LIBRARY NAMES EAF_focuser EAFFocuser EAFFocuser.bin HINTS ${ZWO_EAF_ROOT} "${OAS_VENDOR_SDK_ROOT}/zwo/eaf" ENV ZWO_EAF_ROOT
             PATH_SUFFIXES ${_oas_zwo_eaf_suffixes} REQUIRED)
+    endif()
+    if(WIN32)
+        get_filename_component(_oas_zwo_eaf_lib_name "${ZWO_EAF_LIBRARY}" NAME)
+        string(TOLOWER "${_oas_zwo_eaf_lib_name}" _oas_zwo_eaf_lib_name_lower)
+        if(_oas_zwo_eaf_lib_name_lower MATCHES "(^|[-_])static([-. _]|$)")
+            # Recover from older bootstrap records that selected the static
+            # archive.  The OAL EAF driver needs the DLL import library.
+            unset(_oas_zwo_eaf_import_library CACHE)
+            find_file(_oas_zwo_eaf_import_library
+                NAMES EAF_focuser.lib EAFFocuser.lib
+                HINTS
+                    "${ZWO_EAF_ROOT}"
+                    "${OAS_VENDOR_SDK_ROOT}/zwo/eaf"
+                    "C:/SDK/ZWO/EAF"
+                    "C:/SDK/ZWO/EAF SDK"
+                    ENV ZWO_EAF_ROOT
+                PATH_SUFFIXES
+                    lib lib/x64 x64 Win64
+                    lib/Windows/x64 lib/Windows/x64/Release
+                    Windows/x64 Windows/x64/Release
+                NO_DEFAULT_PATH)
+            if(_oas_zwo_eaf_import_library)
+                set(ZWO_EAF_LIBRARY "${_oas_zwo_eaf_import_library}" CACHE FILEPATH
+                    "Exact ZWO EAF SDK import library path" FORCE)
+                get_filename_component(_oas_zwo_eaf_import_dir "${_oas_zwo_eaf_import_library}" DIRECTORY)
+                foreach(_oas_zwo_eaf_runtime_name IN ITEMS EAF_focuser.dll EAFFocuser.dll)
+                    if(EXISTS "${_oas_zwo_eaf_import_dir}/${_oas_zwo_eaf_runtime_name}")
+                        set(ZWO_EAF_RUNTIME_DIR "${_oas_zwo_eaf_import_dir}" CACHE PATH
+                            "ZWO EAF runtime directory paired with import library" FORCE)
+                        break()
+                    endif()
+                endforeach()
+                message(STATUS "ZWO EAF: replaced static archive with DLL import library: ${ZWO_EAF_LIBRARY}")
+            else()
+                message(FATAL_ERROR
+                    "ZWO EAF Windows library '${ZWO_EAF_LIBRARY}' is a static archive. "
+                    "Use the SDK DLL import library (normally EAF_focuser.lib) and set "
+                    "ZWO_EAF_RUNTIME_DIR to the directory containing EAF_focuser.dll.")
+            endif()
+        endif()
     endif()
     add_library(oal_driver_zwo_eaf SHARED drivers/zwo_eaf/oal_driver_zwo_eaf.cpp)
     target_include_directories(oal_driver_zwo_eaf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${ZWO_EAF_INCLUDE_DIR})
@@ -633,6 +893,38 @@ if(OAS_ENABLE_NATIVE_CANON)
                 HINTS ${CANON_EDSDK_ROOT} ENV CANON_EDSDK_ROOT
                 PATH_SUFFIXES ${_oas_canon_library_suffixes} REQUIRED)
         endif()
+
+        # Canon ships x86 and x64 trees with identical DLL names.  Treat the
+        # import library and runtime DLL directory as one ABI/version pair.
+        # In particular, EDSDK_64/Library/EDSDK.lib must use the sibling
+        # EDSDK_64/Dll runtime, never Windows/EDSDK/Dll from the x86 tree.
+        if(WIN32 AND CANON_EDSDK_LIBRARY)
+            get_filename_component(_oas_canon_import_dir "${CANON_EDSDK_LIBRARY}" DIRECTORY)
+            get_filename_component(_oas_canon_arch_root "${_oas_canon_import_dir}" DIRECTORY)
+            oal_expected_windows_pe_machine(_oas_canon_expected_machine)
+            foreach(_oas_canon_dll_leaf IN ITEMS Dll DLL dll)
+                set(_oas_canon_paired_runtime "${_oas_canon_arch_root}/${_oas_canon_dll_leaf}")
+                set(_oas_canon_primary_dll "${_oas_canon_paired_runtime}/EDSDK.dll")
+                if(EXISTS "${_oas_canon_primary_dll}")
+                    oal_windows_pe_machine("${_oas_canon_primary_dll}" _oas_canon_runtime_machine _oas_canon_runtime_valid)
+                    if(_oas_canon_runtime_valid AND
+                       (NOT _oas_canon_expected_machine OR
+                        "${_oas_canon_runtime_machine}" STREQUAL "${_oas_canon_expected_machine}"))
+                        if(NOT "${CANON_EDSDK_RUNTIME_DIR}" STREQUAL "${_oas_canon_paired_runtime}")
+                            message(STATUS
+                                "Canon EDSDK: pairing import library '${CANON_EDSDK_LIBRARY}' with same-SDK runtime '${_oas_canon_paired_runtime}' (${_oas_canon_runtime_machine}); replacing stale/mismatched CANON_EDSDK_RUNTIME_DIR='${CANON_EDSDK_RUNTIME_DIR}'")
+                        else()
+                            message(STATUS
+                                "Canon EDSDK: verified import-library/runtime pair: ${_oas_canon_paired_runtime} (${_oas_canon_runtime_machine})")
+                        endif()
+                        set(CANON_EDSDK_RUNTIME_DIR "${_oas_canon_paired_runtime}" CACHE PATH
+                            "Directory containing EDSDK runtime DLLs (paired with CANON_EDSDK_LIBRARY)" FORCE)
+                        break()
+                    endif()
+                endif()
+            endforeach()
+        endif()
+
         add_library(oal_driver_canon SHARED drivers/canon/oal_driver_canon_edsdk.cpp)
         target_include_directories(oal_driver_canon PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CANON_EDSDK_INCLUDE_DIR})

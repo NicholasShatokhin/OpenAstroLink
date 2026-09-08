@@ -1,5 +1,8 @@
 ## v0.2.10.53 Raspberry Pi 4/5 ARM64 status
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 OpenAstroLink розглядає 64-bit Raspberry Pi як generic Linux `aarch64` target. Тому Pi 4 і Pi 5 мають спільний OAL ABI та ARM64 vendor SDK matrix. Історичні назви `rpi4-*` preset/sysroot лишаються для backward compatibility і не означають Cortex-A72-only binary. Поточний WSL/Linux→ARM64 build доходить до 100% для `openastrolink-node`, `oal-hardware-probe` та native QHY/Canon/ZWO/Gemini/Sky-Watcher/EQDrive drivers. Physical Pi 5 runtime/HIL і ARM64 `OpenAstroSuite` GUI runtime ще pending.
 
 # Raspberry Pi 4/5 observatory node — v0.2.10.53

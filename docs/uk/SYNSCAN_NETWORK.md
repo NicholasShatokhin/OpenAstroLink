@@ -1,5 +1,8 @@
 # Мережеві транспорти SynScan
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 
 > **Поточний реліз:** v0.2.10.53. Direct SynScan/EQDrive Wi-Fi та serial EQDrive зберігають HIL-кваліфіковану v9 Core geometry; polarity/geometry не змінювати без нових HIL доказів.
 
@@ -94,3 +97,8 @@ TCP 11882 — це **SynScan Communication Protocol server, який експо�
 App/Pro**. Це не direct Wi-Fi endpoint монтування. Починаючи з v0.2.10.18
 `synscan-wifi` більше не означає TCP 11882: прямий Wi-Fi використовує UDP
 11880.
+
+
+## Manual-slew repeat-HIL gate
+
+HIL 2026-09-06 показав, що UDP/11880 manual press/release інколи міг бути ignored або mount лишався в русі після release, хоча Core відправляв stop commands. Current code додає retry, instant stop, source validation і running/stopped post-condition verification. Geometry v9 не змінена. Перед закриттям gate виконати 30–50 rapid press/release/direction changes.

@@ -1,5 +1,8 @@
 # Live View, Scene Autofocus, and Finder Alignment
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 
 > **Current release:** v0.2.10.53. The Live View/finder/scene-autofocus workflow described here remains implemented; nearest-Beta work is HIL convergence and repeatability.
 

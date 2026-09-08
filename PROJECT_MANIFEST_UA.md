@@ -1,3 +1,29 @@
+## v0.2.10.58-buildfix9
+
+- Package/source line: `0.2.10.58-webrtc-preview-checkpoint`, Windows qualification checkpoint `buildfix9`.
+- Core version: `0.2.10.58`.
+- Qualification date: `2026-09-08`.
+- Fresh Windows x64/MSVC configure/build підтверджено з `LibDataChannel::LibDataChannel`; final link доходить до `OpenAstroSuite.exe`.
+- WebRTC runtime DLL staging автоматичний із per-user vcpkg runtime.
+- ZWO EAF Windows linkage відхиляє static archive і використовує DLL import library/runtime pair.
+- Vendor runtime staging перевіряє PE Machine проти target architecture.
+- Canon EDSDK Windows pairing жорстко спарює `EDSDK_64/Library/EDSDK.lib` із sibling AMD64 `EDSDK_64/Dll`, виправляючи stale x86 runtime cache.
+- Попередній `.58` runtime smoke підтвердив node startup після WebRTC staging та OpenCV/UVC Live View. Поточний buildfix9 node-registry retest Canon/ZWO EAF ще pending.
+- WebRTC payload лишається OALV/JPEG через DataChannel; `/video` — per-role fallback; RTP H.264/H.265/AV1 media tracks ще не реалізовані.
+- Static evidence: 75/75 general, 43/43 WebRTC, 43/43 high-rate/Dual-Live.
+- Mount coordinate model v9 (`Axis1Sign=+1`, `Axis2Sign=-1`) лишається frozen і незмінною.
+- Повний актуальний статус: `docs/uk/CURRENT_CHECKLIST.md`.
+
+## v0.2.10.56
+
+- Package: `0.2.10.56-handoff-full`
+- Core version: `0.2.10.56`
+- Дата: `2026-09-07`
+- Призначення: synchronized repository/documentation/site/handoff checkpoint після high-rate streaming і HIL findings 2026-09-06.
+- Functional source basis: v0.2.10.55 + v0.2.10.54 HIL hardening.
+- Mount coordinate model v9 лишається frozen і незмінною.
+- Current high-rate branch ще потребує fresh physical build/HIL cycle.
+
 ## v0.2.10.55
 
 - Package: `0.2.10.55-high-rate-dual-live`
@@ -41,7 +67,7 @@
 - `scripts/build_windows.ps1` сам завантажує `vcvars64` і знаходить Ninja у `PATH` або в Visual Studio CMake tools. Сирий preset запускайте з x64 MSVC Developer Command Prompt.
 - Windows-hosted Raspberry Pi cross presets залишаються GNU/Ninja і не змінювались.
 
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.55
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.58
 
 ## v0.2.10.49
 

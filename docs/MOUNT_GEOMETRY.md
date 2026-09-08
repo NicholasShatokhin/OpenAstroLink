@@ -1,5 +1,8 @@
 # Mount geometry and mechanical coordinates
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 OpenAstroLink separates **sky coordinates** from **mechanical mount axes**. J2000 is the canonical equatorial interchange frame; a mount geometry model converts the requested sky position to the axes required by the selected mount type.
 
 ## Supported geometry profiles

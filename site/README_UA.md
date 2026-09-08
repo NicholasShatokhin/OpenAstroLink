@@ -1,4 +1,6 @@
-# Site snapshot — v0.2.10.55
+# Site snapshot — v0.2.10.58-buildfix9
+
+Windows x64/MSVC buildfix9 fresh-build qualified з увімкненим WebRTC. Активні libdatachannel runtime staging, ZWO EAF DLL-import linkage, vendor PE-machine validation і Canon `EDSDK_64` import/runtime pair locking. Найближчий runtime gate — load `oal.canon` і `oal.zwo.eaf` із corrected build, далі QHY/WebRTC/Dual-Live HIL.
 
 Містить новий розділ offline Sky Map navigation.
 
@@ -20,3 +22,5 @@ Landing page оновлено під підтверджені Windows/Linux/Rasp
 Sky Map v0.2.10.52 додає наведення у довільну видиму точку неба через той самий OAL mount/Scheduler path.
 
 Sky Map v0.2.10.53 додає measured solved camera rectangles, predicted main/guide footprints, Scheduler mosaic preview та optional Stellarium Remote Control frame export.
+
+WebRTC checkpoint: `/webrtc` signaling + `oalv-main`/`oalv-guide` OALW v1 DataChannel; `/video` fallback збережено.

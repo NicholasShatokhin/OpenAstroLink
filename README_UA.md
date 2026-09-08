@@ -1,3 +1,21 @@
+## v0.2.10.58-buildfix9 — Windows build-qualified WebRTC checkpoint
+
+- Fresh Windows x64/MSVC configure/build тепер PASS з `libdatachannel 0.24.5`; WebRTC runtime DLL stage-яться автоматично.
+- ZWO EAF використовує правильну DLL import library/runtime pair; static archive відхиляється для plugin driver.
+- Canon EDSDK жорстко спарює AMD64 `EDSDK_64/Library/EDSDK.lib` із відповідним `EDSDK_64/Dll` і відхиляє x86 DLL.
+- Попередній `.58` node/OpenCV-UVC Live View runtime smoke позитивний; buildfix9 ще потребує node-registry retest Canon і ZWO EAF.
+- QHY high-rate, actual WebRTC transport/fallback, zero-drop SER і Main+Guide Dual Live лишаються HIL gates.
+- Повний актуальний статус: `docs/uk/CURRENT_CHECKLIST.md`.
+- Mount geometry v9 frozen і незмінна.
+
+## v0.2.10.57 — pre-HIL hardening high-rate data plane
+
+- Прибирає stale QHY `maxFps:30` capability та зменшує steady-state QHY live SDK overhead.
+- Робить OALV payload/source dimensions явними та прибирає duplicate remote JPEG decode.
+- Забороняє призначати один native physical camera одночасно Main і Guide; Dual Live вимагає двох native devices.
+- Frozen direct-MC mount geometry v9 не змінюється.
+- Static regressions проходять; fresh Windows/Linux build і physical HIL усе ще потрібні до qualification v0.2.10.57.
+
 ## v0.2.10.55 — high-rate binary Live View та Dual Live
 
 - Live View більше не обмежений 30 FPS: `captureFpsLimit=0` означає camera maximum, а preview має незалежний default 60 FPS.
@@ -101,7 +119,7 @@ Qt/OpenCV/QHY/ZWO автоматизовані там, де є детермін�
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.55 — cross-platform build-qualified native-first Beta foundation з offline free-point Sky Map navigation і HIL-qualified direct-MC v9 mount geometry**
+**Поточний пакет: v0.2.10.58 — WebRTC preview checkpoint; static-qualified, fresh build/network/camera HIL pending**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

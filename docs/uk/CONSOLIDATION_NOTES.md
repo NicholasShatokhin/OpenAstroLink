@@ -1,5 +1,8 @@
 # Як було зведено попередні фрагменти
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 
 > **Контекст поточного релізу:** v0.2.10.50. Це історичні notes про консолідацію; native OAL лишається default, INDI — opt-in.
 

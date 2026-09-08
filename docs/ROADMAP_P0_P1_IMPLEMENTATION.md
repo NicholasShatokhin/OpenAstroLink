@@ -1,19 +1,31 @@
+# OpenAstroLink roadmap — immediate execution after v0.2.10.58-buildfix9
 
-### v0.2.10.55 immediate gate
+**Snapshot:** 2026-09-08  
+**Master checklist:** `CURRENT_CHECKLIST.md`
 
-High-rate Live View / Dual Live HIL comes before further autofocus tuning because the same camera data plane is reused by alignment, guiding setup and planetary work. Qualification target: >60 FPS where hardware permits, independent preview throttling, zero recording drops, and simultaneous main+guide streaming.
+The previous `fresh Windows build` blocker is closed. The exact current Windows x64/MSVC build now configures and links successfully with WebRTC enabled, WebRTC runtime staging active, ZWO EAF using the correct DLL import library, and Canon EDSDK locked to the AMD64 `EDSDK_64` runtime pair.
 
-## v0.2.10.55 execution order
+The immediate program is now **runtime/HIL qualification**, not another broad architecture rewrite.
 
-Cross-platform build qualification is no longer the primary blocker: Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node builds are confirmed. The nearest Beta work is now deliberately narrow:
+## v0.2.10.58-buildfix9 execution order
 
-1. **HIL autofocus** — repeatability, backlash, cancel/failure rollback and verification frame.
-2. **HIL auto-exposure** — convergence/lock/reacquire across representative scenes.
-3. **Scheduler HIL** — mixed DSO/planetary execution, cancellation and restart boundaries.
-4. **Mosaic HIL** — tile geometry, solve/recenter and traversal.
-5. **Polar Alignment HIL** — guided sample motion and safe-region behavior.
+1. Runtime-regression the native plugin registry: `oal.canon` and `oal.zwo.eaf` must load with no Win32 error 193.
+2. QHY high-rate HIL at short exposure: `Capture FPS=MAX`, `Preview=60`; record capture/record/preview FPS and drops.
+3. 5–10 minute SER with `recordDropped=0`; verify AutoStakkert frame count against OAL telemetry/sidecar.
+4. Preview 15/30/60/MAX while recording; GUI preview must not materially reduce recording throughput.
+5. Confirm actual WebRTC DataChannel transport, then failure/fallback/reconnect behavior.
+6. Run Main + Guide Dual Live with two physical cameras and per-role fallback.
+7. Repeat 30–50 direct-Wi-Fi manual press/release/direction changes.
+8. Repeat Scene AF and sparse-scene still auto-exposure HIL; then night HFR AF.
+9. Scheduler DSO + ASTAP/recenter HIL.
+10. Planetary SER/ROI executor HIL.
+11. Mosaic 2×2 + footprint overlay HIL.
+12. Polar Alignment real-sky HIL.
+13. Discovery/hotplug regression.
+14. Portable Windows package + clean-machine test.
+15. Full supervised night qualification and deploy `openastro.link`.
 
-Smart Telescope UX, broader unattended-observatory automation and productized one-button workflows remain OAL 1.0 scope.
+Do not reopen mount coordinate model v9 without new contradictory HIL evidence. Smart Telescope UX and broad unattended-observatory automation remain OAL 1.0 scope.
 
 # OpenAstroLink roadmap — implementation status after v0.2.10.52
 
@@ -90,13 +102,17 @@ Implement out-of-process driver host/crash isolation. Stabilize public C++ SDK f
 
 ## Immediate engineering sequence
 
-1. **HIL autofocus:** convergence, repeatability, backlash, rollback/cancel and final verification frame.
-2. **HIL auto-exposure:** convergence/lock/reacquire on representative real scenes.
-3. **Scheduler HIL:** mixed DSO/planetary blocks, cancellation and restart boundaries.
-4. **Mosaic HIL:** tile geometry, solve/recenter and traversal.
-5. **Polar Alignment HIL:** real-sky guided sampling and safe-region motion.
-6. Continue production guiding, durable session/data-plane and remaining P0 hardening in parallel after the Beta workflow gates.
-7. Keep Smart Telescope UX in the OAL 1.0 track.
+1. Fresh build of the current high-rate branch.
+2. High-rate main-camera + SER zero-drop HIL.
+3. Dual Live main+guide HIL.
+4. Repeat direct-Wi-Fi manual-slew HIL.
+5. Repeat scene autofocus and still auto-exposure HIL; then night star/HFR AF.
+6. Scheduler HIL.
+7. Mosaic HIL.
+8. Polar Alignment HIL.
+9. Full supervised night qualification.
+10. Continue production guiding, durable session/data-plane and remaining P0 hardening after the Beta workflow gates.
+11. Keep Smart Telescope UX in the OAL 1.0 track.
 
 ## Release gates
 
@@ -108,3 +124,6 @@ Implement out-of-process driver host/crash isolation. Stabilize public C++ SDK f
 ## OAL 1.0 autonomous-observatory target
 
 Specified/planned but not yet complete: TLS/auth/roles/audit, idempotency, durable operations, replayable events, safety/weather/roof/power interlocks, emergency stop, production guiding, durable mixed DSO/planetary scheduler, automatic meridian flip recovery, durable science data/provenance, driver isolation and public conformance. These are explicit 1.0 roadmap items rather than claims about the current beta implementation.
+
+## Immediate Windows gate after buildfix8
+Before the high-rate/QHY WebRTC throughput sequence, clear the two native vendor plugin loader failures: run the AMD64 runtime repair/diagnostic, require Canon EDSDK and ZWO EAF to load without `ERROR_BAD_EXE_FORMAT`, then continue with camera-max/Preview-60 and zero-record-drop SER HIL.

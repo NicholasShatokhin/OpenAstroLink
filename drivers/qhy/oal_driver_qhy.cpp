@@ -195,7 +195,7 @@ std::string exposureRangeJson(CameraState *c){
 const char *caps(void*,const char *device){
     const std::string dev=device?device:"";auto*c=camera(dev);std::ostringstream o;o<<"{\"schemaVersion\":\"1.0\",\"identity\":{\"vendor\":\"QHYCCD\",\"hardwareId\":"<<quote(c->rawId)<<"},\"camera\":{";
     if(c->connected)o<<"\"sensor\":{\"widthPx\":"<<c->sensorW<<",\"heightPx\":"<<c->sensorH<<",\"nativeBits\":"<<c->nativeBpp<<",\"color\":"<<(c->bayerPattern.empty()?"false":"true")<<(c->bayerPattern.empty()?"":std::string(",\"bayerPattern\":")+quote(c->bayerPattern))<<"},";else o<<"\"sensor\":{\"widthPx\":0,\"heightPx\":0},";
-    o<<"\"exposure\":"<<exposureRangeJson(c)<<",\"gain\":"<<rangeJson(c,CONTROL_GAIN)<<",\"offset\":"<<rangeJson(c,CONTROL_OFFSET)<<",\"roi\":{\"supported\":true},\"binning\":{\"supported\":true},\"frameTransport\":[\"host-frame-v2\"],\"singleFrame\":{\"supported\":true,\"abortSupported\":true},\"streaming\":{\"supported\":true,\"transport\":\"qhyccd-live\",\"maxFps\":30}}}";
+    o<<"\"exposure\":"<<exposureRangeJson(c)<<",\"gain\":"<<rangeJson(c,CONTROL_GAIN)<<",\"offset\":"<<rangeJson(c,CONTROL_OFFSET)<<",\"roi\":{\"supported\":true},\"binning\":{\"supported\":true},\"frameTransport\":[\"host-frame-v2\"],\"singleFrame\":{\"supported\":true,\"abortSupported\":true},\"streaming\":{\"supported\":true,\"transport\":\"qhyccd-live\"}}}";
     return copyString(o.str());
 }
 const char *health(void*,const char *device){
@@ -265,7 +265,10 @@ const char *invoke(void*,const char *device,const char *method,const char *reque
     if(m=="camera.liveFrame"){
         std::lock_guard<std::mutex> op(c->operationMutex);if(!c->liveActive)return fail("LIVE_NOT_ACTIVE","QHY live stream is not active");
         const int timeoutMs=std::clamp(int(number(r,"timeoutMs",2000)),250,10000);const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs);
-        const auto length=GetQHYCCDMemLength(c->handle);if(!length)return fail("QHY_ERROR","GetQHYCCDMemLength returned zero in live mode");if(c->liveBuffer.size()!=length)c->liveBuffer.resize(length);auto &bytes=c->liveBuffer;std::uint32_t fw=0,fh=0,bpp=0,channels=0;std::uint32_t rc=QHYCCD_ERROR;
+        // liveStart sizes the reusable buffer once. Avoid a vendor SDK query on
+        // every high-rate frame; fall back to one query only if the start-time
+        // size was unavailable. ROI/binning cannot change while liveActive.
+        if(c->liveBuffer.empty()){const auto length=GetQHYCCDMemLength(c->handle);if(!length)return fail("QHY_ERROR","GetQHYCCDMemLength returned zero in live mode");c->liveBuffer.resize(length);}auto &bytes=c->liveBuffer;std::uint32_t fw=0,fh=0,bpp=0,channels=0;std::uint32_t rc=QHYCCD_ERROR;
         while(std::chrono::steady_clock::now()<deadline&&!c->abortRequested){rc=GetQHYCCDLiveFrame(c->handle,&fw,&fh,&bpp,&channels,bytes.data());if(qok(rc))break;std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         if(c->abortRequested) return fail("CANCELLED","QHY live stream cancelled");
         if(!qok(rc)) return fail("LIVE_FRAME_TIMEOUT","QHY live stream produced no frame before timeout");

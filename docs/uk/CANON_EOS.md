@@ -1,5 +1,8 @@
 # Нативний Canon EOS — v0.2.10.5
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 
 > **Поточний реліз:** v0.2.10.53. `oal.canon` лишається native OAL. EDSDK підтримується на Windows і у валідованій Linux/ARM64 vendor-збірці; Linux також може використовувати selectable gphoto2 transport. Canon EDSDK надає користувач, OAL його автоматично не завантажує.
 
@@ -66,3 +69,8 @@ CANON_EDSDK_RUNTIME_DIR
 ## Hot-remove / power-off
 
 The EDSDK backend registers the per-camera state-event handler. `kEdsStateEvent_Shutdown` immediately marks the body disconnected, wakes any pending exposure, emits `device.disconnected`, and preserves the persisted binding so a later camera-added hot-plug can reconnect automatically.
+
+## Windows buildfix9 ABI/runtime pairing — 2026-09-08
+
+Windows Canon EDSDK configuration тепер трактує import library і runtime як одну SDK/ABI pair. `EDSDK_64/Library/EDSDK.lib` спарюється з sibling `EDSDK_64/Dll`; PE-machine validation відхиляє parallel I386 runtime tree. Fresh configure/build PASS зі staged двома AMD64 Canon runtime DLL. Залишився node-registry runtime load `oal.canon` без Win32 error 193, а далі normal Canon exposure/reconnect regression.
+

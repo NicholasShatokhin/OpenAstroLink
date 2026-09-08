@@ -1,5 +1,8 @@
 ## Current qualification — v0.2.10.53
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 | Target | Build status | Notes |
 |---|---|---|
 | Windows x64 / MSVC 2022 + Ninja | ✅ confirmed | Full observatory build succeeded after deterministic `cl.exe` selection. |
@@ -12,7 +15,7 @@ Native drivers are the default everywhere. INDI is opt-in only. Raw `cmake --pre
 
 ## Windows compiler selection — build-fix20
 
-Native Windows presets use the Ninja generator with `CMAKE_CXX_COMPILER=cl.exe`. This keeps the proven MSVC/Ninja build path while preventing Strawberry/MinGW `c++.exe` from being selected, and it does not require CMake to discover a registered Visual Studio instance. Raw `cmake --preset my-windows-observatory` must run in an x64 MSVC Developer Command Prompt; `scripts/build_windows.ps1` loads `vcvars64` automatically. Native Windows build directories use `*-msvc-ninja` names to avoid stale GNU-Ninja and failed VS-generator cache collisions. Windows-hosted Raspberry Pi cross presets remain GNU/Ninja because they intentionally target Linux ARM.
+Native Windows presets use the Ninja generator with `CMAKE_CXX_COMPILER=cl.exe`. This keeps the proven MSVC/Ninja build path while preventing Strawberry/MinGW `c++.exe` from being selected, and it does not require CMake to discover a registered Visual Studio instance. Raw `cmake --preset my-windows-observatory` must run in an x64 MSVC Developer Command Prompt; `scripts/build_windows.ps1` loads `vcvars64` automatically. After `scripts/bootstrap_native_dependencies.cmd`, native configure also auto-imports `.oal/native-deps-windows-x64.json`, so WebRTC/vcpkg dependency roots are available to the raw preset path as well. Native Windows build directories use `*-msvc-ninja` names to avoid stale GNU-Ninja and failed VS-generator cache collisions. Windows-hosted Raspberry Pi cross presets remain GNU/Ninja because they intentionally target Linux ARM.
 
 # Build platforms — v0.2.10.53
 
@@ -482,3 +485,8 @@ Jammy provides Qt 6.2.4 only. Installing more Jammy `qt6-*`/`libqt6*-dev` packag
 ```
 
 The wrapper installs a complete per-user Qt through `aqtinstall` under `~/.local/share/openastrolink/qt` and does not require the Qt GUI installer or a Qt account. Do not run the Qt GUI installer with `sudo`. The Linux wrapper also removes a stale CMake cache automatically when a checkout has moved between WSL (`/mnt/c/...`) and native Linux (`~/...`).
+
+## 2026-09-08 Windows buildfix9 qualification
+
+The current `my-windows-observatory` MSVC/Ninja path is fresh-build qualified with WebRTC enabled. Native dependency records are imported into raw CMake presets; libdatachannel runtime DLLs are staged automatically; ZWO EAF uses the DLL import library; and Canon EDSDK locks the AMD64 import library to the sibling `EDSDK_64/Dll` runtime after PE-machine validation. The build reaches the final `OpenAstroSuite.exe` link. Current runtime retest is limited to loading `oal.canon` and `oal.zwo.eaf` from the corrected buildfix9 tree.
+

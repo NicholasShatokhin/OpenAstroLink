@@ -5,6 +5,12 @@
 #include <QUrl>
 #include <QWebSocket>
 #include <QTimer>
+#include <QBitArray>
+#include <QVector>
+#include <atomic>
+#ifdef OAS_HAVE_WEBRTC
+#include <rtc/rtc.h>
+#endif
 
 namespace oas {
 
@@ -12,7 +18,7 @@ class RemoteObservatoryController final : public ObservatoryController {
     Q_OBJECT
 public:
     explicit RemoteObservatoryController(QUrl nodeBase, QObject *parent = nullptr);
-    ~RemoteObservatoryController() override = default;
+    ~RemoteObservatoryController() override;
 
     bool probe(QString *error = nullptr);
 
@@ -109,6 +115,9 @@ public:
 private slots:
     void onWsText(const QString &message);
     void onWsBinary(const QByteArray &message);
+#ifdef OAS_HAVE_WEBRTC
+    void onWebRtcSignal(const QString &message);
+#endif
 
 private:
     QUrl api(const QString &path) const;
@@ -116,6 +125,22 @@ private:
     bool refreshMetadata(QString *error=nullptr) const;
     void updateBackendCatalogFromState(const QJsonObject &state) const;
     void openEventStream(const QJsonObject &nodeInfo);
+    void consumeVideoPacket(const QByteArray &message,const QString &networkTransport);
+#ifdef OAS_HAVE_WEBRTC
+    struct WebRtcReassembly {quint64 sequence{0};quint32 totalLength{0};quint16 fragmentCount{0};QVector<QByteArray> fragments;QBitArray received;int receivedCount{0};};
+    bool ensureWebRtcPeer();
+    void stopWebRtcPeer();
+    void sendWebRtcSignal(const QJsonObject &message);
+    void handleWebRtcFragment(const QByteArray &message);
+    void updateVideoFallback();
+    static void rtcLocalDescriptionCallback(int pc,const char *sdp,const char *type,void *ptr);
+    static void rtcLocalCandidateCallback(int pc,const char *candidate,const char *mid,void *ptr);
+    static void rtcDataChannelCallback(int pc,int dc,void *ptr);
+    static void rtcDataOpenCallback(int dc,void *ptr);
+    static void rtcDataClosedCallback(int dc,void *ptr);
+    static void rtcDataErrorCallback(int dc,const char *error,void *ptr);
+    static void rtcDataMessageCallback(int dc,const char *message,int size,void *ptr);
+#endif
     static SolveResult parseSolve(const QJsonObject &o);
     static AutofocusResult parseAutofocus(const QJsonObject &o);
     static GuidingStatus parseGuiding(const QJsonObject &o);
@@ -134,9 +159,26 @@ private:
     mutable bool metadataLoaded_{false};
     QWebSocket ws_;
     QWebSocket videoWs_;
+#ifdef OAS_HAVE_WEBRTC
+    QWebSocket webrtcWs_;
+#endif
     QTimer wsReconnect_;
     QUrl wsUrl_;
     QUrl videoWsUrl_;
+#ifdef OAS_HAVE_WEBRTC
+    QUrl webrtcWsUrl_;
+    bool webrtcAdvertised_{false};
+    bool webrtcRemoteDescriptionSet_{false};
+    QList<QPair<QString,QString>> webrtcPendingCandidates_;
+    std::atomic_int webrtcPc_{-1};
+    std::atomic_int webrtcMainDc_{-1};
+    std::atomic_int webrtcGuideDc_{-1};
+    std::atomic_bool webrtcMainOpen_{false};
+    std::atomic_bool webrtcGuideOpen_{false};
+    std::atomic_bool webrtcStopping_{false};
+    WebRtcReassembly webrtcMainAssembly_;
+    WebRtcReassembly webrtcGuideAssembly_;
+#endif
     CameraFrame previousFrame_;
     CameraFrame lastFrame_;
     CameraFrame lastGuideFrame_;

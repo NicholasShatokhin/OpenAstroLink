@@ -1,5 +1,8 @@
 # SynScan network transports
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 
 > **Current release:** v0.2.10.53. Direct SynScan/EQDrive Wi-Fi and serial EQDrive retain the HIL-qualified v9 Core geometry; do not change polarity/geometry without new HIL evidence.
 
@@ -100,3 +103,8 @@ Reference: Sky-Watcher SynScan App Protocol,
 TCP 11882 is the **SynScan Communication Protocol server exported by SynScan
 App/Pro**. It is not the direct mount-Wi-Fi endpoint. OpenAstroLink v0.2.10.18
 no longer labels this path `synscan-wifi`; direct Wi-Fi uses UDP 11880 instead.
+
+
+## Manual-slew repeat-HIL gate
+
+2026-09-06 HIL showed that UDP/11880 manual press/release could intermittently be ignored or remain moving after release even though Core emitted stop commands. Current code adds retry, instant stop, source validation and running/stopped post-condition verification. Geometry v9 is unchanged. Run 30–50 rapid press/release/direction changes before closing this gate.

@@ -56,7 +56,7 @@ if (-not $Force) {
             $rec = [ordered]@{ OAS_QT_ROOT=$p; CMAKE_PREFIX_PATH=$p; OAS_QT_VERSION=$v }
             $out = "$root\.oal\native-qt-windows-x64.json"
             $rec | ConvertTo-Json | Set-Content -Encoding UTF8 $out
-            Write-Host "Using native Qt $v: $p"
+            Write-Host "Using native Qt ${v}: $p"
             Write-Host "Qt environment record: $out"
             exit 0
         }

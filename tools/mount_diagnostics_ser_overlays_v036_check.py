@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
 checks=[
- ('release version','CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.55'),
+ ('release version','CMakeLists.txt','project(OpenAstroSuite VERSION 0.2.10.58'),
  ('SER writer source','src/core/ser_writer.cpp','LUCAM-RECORDER'),
  ('SER raw pre-debayer order','src/core/application_controller.cpp','appendSer(frame,serError)'),
  ('SER live request','src/core/astro_types.h','bool recordSer{false}'),
@@ -26,7 +26,8 @@ checks=[
  ('mount backend diagnostic snapshot','src/core/application_controller.cpp','Mount diagnostic CONNECT'),
  ('ASCOM diagnostics state','src/core/application_controller.cpp','mj["diagnostics"]'),
  ('remote mount diagnostics','src/core/remote_observatory_controller.cpp','s.diagnostics=o.value("diagnostics").toObject()'),
- ('live preview stale-cache avoidance','src/core/remote_observatory_controller.cpp','live?QString("latest"):id'),
+ ('live preview skips HTTP preview-cache fetch','src/core/remote_observatory_controller.cpp','const bool live=id.startsWith("live-");if(!live)'),
+ ('live preview binary data plane','src/core/remote_observatory_controller.cpp','setPath("/video")'),
 ]
 fail=[]
 for name,file,needle in checks:

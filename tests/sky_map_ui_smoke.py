@@ -12,7 +12,7 @@ sky_cpp = (root / 'src/gui/sky_map_widget.cpp').read_text(encoding='utf-8')
 stell_h = (root / 'src/gui/stellarium_remote_control_client.h').read_text(encoding='utf-8')
 stell_cpp = (root / 'src/gui/stellarium_remote_control_client.cpp').read_text(encoding='utf-8')
 
-assert 'VERSION 0.2.10.55' in cmake
+assert 'VERSION 0.2.10.58' in cmake
 assert 'src/gui/sky_map_widget.cpp' in cmake
 assert 'src/gui/stellarium_remote_control_client.cpp' in cmake
 assert 'struct SkyFrame' in astro and 'skyFrameToJson' in astro and 'skyFrameFromJson' in astro

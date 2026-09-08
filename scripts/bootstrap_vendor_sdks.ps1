@@ -34,6 +34,28 @@ function Expand-ZipTree([string]$Archive, [string]$Dest) {
     }
 }
 
+function Get-PeMachine([string]$Path) {
+    try {
+        $fs = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite')
+        try {
+            $br = New-Object System.IO.BinaryReader($fs)
+            if ($br.ReadUInt16() -ne 0x5A4D) { return 'NOT_PE' }
+            $fs.Position = 0x3C
+            $pe = $br.ReadUInt32()
+            if ($pe + 6 -gt $fs.Length) { return 'TRUNCATED' }
+            $fs.Position = $pe
+            if ($br.ReadUInt32() -ne 0x00004550) { return 'NOT_PE' }
+            switch ($br.ReadUInt16()) {
+                0x8664 { return 'AMD64' }
+                0x014c { return 'I386' }
+                0xaa64 { return 'ARM64' }
+                0x01c4 { return 'ARMNT' }
+                default { return ('0x{0:X4}' -f $_) }
+            }
+        } finally { $fs.Dispose() }
+    } catch { return 'ERROR' }
+}
+
 function Stage-ZwoWindows([string]$Kind, [string]$SearchRoot, [string]$Stage) {
     if ($Kind -eq 'ASI') {
         $headerName='ASICamera2.h'; $libPattern='ASICamera2.lib'; $dllPattern='ASICamera2.dll'
@@ -42,11 +64,21 @@ function Stage-ZwoWindows([string]$Kind, [string]$SearchRoot, [string]$Stage) {
     }
     $h = Get-ChildItem $SearchRoot -Recurse -File -Filter $headerName -ErrorAction SilentlyContinue | Select-Object -First 1
     $libs = if ($Kind -eq 'ASI') { Get-ChildItem $SearchRoot -Recurse -File -Filter $libPattern -ErrorAction SilentlyContinue } else { Get-ChildItem $SearchRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $libPattern } }
-    $l = $libs | Where-Object { $_.FullName -match '(?i)(x64|win64|[\\/]64[\\/]|Release)' } | Select-Object -First 1
-    if (-not $l) { $l = $libs | Select-Object -First 1 }
+    if ($Kind -eq 'EAF') {
+        # The Windows EAF SDK can ship both EAF_focuser.lib (DLL import library)
+        # and EAF_focuser-static.lib. The native OAL driver must prefer the
+        # import library; selecting the static archive produces unresolved EAF*
+        # symbols with the current Windows SDK layout.
+        $preferred = @($libs | Where-Object { $_.Name -notmatch '(?i)(^|[-_])static([-. _]|$)' })
+        if ($preferred.Count -gt 0) { $libs = $preferred }
+    }
+    $l = $libs | Where-Object { $_.FullName -match '(?i)(x64|win64|[\\/]64[\\/]|Release)' } | Sort-Object @{Expression={ if ($_.Name -match '(?i)^EAF_focuser\.lib$') {0} else {1} }}, FullName | Select-Object -First 1
+    if (-not $l) { $l = $libs | Sort-Object @{Expression={ if ($_.Name -match '(?i)^EAF_focuser\.lib$') {0} else {1} }}, FullName | Select-Object -First 1 }
     $dlls = if ($Kind -eq 'ASI') { Get-ChildItem $SearchRoot -Recurse -File -Filter $dllPattern -ErrorAction SilentlyContinue } else { Get-ChildItem $SearchRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $dllPattern } }
-    $d = $dlls | Where-Object { $_.FullName -match '(?i)(x64|win64|[\\/]64[\\/]|Release)' } | Select-Object -First 1
-    if (-not $d) { $d = $dlls | Select-Object -First 1 }
+    # Validate the actual PE machine instead of trusting SDK folder names.
+    $amd64Dlls = @($dlls | Where-Object { (Get-PeMachine $_.FullName) -eq 'AMD64' })
+    $d = $amd64Dlls | Where-Object { $_.FullName -match '(?i)(x64|win64|[\/]64[\/]|Release)' } | Select-Object -First 1
+    if (-not $d) { $d = $amd64Dlls | Select-Object -First 1 }
     if (-not $h -or -not $l) { return $null }
     Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path "$Stage\include", "$Stage\lib", "$Stage\bin" | Out-Null
@@ -70,8 +102,9 @@ if (-not $SkipQhy) {
         $hdr = Get-ChildItem $tmp -Recurse -File -Filter qhyccd.h | Select-Object -First 1
         $lib = Get-ChildItem $tmp -Recurse -File -Filter qhyccd.lib | Where-Object { $_.FullName -match '(?i)(x64|win64|64)' } | Select-Object -First 1
         if (-not $lib) { $lib = Get-ChildItem $tmp -Recurse -File -Filter qhyccd.lib | Select-Object -First 1 }
-        $dll = Get-ChildItem $tmp -Recurse -File -Filter qhyccd.dll | Where-Object { $_.FullName -match '(?i)(x64|win64|64)' } | Select-Object -First 1
-        if (-not $dll) { $dll = Get-ChildItem $tmp -Recurse -File -Filter qhyccd.dll | Select-Object -First 1 }
+        $qhyDlls = @(Get-ChildItem $tmp -Recurse -File -Filter qhyccd.dll | Where-Object { (Get-PeMachine $_.FullName) -eq 'AMD64' })
+        $dll = $qhyDlls | Where-Object { $_.FullName -match '(?i)(x64|win64|64)' } | Select-Object -First 1
+        if (-not $dll) { $dll = $qhyDlls | Select-Object -First 1 }
         if (-not $hdr -or -not $lib -or -not $dll) { throw "QHY Windows SDK layout changed: qhyccd.h/.lib/.dll not all found" }
         $stage = Join-Path $DestRoot 'qhy'
         Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue

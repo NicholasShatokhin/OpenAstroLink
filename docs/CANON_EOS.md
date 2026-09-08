@@ -1,5 +1,8 @@
 # Native Canon EOS driver — `oal.canon`
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 
 > **Current release:** v0.2.10.53. `oal.canon` remains native OAL. EDSDK is supported on Windows and in the validated Linux/ARM64 vendor build; Linux may also use the selectable gphoto2 transport. Canon EDSDK is user-supplied and is not downloaded automatically by OAL.
 
@@ -134,3 +137,8 @@ Recommended EOS 550D HIL sequence:
 ## Hot-remove / power-off
 
 The EDSDK backend registers the per-camera state-event handler. `kEdsStateEvent_Shutdown` immediately marks the body disconnected, wakes any pending exposure, emits `device.disconnected`, and preserves the persisted binding so a later camera-added hot-plug can reconnect automatically.
+
+## Windows buildfix9 ABI/runtime pairing — 2026-09-08
+
+Windows Canon EDSDK configuration now treats the import library and runtime as one SDK/ABI pair. `EDSDK_64/Library/EDSDK.lib` is paired with sibling `EDSDK_64/Dll`; PE-machine validation rejects the parallel I386 runtime tree. Fresh configure/build passes with two AMD64 Canon runtime DLLs staged. The remaining acceptance test is node-registry runtime loading of `oal.canon` without Win32 error 193, followed by the normal Canon exposure/reconnect regression.
+

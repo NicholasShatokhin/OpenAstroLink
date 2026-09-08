@@ -1,3 +1,21 @@
+## v0.2.10.58-buildfix9 — Windows build-qualified WebRTC checkpoint
+
+- Fresh Windows x64/MSVC configure and build now pass with `libdatachannel 0.24.5`; WebRTC runtime DLLs are staged automatically.
+- ZWO EAF uses the correct DLL import library/runtime pair; the static archive is rejected for the plugin driver.
+- Canon EDSDK locks AMD64 `EDSDK_64/Library/EDSDK.lib` to the matching `EDSDK_64/Dll` runtime and rejects x86 DLLs.
+- The previous `.58` node/OpenCV-UVC Live View runtime smoke is positive; buildfix9 still needs a node-registry retest for Canon and ZWO EAF before those plugins are runtime-qualified.
+- QHY high-rate, actual WebRTC transport/fallback, zero-drop SER and Main+Guide Dual Live remain HIL gates.
+- Complete current status: `docs/CURRENT_CHECKLIST.md`.
+- Mount geometry v9 is frozen and unchanged.
+
+## v0.2.10.57 — pre-HIL high-rate data-plane hardening
+
+- Removes the stale QHY `maxFps:30` capability and reduces steady-state QHY live SDK overhead.
+- Makes OALV payload/source dimensions explicit and removes duplicate remote JPEG decoding.
+- Rejects assigning one native physical camera to both Main and Guide; Dual Live requires two native devices.
+- Does not change frozen direct-MC mount geometry v9.
+- Static regressions pass; fresh Windows/Linux build and physical HIL are still required before calling v0.2.10.57 qualified.
+
 ## v0.2.10.55 — high-rate binary Live View and Dual Live
 
 - Live View capture is no longer capped at 30 FPS: `captureFpsLimit=0` means camera maximum and preview has an independent 60 FPS default.
@@ -101,7 +119,7 @@ Qt/OpenCV/QHY/ZWO are resolved where deterministic distribution is available. Ca
 - QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
 - Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
 
-**Current package: v0.2.10.55 — cross-platform build-qualified native-first Beta foundation with offline free-point Sky Map navigation and HIL-qualified direct-MC v9 mount geometry**
+**Current package: v0.2.10.58 — WebRTC preview checkpoint; static-qualified, fresh build/network/camera HIL pending**
 
 ## v0.2.10.46 — ObservationPlan and supervised DSO executor
 

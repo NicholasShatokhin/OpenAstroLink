@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.55
+  version: 0.2.10.58
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -210,7 +210,7 @@ paths:
     post:
       summary: Start high-rate Live View for camera role `main` or `guide` (cancel the returned operation to stop)
       description: |
-        Acquisition and preview rates are independent. `captureFpsLimit: 0` means consume frames as fast as the camera/SDK can deliver them; `previewFpsLimit: 0` means preview as fast as the preview pipeline can deliver. Raw SER recording is performed in the acquisition path before droppable preview processing. Remote Live View pixels are delivered on the WebSocket `/video` path as OALV v1 binary JPEG packets; JSON events/state remain on `/events`.
+        Acquisition and preview rates are independent. `captureFpsLimit: 0` means consume frames as fast as the camera/SDK can deliver them; `previewFpsLimit: 0` means preview as fast as the preview pipeline can deliver. Raw SER recording is performed in the acquisition path before droppable preview processing. Remote Live View pixels are delivered on the WebSocket `/video` path as OALV v1 binary JPEG packets; JSON events/state remain on `/events`. In OALV v1 telemetry, `width`/`height` describe the encoded JPEG payload after preview-only scaling, while `sourceWidth`/`sourceHeight` preserve the pre-transport preview dimensions.
       parameters: [ { $ref: '#/components/parameters/DeviceId' } ]
       requestBody:
         content:

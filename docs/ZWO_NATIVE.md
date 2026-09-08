@@ -1,5 +1,8 @@
 # Native ZWO ASI camera and EAF focuser drivers
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 
 > **Current release:** v0.2.10.53. Native ZWO ASI/EAF remain default OAL drivers; ARM64 vendor libraries have passed the full Raspberry Pi cross-build.
 
@@ -42,3 +45,8 @@ ZWO_EAF_LIBRARY=/path/to/library
 ## Hardware validation required
 
 The source has compile/API-shape validation against SDK-compatible headers, but production status requires hardware-in-the-loop tests on representative ASI cameras and EAF generations on the target Raspberry Pi. Required tests include repeated exposure, abort, ROI/binning, two simultaneous ASI cameras, disconnect/reconnect, EAF motion/halt/limits/temperature and autofocus repeatability.
+
+## Windows EAF build/runtime qualification — 2026-09-08
+
+CMake now refuses the staged `EAF_focuser-static.lib` for the plugin driver and recovers to the DLL import library `EAF_focuser.lib`, pairing a same-architecture runtime DLL. Fresh buildfix9 configure/build passes. The remaining Windows acceptance test is node-registry loading of `oal.zwo.eaf`, followed by real EAF HIL.
+

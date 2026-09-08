@@ -1,5 +1,8 @@
 # Специфікація scheduler та автономної зйомки OpenAstroLink
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 **Канонічна мова:** англійська; цей файл є українським дзеркалом.  
 **Ціль:** поетапна реалізація від першої supervised beta до OAL 1.0.  
 **Стан реалізації:** у v0.2.10.50 node має mixed DSO/planetary/mosaic executor і persistent per-block календар. Кожен `ObservationBlock` може мати власний `startAtUtc`, опційні `parkAfter` / `autoUnparkBefore`; node зберігає plan, armed state і cursor наступного незавершеного блока. DSO виконує `slew -> adaptive solve/recenter -> autofocus -> FITS/RAW`, planetary — `GOTO -> full-frame acquisition/detection -> planetary autofocus -> hardware ROI -> finite SER`, mosaic автоматично генерує тайли з optical-profile FOV і повторно використовує DSO executor для кожного тайла. Restart між блоками продовжує з першого незавершеного; restart посеред блока запускає цей block заново. Mid-frame/SER checkpoints, weather/roof safety, meridian recovery та повний unattended hardening OAL 1.0 ще заплановані.
@@ -261,3 +264,8 @@ Scheduler зберігає plan revision, current block/phase, completed FITS/SE
 ## Опційне обмеження руху Polar Alignment
 
 Polar Alignment не вимагає обмеженої ділянки неба. За замовчуванням workflow може використовувати звичайну доступну монтуванню область неба з урахуванням hard limits backend-а. Для балконів, дахів, стін, дерев або інших перешкод можна ввімкнути `TelescopeProfile.polarMotionLimits`. Коли обмеження ввімкнене, OAL семплує весь запланований RA-slew шлях в Az/Alt і відхиляє рух до його початку, якщо хоча б одна точка виходить за дозволену область.
+
+
+## Sky Map integration checkpoint
+
+Sky Map target → Scheduler coordinate transfer фізично підтверджений у running GUI. Full autonomous mixed-block/session HIL ще pending.

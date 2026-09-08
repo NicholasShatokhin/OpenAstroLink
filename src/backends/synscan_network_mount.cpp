@@ -115,7 +115,7 @@ bool SynScanNetworkMount::instantStopAxis(int axis,QString*error){
 bool SynScanNetworkMount::waitStopped(int axis,int timeoutMs,QString*error){
     QElapsedTimer t;t.start();QString last;
     while(t.elapsed()<timeoutMs){qint32 p=0;bool running=false,g=false,i=false;QString e;if(readAxis(axis,p,running,g,i,&e)){if(!running){if(error)error->clear();return true;}}else last=e;QThread::msleep(45);}
-    if(error)*error=last.isEmpty()?QString("Axis %1 did not stop in time").arg(axis):QString("Axis %1 stop could not be confirmed: %2").arg(axis,last);return false;
+    if(error)*error=last.isEmpty()?QString("Axis %1 did not stop in time").arg(axis):QString("Axis %1 stop could not be confirmed: %2").arg(axis).arg(last);return false;
 }
 bool SynScanNetworkMount::confirmedStopAxis(int axis,int timeoutMs,QString*error){
     QString last;

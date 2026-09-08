@@ -1,5 +1,8 @@
 # Екваторіальні системи координат
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 
 > **Поточний реліз:** v0.2.10.53. J2000 interchange contract і розділення mount frames не змінені HIL-кваліфікацією v9.
 

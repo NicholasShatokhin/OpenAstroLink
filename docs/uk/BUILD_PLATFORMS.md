@@ -1,5 +1,8 @@
 ## Поточна build-кваліфікація — v0.2.10.53
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 | Target | Build status | Примітка |
 |---|---|---|
 | Windows x64 / MSVC 2022 + Ninja | ✅ confirmed | Повний observatory build успішний після deterministic `cl.exe` selection. |
@@ -12,7 +15,7 @@ Native drivers — default. INDI — тільки opt-in. Сирий `cmake --pr
 
 ## Вибір Windows compiler — build-fix20
 
-Нативні Windows presets використовують generator Ninja з явним `CMAKE_CXX_COMPILER=cl.exe`. Так зберігається перевірений MSVC/Ninja шлях, Strawberry/MinGW `c++.exe` не може бути обраний, а CMake не мусить знаходити зареєстрований Visual Studio instance. Сирий `cmake --preset my-windows-observatory` запускайте з x64 MSVC Developer Command Prompt; `scripts/build_windows.ps1` сам завантажує `vcvars64`. Нативні Windows build directories мають суфікс `*-msvc-ninja`, щоб не змішувати старий GNU-Ninja та невдалий VS-generator cache. Windows-hosted Raspberry Pi cross presets лишаються GNU/Ninja, бо вони навмисно збирають Linux ARM.
+Нативні Windows presets використовують generator Ninja з явним `CMAKE_CXX_COMPILER=cl.exe`. Так зберігається перевірений MSVC/Ninja шлях, Strawberry/MinGW `c++.exe` не може бути обраний, а CMake не мусить знаходити зареєстрований Visual Studio instance. Сирий `cmake --preset my-windows-observatory` запускайте з x64 MSVC Developer Command Prompt; `scripts/build_windows.ps1` сам завантажує `vcvars64`. Після `scripts/bootstrap_native_dependencies.cmd` native configure також автоматично читає `.oal/native-deps-windows-x64.json`, тому WebRTC/vcpkg dependency roots доступні і для прямого preset configure. Нативні Windows build directories мають суфікс `*-msvc-ninja`, щоб не змішувати старий GNU-Ninja та невдалий VS-generator cache. Windows-hosted Raspberry Pi cross presets лишаються GNU/Ninja, бо вони навмисно збирають Linux ARM.
 
 # Платформи збірки — v0.2.10.53
 
@@ -292,3 +295,8 @@ Jammy надає лише Qt 6.2.4. Встановлення додаткови�
 ```
 
 Скрипт встановлює повний per-user Qt через `aqtinstall` у `~/.local/share/openastrolink/qt` і не потребує GUI-інсталятора Qt або Qt Account. Не запускайте GUI-інсталятор Qt через `sudo`. Linux wrapper також автоматично видаляє застарілий CMake cache, якщо checkout було перенесено між WSL (`/mnt/c/...`) і нативним Linux (`~/...`).
+
+## 2026-09-08 Windows buildfix9 qualification
+
+Current `my-windows-observatory` MSVC/Ninja path fresh-build qualified з WebRTC. Native dependency record імпортується в raw CMake preset; libdatachannel runtime DLL stage-яться автоматично; ZWO EAF використовує DLL import library; Canon EDSDK жорстко спарює AMD64 import library з sibling `EDSDK_64/Dll` після PE-machine validation. Build доходить до final link `OpenAstroSuite.exe`. Найближчий runtime retest — load `oal.canon` і `oal.zwo.eaf` із corrected buildfix9 tree.
+

@@ -14,7 +14,8 @@
         "OAS_ENABLE_NATIVE_GEMINI": "ON",
         "OAS_ENABLE_NATIVE_SKYWATCHER": "ON",
         "OAS_ENABLE_GPHOTO2": "OFF",
-        "OAS_ENABLE_INDI": "OFF"
+        "OAS_ENABLE_INDI": "OFF",
+        "OAS_ENABLE_WEBRTC": "ON"
       }
     },
     {
@@ -65,7 +66,8 @@
         "OAS_ENABLE_NATIVE_ZWO_ASI": "ON",
         "OAS_ENABLE_NATIVE_ZWO_EAF": "ON",
         "OAS_ENABLE_INDI": "OFF",
-        "OAS_REQUIRE_MSVC": "ON"
+        "OAS_REQUIRE_MSVC": "ON",
+        "OAS_REQUIRE_WEBRTC": "ON"
       }
     },
     {

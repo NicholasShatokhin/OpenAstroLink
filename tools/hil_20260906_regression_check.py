@@ -10,7 +10,7 @@ def need(path,*tokens):
         if token not in text:
             raise SystemExit(f'FAIL {path}: missing {token!r}')
 
-need('CMakeLists.txt','VERSION 0.2.10.55')
+need('CMakeLists.txt','VERSION 0.2.10.58')
 need('src/backends/synscan_network_mount.cpp',
      'dg.senderPort()!=port_',
      'instantStopAxis',
@@ -64,4 +64,4 @@ def next_exposure(current, p995, clip, target=0.62):
 # inside the new sparse-scene acquisition band and must lock rather than jump.
 nxt,locked=next_exposure(0.6381,0.554,0.00349)
 assert locked and abs(nxt-0.6381)<1e-9, (nxt,locked)
-print(f'PASS v0.2.10.55 2026-09-06 HIL + binary-live regression: {checks} static assertions + sparse exposure lock model')
+print(f'PASS v0.2.10.58 2026-09-06 HIL + binary-live regression: {checks} static assertions + sparse exposure lock model')

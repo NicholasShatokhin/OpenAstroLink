@@ -14,5 +14,6 @@
   "nativeEqDrive": "@OAS_ENABLE_NATIVE_EQDRIVE@",
   "classicAscom": "@OAS_ENABLE_ASCOM_CLASSIC@",
   "synScanNetwork": "ON",
-  "indiCompatibility": "@OAS_ENABLE_INDI@"
+  "indiCompatibility": "@OAS_ENABLE_INDI@",
+  "webrtcPreview": "@OAS_WEBRTC_AVAILABLE@"
 }

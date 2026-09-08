@@ -3,10 +3,12 @@
 #include "core/mount_geometry.h"
 #include <QJsonDocument>
 #include <QThread>
+#include <QRegularExpression>
 #include <QtEndian>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
+#include <vector>
 
 namespace oas {
 namespace {
@@ -32,11 +34,36 @@ RemoteObservatoryController::RemoteObservatoryController(QUrl base,QObject *pare
     wsReconnect_.setInterval(3000);wsReconnect_.setSingleShot(false);
     connect(&ws_,&QWebSocket::textMessageReceived,this,&RemoteObservatoryController::onWsText);
     connect(&videoWs_,&QWebSocket::binaryMessageReceived,this,&RemoteObservatoryController::onWsBinary);
-    connect(&ws_,&QWebSocket::connected,this,[this](){wsReconnect_.stop();emit logMessage("Connected to OAL event stream");refreshState();});
+    connect(&ws_,&QWebSocket::connected,this,[this](){emit logMessage("Connected to OAL event stream");refreshState();});
     connect(&ws_,&QWebSocket::disconnected,this,[this](){emit logMessage("OAL event stream disconnected; commands still use HTTP");if(wsUrl_.isValid()&&!wsReconnect_.isActive())wsReconnect_.start();});
-    connect(&videoWs_,&QWebSocket::connected,this,[this](){emit logMessage("Connected to OAL binary video stream");});
-    connect(&videoWs_,&QWebSocket::disconnected,this,[this](){if(videoWsUrl_.isValid()&&!wsReconnect_.isActive())wsReconnect_.start();});
-    connect(&wsReconnect_,&QTimer::timeout,this,[this](){if(ws_.state()==QAbstractSocket::UnconnectedState&&wsUrl_.isValid())ws_.open(wsUrl_);if(videoWs_.state()==QAbstractSocket::UnconnectedState&&videoWsUrl_.isValid())videoWs_.open(videoWsUrl_);});
+    connect(&videoWs_,&QWebSocket::connected,this,[this](){emit logMessage("Connected to OAL binary video fallback");});
+    connect(&videoWs_,&QWebSocket::disconnected,this,[this](){
+#ifdef OAS_HAVE_WEBRTC
+        if(webrtcMainOpen_.load(std::memory_order_relaxed)&&webrtcGuideOpen_.load(std::memory_order_relaxed))return;
+#endif
+        if(videoWsUrl_.isValid()&&!wsReconnect_.isActive())wsReconnect_.start();
+    });
+#ifdef OAS_HAVE_WEBRTC
+    connect(&webrtcWs_,&QWebSocket::textMessageReceived,this,&RemoteObservatoryController::onWebRtcSignal);
+    connect(&webrtcWs_,&QWebSocket::connected,this,[this](){if(ensureWebRtcPeer())emit logMessage("Connected to OAL WebRTC signaling");else emit logMessage("Could not initialize local WebRTC peer; using /video fallback");});
+    connect(&webrtcWs_,&QWebSocket::disconnected,this,[this](){stopWebRtcPeer();updateVideoFallback();if(webrtcAdvertised_&&webrtcWsUrl_.isValid()&&!wsReconnect_.isActive())wsReconnect_.start();});
+#endif
+    connect(&wsReconnect_,&QTimer::timeout,this,[this](){
+        bool pending=false;if(ws_.state()==QAbstractSocket::UnconnectedState&&wsUrl_.isValid()){ws_.open(wsUrl_);pending=true;}
+#ifdef OAS_HAVE_WEBRTC
+        if(webrtcAdvertised_&&webrtcWs_.state()==QAbstractSocket::UnconnectedState&&webrtcWsUrl_.isValid()){webrtcWs_.open(webrtcWsUrl_);pending=true;}
+        const bool fullRtc=webrtcMainOpen_.load(std::memory_order_relaxed)&&webrtcGuideOpen_.load(std::memory_order_relaxed);
+        if(!fullRtc&&videoWs_.state()==QAbstractSocket::UnconnectedState&&videoWsUrl_.isValid()){videoWs_.open(videoWsUrl_);pending=true;}
+#else
+        if(videoWs_.state()==QAbstractSocket::UnconnectedState&&videoWsUrl_.isValid()){videoWs_.open(videoWsUrl_);pending=true;}
+#endif
+        if(!pending&&ws_.state()==QAbstractSocket::ConnectedState)wsReconnect_.stop();
+    });
+}
+RemoteObservatoryController::~RemoteObservatoryController(){
+#ifdef OAS_HAVE_WEBRTC
+    stopWebRtcPeer();
+#endif
 }
 QUrl RemoteObservatoryController::api(const QString&p)const{return appendPath(base_,"api/v1/"+p);}
 bool RemoteObservatoryController::accepted(const HttpJsonClient::Reply&r,QJsonValue*d,QString*e)const{
@@ -75,7 +102,11 @@ bool RemoteObservatoryController::refreshMetadata(QString*e)const{
     auto arr=[](const QJsonValue&v){QStringList x;for(auto i:v.toArray())x<<i.toString();return x;};cameraBackends_=arr(o.value("camera"));mountBackends_=arr(o.value("mount"));focuserBackends_=arr(o.value("focuser"));solverBackends_=arr(o.value("solver"));
     auto pr=http_.get(api("profile"),3000);if(!accepted(pr,&d,e))return false;profile_=profileFromJson(d.toObject());metadataLoaded_=true;return true;
 }
-void RemoteObservatoryController::openEventStream(const QJsonObject&i){if(!i.value("wsRunning").toBool())return;wsUrl_=base_;wsUrl_.setScheme(wsUrl_.scheme()=="https"?"wss":"ws");wsUrl_.setPort(i.value("wsPort").toInt(8090));wsUrl_.setPath("/events");videoWsUrl_=wsUrl_;videoWsUrl_.setPath("/video");ws_.open(wsUrl_);videoWs_.open(videoWsUrl_);}
+void RemoteObservatoryController::openEventStream(const QJsonObject&i){if(!i.value("wsRunning").toBool())return;wsUrl_=base_;wsUrl_.setScheme(wsUrl_.scheme()=="https"?"wss":"ws");wsUrl_.setPort(i.value("wsPort").toInt(8090));wsUrl_.setPath("/events");videoWsUrl_=wsUrl_;videoWsUrl_.setPath("/video");ws_.open(wsUrl_);videoWs_.open(videoWsUrl_);
+#ifdef OAS_HAVE_WEBRTC
+    webrtcAdvertised_=i.value("webrtc").toObject().value("available").toBool(false);webrtcWsUrl_=wsUrl_;webrtcWsUrl_.setPath("/webrtc");if(webrtcAdvertised_)webrtcWs_.open(webrtcWsUrl_);
+#endif
+}
 TelescopeProfile RemoteObservatoryController::profile()const{if(!metadataLoaded_)refreshMetadata(nullptr);return profile_;}
 void RemoteObservatoryController::setProfile(const TelescopeProfile&p){QJsonValue d;QString e;if(accepted(http_.postJson(api("profile"),profileJson(p)),&d,&e)){profile_=p;emit profileChanged();emit logMessage("Profile saved on OAL node");}else emit logMessage("Profile update failed: "+e);}
 QStringList RemoteObservatoryController::cameraBackends()const{if(!metadataLoaded_)refreshMetadata(nullptr);return cameraBackends_;}
@@ -149,10 +180,54 @@ void RemoteObservatoryController::stopOalServer(){emit logMessage("Remote mode: 
 bool RemoteObservatoryController::startStellariumServer(quint16 port,QString*e){QJsonValue d;if(!accepted(http_.postJson(api("integrations/stellarium"),{{"enabled",true},{"port",int(port)}}),&d,e))return false;auto o=d.toObject();stellariumRunning_=o.value("running").toBool();stellariumPort_=quint16(o.value("port").toInt(port));return stellariumRunning_;}
 void RemoteObservatoryController::stopStellariumServer(){QJsonValue d;QString e;if(accepted(http_.postJson(api("integrations/stellarium"),{{"enabled",false}}),&d,&e)){stellariumRunning_=false;}else emit logMessage("Could not stop Stellarium bridge: "+e);}
 void RemoteObservatoryController::onWsText(const QString&m){auto doc=QJsonDocument::fromJson(m.toUtf8());if(!doc.isObject())return;auto root=doc.object();auto type=root.value("type").toString();auto p=root.value("payload").toObject();if(type=="state"){updateBackendCatalogFromState(p);if(p.contains("lastSolvedFrame"))lastSolvedFrame_=skyFrameFromJson(p.value("lastSolvedFrame").toObject());if(p.contains("solve"))lastSolve_=parseSolve(p.value("solve").toObject());emit stateChanged(p);} else if(type=="frameReady"){const QString id=p.value("frameId").toString();const bool live=id.startsWith("live-");if(!live)QTimer::singleShot(0,this,[this,id](){QString e;if(!fetchFramePreview(id,nullptr,&e))emit logMessage("Frame preview fetch failed: "+e);});}else if(type=="solveResult"){lastSolve_=parseSolve(p);if(p.contains("lastSolvedFrame"))lastSolvedFrame_=skyFrameFromJson(p.value("lastSolvedFrame").toObject());emit solveCompleted(p);}else if(type=="autofocusProgress")emit autofocusProgress(p);else if(type=="autofocusResult")emit autofocusCompleted(p);else if(type=="guidingUpdate"){guiding_=parseGuiding(p);emit guidingChanged(p);}else if(type=="sessionUpdate"){session_=parseSession(p);emit sessionChanged(p);}else if(type=="polarSampleCount")emit polarSampleCountChanged(p.value("count").toInt());else if(type=="polarAlignmentResult")emit polarAlignmentCompleted(p);else if(type=="motion")emit motionEstimated(p);else if(type=="operation")emit operationChanged(p);}
-void RemoteObservatoryController::onWsBinary(const QByteArray&m){
-    if(m.size()<10||m.left(4)!="OALV"||quint8(m[4])!=1)return;const QString role=quint8(m[5])==1?"guide":"main";const auto *p=reinterpret_cast<const uchar*>(m.constData()+6);const quint32 headerLen=qFromBigEndian<quint32>(p);if(headerLen>quint32(m.size()-10))return;const QByteArray headerBytes=m.mid(10,int(headerLen));const QByteArray jpeg=m.mid(10+int(headerLen));auto doc=QJsonDocument::fromJson(headerBytes);if(!doc.isObject())return;const QJsonObject stats=doc.object();QImage image=QImage::fromData(jpeg,"JPEG");if(image.isNull())return;
-    CameraFrame f;f.id=stats.value("frameId").toString(QString("live-%1").arg(role));f.capturedUtc=QDateTime::fromString(stats.value("capturedUtc").toString(),Qt::ISODateWithMs);f.exposureSec=stats.value("exposureSec").toDouble();f.gain=stats.value("gain").toInt();f.source="remote-oalv1";
-    std::vector<uchar> bytes(jpeg.begin(),jpeg.end());f.image=cv::imdecode(bytes,cv::IMREAD_UNCHANGED);if(role=="guide")lastGuideFrame_=f;else {previousFrame_=lastFrame_;lastFrame_=f;emit frameCaptured(image,f.id);}emit videoFrameCaptured(image,role,stats);
+#ifdef OAS_HAVE_WEBRTC
+bool RemoteObservatoryController::ensureWebRtcPeer(){
+    if(webrtcPc_.load(std::memory_order_relaxed)>=0)return true;webrtcStopping_.store(false,std::memory_order_relaxed);
+    QList<QByteArray> iceStorage;std::vector<const char*> icePointers;const QString env=qEnvironmentVariable("OAL_WEBRTC_ICE_SERVERS").trimmed();if(!env.isEmpty()){const auto urls=env.split(QRegularExpression("[;,\\n]"),Qt::SkipEmptyParts);for(const auto&u:urls)iceStorage.push_back(u.trimmed().toUtf8());for(const auto&u:iceStorage)icePointers.push_back(u.constData());}
+    rtcConfiguration cfg{};cfg.iceServers=icePointers.empty()?nullptr:icePointers.data();cfg.iceServersCount=int(icePointers.size());cfg.disableAutoNegotiation=false;cfg.maxMessageSize=256*1024;const int pc=rtcCreatePeerConnection(&cfg);if(pc<0)return false;webrtcPc_.store(pc,std::memory_order_relaxed);rtcSetUserPointer(pc,this);rtcSetLocalDescriptionCallback(pc,&RemoteObservatoryController::rtcLocalDescriptionCallback);rtcSetLocalCandidateCallback(pc,&RemoteObservatoryController::rtcLocalCandidateCallback);rtcSetDataChannelCallback(pc,&RemoteObservatoryController::rtcDataChannelCallback);return true;
+}
+void RemoteObservatoryController::stopWebRtcPeer(){
+    webrtcStopping_.store(true,std::memory_order_relaxed);webrtcMainOpen_.store(false,std::memory_order_relaxed);webrtcGuideOpen_.store(false,std::memory_order_relaxed);webrtcRemoteDescriptionSet_=false;webrtcPendingCandidates_.clear();webrtcMainAssembly_=WebRtcReassembly{};webrtcGuideAssembly_=WebRtcReassembly{};
+    const int mainDc=webrtcMainDc_.exchange(-1,std::memory_order_relaxed),guideDc=webrtcGuideDc_.exchange(-1,std::memory_order_relaxed);if(mainDc>=0){rtcSetUserPointer(mainDc,nullptr);rtcDeleteDataChannel(mainDc);}if(guideDc>=0&&guideDc!=mainDc){rtcSetUserPointer(guideDc,nullptr);rtcDeleteDataChannel(guideDc);}const int pc=webrtcPc_.exchange(-1,std::memory_order_relaxed);if(pc>=0){rtcSetUserPointer(pc,nullptr);rtcDeletePeerConnection(pc);}webrtcStopping_.store(false,std::memory_order_relaxed);
+}
+void RemoteObservatoryController::sendWebRtcSignal(const QJsonObject&message){if(webrtcWs_.state()==QAbstractSocket::ConnectedState)webrtcWs_.sendTextMessage(QString::fromUtf8(QJsonDocument(message).toJson(QJsonDocument::Compact)));}
+void RemoteObservatoryController::onWebRtcSignal(const QString&message){
+    if(!ensureWebRtcPeer())return;const auto doc=QJsonDocument::fromJson(message.toUtf8());if(!doc.isObject())return;const auto o=doc.object();const QString type=o.value("type").toString();const int pc=webrtcPc_.load(std::memory_order_relaxed);if(pc<0)return;
+    if(type=="description"){
+        const QByteArray sdp=o.value("sdp").toString().toUtf8(),dt=o.value("descriptionType").toString("offer").toUtf8();if(sdp.isEmpty())return;if(rtcSetRemoteDescription(pc,sdp.constData(),dt.constData())<0){emit logMessage("WebRTC remote description rejected; keeping /video fallback");return;}webrtcRemoteDescriptionSet_=true;const auto queued=webrtcPendingCandidates_;webrtcPendingCandidates_.clear();for(const auto&c:queued){const QByteArray cand=c.first.toUtf8(),mid=c.second.toUtf8();rtcAddRemoteCandidate(pc,cand.constData(),mid.isEmpty()?nullptr:mid.constData());}
+    }else if(type=="candidate"){
+        const QString cand=o.value("candidate").toString(),mid=o.value("mid").toString();if(cand.isEmpty())return;if(!webrtcRemoteDescriptionSet_){webrtcPendingCandidates_.push_back({cand,mid});return;}const QByteArray cu=cand.toUtf8(),mu=mid.toUtf8();rtcAddRemoteCandidate(pc,cu.constData(),mu.isEmpty()?nullptr:mu.constData());
+    }else if(type=="error")emit logMessage("Node WebRTC: "+o.value("message").toString());
+}
+void RemoteObservatoryController::updateVideoFallback(){
+    const bool fullRtc=webrtcMainOpen_.load(std::memory_order_relaxed)&&webrtcGuideOpen_.load(std::memory_order_relaxed);if(fullRtc){if(videoWs_.state()!=QAbstractSocket::UnconnectedState)videoWs_.close();}else if(videoWs_.state()==QAbstractSocket::UnconnectedState&&videoWsUrl_.isValid())videoWs_.open(videoWsUrl_);
+}
+void RemoteObservatoryController::handleWebRtcFragment(const QByteArray&m){
+    if(m.size()<24||m.left(4)!="OALW"||quint8(m[4])!=1)return;const QString role=quint8(m[5])==1?"guide":"main";const auto*p=reinterpret_cast<const uchar*>(m.constData()+8);const quint64 seq=qFromBigEndian<quint64>(p);const quint32 total=qFromBigEndian<quint32>(p+8);const quint16 index=qFromBigEndian<quint16>(p+12),count=qFromBigEndian<quint16>(p+14);if(total==0||total>32u*1024u*1024u||count==0||index>=count)return;auto&a=role=="guide"?webrtcGuideAssembly_:webrtcMainAssembly_;if(a.fragmentCount&&seq<a.sequence)return;if(!a.fragmentCount||seq!=a.sequence||a.totalLength!=total||a.fragmentCount!=count){a=WebRtcReassembly{};a.sequence=seq;a.totalLength=total;a.fragmentCount=count;a.fragments.resize(count);a.received.resize(count);}
+    if(!a.received.testBit(index)){a.fragments[index]=m.mid(24);a.received.setBit(index,true);++a.receivedCount;}if(a.receivedCount!=a.fragmentCount)return;QByteArray packet;packet.reserve(int(a.totalLength));for(const auto&fragment:a.fragments)packet.append(fragment);const quint32 expected=a.totalLength;a=WebRtcReassembly{};if(quint32(packet.size())!=expected)return;consumeVideoPacket(packet,"webrtc-datachannel");
+}
+void RemoteObservatoryController::rtcLocalDescriptionCallback(int,const char*sdp,const char*type,void*ptr){auto*self=static_cast<RemoteObservatoryController*>(ptr);if(!self)return;const QString qsdp=QString::fromUtf8(sdp?sdp:""),qt=QString::fromUtf8(type?type:"");QMetaObject::invokeMethod(self,[self,qsdp,qt](){self->sendWebRtcSignal({{"type","description"},{"descriptionType",qt},{"sdp",qsdp}});},Qt::QueuedConnection);}
+void RemoteObservatoryController::rtcLocalCandidateCallback(int,const char*candidate,const char*mid,void*ptr){auto*self=static_cast<RemoteObservatoryController*>(ptr);if(!self)return;const QString qc=QString::fromUtf8(candidate?candidate:""),qm=QString::fromUtf8(mid?mid:"");QMetaObject::invokeMethod(self,[self,qc,qm](){self->sendWebRtcSignal({{"type","candidate"},{"candidate",qc},{"mid",qm}});},Qt::QueuedConnection);}
+void RemoteObservatoryController::rtcDataChannelCallback(int,int dc,void*ptr){
+    auto*self=static_cast<RemoteObservatoryController*>(ptr);if(!self||self->webrtcStopping_.load(std::memory_order_relaxed)){if(dc>=0)rtcClose(dc);return;}const int n=rtcGetDataChannelLabel(dc,nullptr,0);if(n<=1){rtcClose(dc);return;}QByteArray label(n,Qt::Uninitialized);if(rtcGetDataChannelLabel(dc,label.data(),label.size())<0){rtcClose(dc);return;}if(!label.isEmpty()&&label.back()=='\0')label.chop(1);std::atomic_int*slot=nullptr;if(label=="oalv-main")slot=&self->webrtcMainDc_;else if(label=="oalv-guide")slot=&self->webrtcGuideDc_;else {rtcClose(dc);return;}int expected=-1;if(!slot->compare_exchange_strong(expected,dc,std::memory_order_relaxed)){rtcClose(dc);return;}rtcSetUserPointer(dc,self);rtcSetOpenCallback(dc,&RemoteObservatoryController::rtcDataOpenCallback);rtcSetClosedCallback(dc,&RemoteObservatoryController::rtcDataClosedCallback);rtcSetErrorCallback(dc,&RemoteObservatoryController::rtcDataErrorCallback);rtcSetMessageCallback(dc,&RemoteObservatoryController::rtcDataMessageCallback);
+}
+void RemoteObservatoryController::rtcDataOpenCallback(int dc,void*ptr){auto*self=static_cast<RemoteObservatoryController*>(ptr);if(!self)return;if(dc==self->webrtcMainDc_.load(std::memory_order_relaxed))self->webrtcMainOpen_.store(true,std::memory_order_relaxed);else if(dc==self->webrtcGuideDc_.load(std::memory_order_relaxed))self->webrtcGuideOpen_.store(true,std::memory_order_relaxed);else return;QMetaObject::invokeMethod(self,[self](){self->updateVideoFallback();emit self->logMessage("WebRTC preview DataChannel ready");},Qt::QueuedConnection);}
+void RemoteObservatoryController::rtcDataClosedCallback(int dc,void*ptr){auto*self=static_cast<RemoteObservatoryController*>(ptr);if(!self)return;if(dc==self->webrtcMainDc_.load(std::memory_order_relaxed))self->webrtcMainOpen_.store(false,std::memory_order_relaxed);else if(dc==self->webrtcGuideDc_.load(std::memory_order_relaxed))self->webrtcGuideOpen_.store(false,std::memory_order_relaxed);QMetaObject::invokeMethod(self,[self](){self->updateVideoFallback();},Qt::QueuedConnection);}
+void RemoteObservatoryController::rtcDataErrorCallback(int,const char*error,void*ptr){auto*self=static_cast<RemoteObservatoryController*>(ptr);if(!self)return;const QString e=QString::fromUtf8(error?error:"unknown");QMetaObject::invokeMethod(self,[self,e](){emit self->logMessage("WebRTC preview error: "+e);self->updateVideoFallback();},Qt::QueuedConnection);}
+void RemoteObservatoryController::rtcDataMessageCallback(int,const char*message,int size,void*ptr){auto*self=static_cast<RemoteObservatoryController*>(ptr);if(!self||size<0||!message)return;const QByteArray copy(message,size);QMetaObject::invokeMethod(self,[self,copy](){self->handleWebRtcFragment(copy);},Qt::QueuedConnection);}
+#endif
+
+void RemoteObservatoryController::onWsBinary(const QByteArray&m){consumeVideoPacket(m,"websocket");}
+void RemoteObservatoryController::consumeVideoPacket(const QByteArray&m,const QString&networkTransport){
+    if(m.size()<10||m.left(4)!="OALV"||quint8(m[4])!=1)return;const QString role=quint8(m[5])==1?"guide":"main";
+#ifdef OAS_HAVE_WEBRTC
+    if(networkTransport=="websocket"){const bool rtcRole=role=="guide"?webrtcGuideOpen_.load(std::memory_order_relaxed):webrtcMainOpen_.load(std::memory_order_relaxed);if(rtcRole)return;}
+#endif
+    const auto *p=reinterpret_cast<const uchar*>(m.constData()+6);const quint32 headerLen=qFromBigEndian<quint32>(p);if(headerLen>quint32(m.size()-10))return;const QByteArray headerBytes=m.mid(10,int(headerLen));const QByteArray jpeg=m.mid(10+int(headerLen));auto doc=QJsonDocument::fromJson(headerBytes);if(!doc.isObject())return;QJsonObject stats=doc.object();stats["networkTransport"]=networkTransport;QImage image=QImage::fromData(jpeg,"JPEG");if(image.isNull())return;
+    CameraFrame f;f.id=stats.value("frameId").toString(QString("live-%1").arg(role));f.capturedUtc=QDateTime::fromString(stats.value("capturedUtc").toString(),Qt::ISODateWithMs);f.exposureSec=stats.value("exposureSec").toDouble();f.gain=stats.value("gain").toInt();f.source=networkTransport=="webrtc-datachannel"?"remote-oalv1-webrtc":"remote-oalv1-websocket";
+    // QImage::fromData already performed the JPEG decode. Re-decoding the same
+    // packet through cv::imdecode doubled remote preview CPU cost at high FPS.
+    QImage rgb=image.convertToFormat(QImage::Format_RGB888);cv::Mat rgbView(rgb.height(),rgb.width(),CV_8UC3,rgb.bits(),size_t(rgb.bytesPerLine()));cv::cvtColor(rgbView,f.image,cv::COLOR_RGB2BGR);if(role=="guide")lastGuideFrame_=f;else {previousFrame_=lastFrame_;lastFrame_=f;emit frameCaptured(image,f.id);}emit videoFrameCaptured(image,role,stats);
 }
 bool RemoteObservatoryController::fetchFramePreview(const QString&id,CameraFrame*out,QString*e){if(id.isEmpty()){if(e)*e="Frame id is empty";return false;}QJsonValue d;if(!accepted(http_.get(api("frames/"+id+"/preview"),30000),&d,e))return false;auto o=d.toObject();CameraFrame f;f.id=o.value("frameId").toString(id);f.capturedUtc=QDateTime::fromString(o.value("capturedUtc").toString(),Qt::ISODateWithMs);f.exposureSec=o.value("exposureSec").toDouble();f.gain=o.value("gain").toInt();f.binX=std::max(1,o.value("binX").toInt(1));f.binY=std::max(1,o.value("binY").toInt(1));f.source="remote-node";auto png=QByteArray::fromBase64(o.value("imagePngBase64").toString().toLatin1());std::vector<uchar> bytes(png.begin(),png.end());f.image=cv::imdecode(bytes,cv::IMREAD_UNCHANGED);if(f.image.empty()){if(e)*e="Node returned no preview pixels";return false;}const bool operational=f.id.startsWith("af-preview-")||f.id.startsWith("focus-preview-");if(!operational){previousFrame_=lastFrame_;lastFrame_=f;}if(out)*out=f;emit frameCaptured(toQImage(f.image),f.id);if(!f.id.startsWith("live-")&&!operational)emit logMessage("Remote frame ready: "+f.id);return true;}
 QImage RemoteObservatoryController::toQImage(const cv::Mat&i){if(i.empty())return{};cv::Mat rgb;if(i.channels()==1){cv::Mat u8;if(i.depth()==CV_16U){

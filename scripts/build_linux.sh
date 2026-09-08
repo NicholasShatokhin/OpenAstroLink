@@ -80,6 +80,7 @@ if [[ $auto_deps -eq 1 ]]; then
     [[ -f "${QHYCCD_INCLUDE_DIR:-}/qhyccd.h" ]] || need_bootstrap=1
     [[ -f "${ZWO_ASI_INCLUDE_DIR:-}/ASICamera2.h" ]] || need_bootstrap=1
     [[ -f "${ZWO_EAF_INCLUDE_DIR:-}/EAF_focuser.h" ]] || need_bootstrap=1
+    [[ -n "${LibDataChannel_DIR:-}" && -d "${LibDataChannel_DIR:-}" ]] || need_bootstrap=1
   fi
   if [[ $need_bootstrap -eq 1 ]]; then
     echo "Bootstrapping native Linux dependencies (per-user Qt + vendor SDKs; system OpenCV/toolchain as needed) ..."
@@ -89,7 +90,7 @@ if [[ $auto_deps -eq 1 ]]; then
 
   # shellcheck disable=SC1090
   source "$dep_env"
-  for name in CMAKE_PREFIX_PATH OpenCV_DIR QHYCCD_INCLUDE_DIR QHYCCD_LIBRARY QHYCCD_RUNTIME_DIR QHYCCD_ROOT ZWO_ASI_INCLUDE_DIR ZWO_ASI_LIBRARY ZWO_ASI_RUNTIME_DIR ZWO_ASI_ROOT ZWO_EAF_INCLUDE_DIR ZWO_EAF_LIBRARY ZWO_EAF_RUNTIME_DIR ZWO_EAF_ROOT CANON_EDSDK_INCLUDE_DIR CANON_EDSDK_LIBRARY CANON_EDSDK_RUNTIME_DIR CANON_EDSDK_ROOT; do
+  for name in CMAKE_PREFIX_PATH OpenCV_DIR LibDataChannel_DIR QHYCCD_INCLUDE_DIR QHYCCD_LIBRARY QHYCCD_RUNTIME_DIR QHYCCD_ROOT ZWO_ASI_INCLUDE_DIR ZWO_ASI_LIBRARY ZWO_ASI_RUNTIME_DIR ZWO_ASI_ROOT ZWO_EAF_INCLUDE_DIR ZWO_EAF_LIBRARY ZWO_EAF_RUNTIME_DIR ZWO_EAF_ROOT CANON_EDSDK_INCLUDE_DIR CANON_EDSDK_LIBRARY CANON_EDSDK_RUNTIME_DIR CANON_EDSDK_ROOT; do
     if [[ -n "${!name:-}" ]]; then cmake_args+=("-D${name}=${!name}"); fi
   done
 fi

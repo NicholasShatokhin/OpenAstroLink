@@ -1,5 +1,8 @@
 ## v0.2.10.52 build/distribution status
 
+> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+
+
 Native vendor SDK discovery/bootstrap є частиною supported build workflow. QHY 26.06.04 ARM64 перевірено повною Raspberry Pi cross-збіркою; QHY/ZWO staging перевіряє target architecture, а не довіряє назві archive. Canon EDSDK — тільки manual-download/local-discovery. Native drivers — default; INDI — optional compatibility.
 
 # Native OAL Driver SDK — ABI v2

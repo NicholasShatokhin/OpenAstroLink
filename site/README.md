@@ -1,4 +1,6 @@
-# Site snapshot — v0.2.10.55
+# Site snapshot — v0.2.10.58-buildfix9
+
+Windows x64/MSVC buildfix9 is fresh-build qualified with WebRTC enabled. libdatachannel runtime staging, ZWO EAF DLL-import linkage, vendor PE-machine validation, and Canon `EDSDK_64` import/runtime pair locking are active. The next immediate runtime gate is loading `oal.canon` and `oal.zwo.eaf` from the corrected build, followed by QHY/WebRTC/Dual-Live HIL.
 
 Includes the new offline Sky Map navigation section.
 
@@ -20,3 +22,5 @@ No deployment provider is assumed yet. The directory can be published as static 
 Sky Map v0.2.10.52 adds arbitrary visible-sky point targeting with the same OAL mount/Scheduler path.
 
 Sky Map v0.2.10.53 adds measured solved camera rectangles, predicted main/guide footprints, Scheduler mosaic preview and optional Stellarium Remote Control frame export.
+
+WebRTC checkpoint: `/webrtc` signaling + `oalv-main`/`oalv-guide` OALW v1 DataChannels; `/video` fallback retained.

@@ -1,19 +1,31 @@
+# Roadmap OpenAstroLink — immediate execution після v0.2.10.58-buildfix9
 
-### v0.2.10.55 найближчий gate
+**Snapshot:** 2026-09-08  
+**Master checklist:** `CURRENT_CHECKLIST.md`
 
-High-rate Live View / Dual Live HIL виконується перед подальшим tuning autofocus, бо той самий camera data plane потрібен для alignment, guiding setup і planetary work. Qualification target: >60 FPS, де hardware дозволяє, independent preview throttling, zero recording drops та simultaneous main+guide streaming.
+Попередній blocker `fresh Windows build` закритий. Точний current Windows x64/MSVC build тепер успішно configure/link з WebRTC, WebRTC runtime staging, правильним ZWO EAF DLL import library і Canon EDSDK, жорстко спареним з AMD64 `EDSDK_64` runtime.
 
-## v0.2.10.55 порядок робіт
+Найближча програма — **runtime/HIL qualification**, а не новий широкий architecture rewrite.
 
-Cross-platform build qualification більше не головний blocker: Windows x64, Linux x86_64 та Raspberry Pi/Linux ARM64 node builds підтверджені. Найближча Beta тепер вузько сфокусована:
+## v0.2.10.58-buildfix9 execution order
 
-1. **HIL autofocus** — repeatability, backlash, cancel/failure rollback та verification frame.
-2. **HIL auto-exposure** — convergence/lock/reacquire на типових сценах.
-3. **Scheduler HIL** — mixed DSO/planetary execution, cancellation і restart boundaries.
-4. **Mosaic HIL** — tile geometry, solve/recenter і traversal.
-5. **Polar Alignment HIL** — guided sample motion і safe-region behavior.
+1. Runtime-regression native plugin registry: `oal.canon` і `oal.zwo.eaf` мають load без Win32 error 193.
+2. QHY high-rate HIL: short exposure, `Capture FPS=MAX`, `Preview=60`; capture/record/preview FPS і drops.
+3. SER 5–10 хв з `recordDropped=0`; AutoStakkert frame count проти OAL telemetry/sidecar.
+4. Preview 15/30/60/MAX під час recording; GUI preview не має матеріально знижувати recording throughput.
+5. Підтвердити actual WebRTC DataChannel transport, потім failure/fallback/reconnect.
+6. Main + Guide Dual Live на двох physical cameras з per-role fallback.
+7. Repeat 30–50 direct-Wi-Fi manual press/release/direction changes.
+8. Repeat Scene AF і sparse-scene still auto-exposure HIL; потім night HFR AF.
+9. Scheduler DSO + ASTAP/recenter HIL.
+10. Planetary SER/ROI executor HIL.
+11. Mosaic 2×2 + footprint overlay HIL.
+12. Polar Alignment real-sky HIL.
+13. Discovery/hotplug regression.
+14. Portable Windows package + clean-machine test.
+15. Full supervised night qualification і deploy `openastro.link`.
 
-Smart Telescope UX, ширша unattended-observatory automation та one-button workflows лишаються OAL 1.0 scope.
+Не відкривати знову mount coordinate model v9 без нових суперечливих HIL-доказів. Smart Telescope UX і broad unattended-observatory automation лишаються scope OAL 1.0.
 
 # Roadmap OpenAstroLink після v0.2.10.52
 
@@ -43,13 +55,17 @@ Smart Telescope UX, ширша unattended-observatory automation та one-button
 
 ## Найближча послідовність
 
-1. Чиста Windows MSVC+Ninja і native Linux збірка з реальними SDK.
-2. HIL QHY/Canon/ZWO/Gemini/Sky-Watcher: спочатку native-only, потім native+INDI.
-3. Real-sky ASTAP → autofocus → closed-loop GOTO → polar alignment.
-4. FITS/RAW data plane + planetary SER.
-5. Production guider.
-6. Durable session engine.
-7. Паралельно закривати P0 hardening.
+1. Fresh build current high-rate branch.
+2. High-rate main-camera + SER zero-drop HIL.
+3. Dual Live main+guide HIL.
+4. Repeat direct-Wi-Fi manual-slew HIL.
+5. Repeat scene autofocus і still auto-exposure HIL; потім night star/HFR AF.
+6. Scheduler HIL.
+7. Mosaic HIL.
+8. Polar Alignment HIL.
+9. Full supervised night qualification.
+10. Після Beta workflow gates продовжити production guiding, durable session/data-plane та решту P0 hardening.
+11. Smart Telescope UX лишити в OAL 1.0 track.
 
 **Supervised first-light:** build + HIL + ASTAP + autofocus.  
 **Повний imaging workflow:** додати closed-loop GOTO, polar alignment, DSO storage, SER.  
@@ -59,3 +75,6 @@ Smart Telescope UX, ширша unattended-observatory automation та one-button
 ## Ціль OAL 1.0 — автономна обсерваторія
 
 Заплановано, але ще не завершено: TLS/auth/roles/audit, idempotency, durable operations, replayable events, safety/weather/roof/power interlocks, emergency stop, production guiding, durable mixed DSO/planetary scheduler, automatic meridian flip recovery, durable science data/provenance, driver isolation та public conformance. Це явні roadmap-вимоги 1.0, а не твердження про поточну beta.
+
+## Immediate Windows gate після buildfix8
+Перед high-rate/QHY WebRTC throughput sequence треба закрити два native vendor plugin loader failures: виконати AMD64 runtime repair/diagnostic, вимагати завантаження Canon EDSDK і ZWO EAF без `ERROR_BAD_EXE_FORMAT`, а вже потім продовжити camera-max/Preview-60 та zero-record-drop SER HIL.

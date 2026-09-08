@@ -1,5 +1,8 @@
 # How the previous fragments were consolidated
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 
 > **Current release context:** v0.2.10.50. These notes are historical architecture/consolidation rationale; native OAL remains the default and INDI is opt-in.
 

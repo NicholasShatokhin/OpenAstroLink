@@ -1,5 +1,8 @@
 # Sky Map — offline mount navigation and framing
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 **Introduced:** v0.2.10.51  
 **Free-point targeting:** v0.2.10.52  
 **Camera footprints / mosaic framing / Stellarium frame export:** v0.2.10.53
@@ -80,3 +83,8 @@ Before Beta release verify:
 10. disabling/hiding the exported Stellarium frame works without affecting the Telescope Control bridge.
 
 Catalogue-object → Scheduler transfer is already HIL/UI-confirmed. v0.2.10.53 adds the footprint/framing path without changing mount v9 geometry.
+
+
+## 2026-09-06 HIL checkpoint
+
+Free-point Sky Map GOTO is physically confirmed on the real mount, and Sky Map target transfer into Scheduler is confirmed in the running GUI. Current code also mirrors the selected target into Mount-tab J2000 fields. Camera-footprint and Stellarium-export overlays remain HIL-pending.

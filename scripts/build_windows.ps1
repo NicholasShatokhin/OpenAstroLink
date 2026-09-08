@@ -60,13 +60,14 @@ if (-not $NoAutoDeps) {
             if (-not (Test-Path "$($d.OAS_QT_ROOT)\lib\cmake\Qt6\Qt6Config.cmake")) { $need = $true }
             if (-not (Test-Path "$($d.OpenCV_DIR)\OpenCVConfig.cmake")) { $need = $true }
             if (-not (Test-Path "$($d.QHYCCD_INCLUDE_DIR)\qhyccd.h")) { $need = $true }
+            if (-not $d.LibDataChannel_DIR -or -not (Get-ChildItem $d.LibDataChannel_DIR -File -Filter '*Config.cmake' -ErrorAction SilentlyContinue)) { $need = $true }
         } catch { $need = $true }
     }
     if ($need) {
         & "$PSScriptRoot\bootstrap_native_dependencies.ps1" -QtVersion $QtVersion -QhyVersion $QhyVersion
     }
     $d = Get-Content $depRecord -Raw | ConvertFrom-Json
-    foreach ($name in @('CMAKE_PREFIX_PATH','OpenCV_DIR','QHYCCD_INCLUDE_DIR','QHYCCD_LIBRARY','QHYCCD_RUNTIME_DIR','QHYCCD_ROOT','ZWO_ASI_INCLUDE_DIR','ZWO_ASI_LIBRARY','ZWO_ASI_RUNTIME_DIR','ZWO_ASI_ROOT','ZWO_EAF_INCLUDE_DIR','ZWO_EAF_LIBRARY','ZWO_EAF_RUNTIME_DIR','ZWO_EAF_ROOT','CANON_EDSDK_INCLUDE_DIR','CANON_EDSDK_LIBRARY','CANON_EDSDK_RUNTIME_DIR','CANON_EDSDK_ROOT')) {
+    foreach ($name in @('CMAKE_PREFIX_PATH','OpenCV_DIR','LibDataChannel_DIR','QHYCCD_INCLUDE_DIR','QHYCCD_LIBRARY','QHYCCD_RUNTIME_DIR','QHYCCD_ROOT','ZWO_ASI_INCLUDE_DIR','ZWO_ASI_LIBRARY','ZWO_ASI_RUNTIME_DIR','ZWO_ASI_ROOT','ZWO_EAF_INCLUDE_DIR','ZWO_EAF_LIBRARY','ZWO_EAF_RUNTIME_DIR','ZWO_EAF_ROOT','CANON_EDSDK_INCLUDE_DIR','CANON_EDSDK_LIBRARY','CANON_EDSDK_RUNTIME_DIR','CANON_EDSDK_ROOT')) {
         $prop = $d.PSObject.Properties[$name]
         if ($prop -and $prop.Value) { $cmakeExtra += "-D${name}=$($prop.Value)" }
     }

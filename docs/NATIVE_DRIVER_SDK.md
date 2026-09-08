@@ -1,5 +1,8 @@
 ## v0.2.10.52 build/distribution status
 
+> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+
+
 Native vendor SDK discovery/bootstrap is part of the supported build workflow. QHY 26.06.04 ARM64 has been validated through a full Raspberry Pi cross-build; QHY/ZWO staging verifies target architecture instead of trusting archive names. Canon EDSDK remains manual-download/local-discovery only. Native drivers remain default; INDI is optional compatibility.
 
 # OpenAstroLink Native Driver SDK — ABI v2 (v0.2.10.5)

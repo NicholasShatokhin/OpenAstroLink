@@ -1,3 +1,29 @@
+## v0.2.10.58-buildfix9
+
+- Package/source line: `0.2.10.58-webrtc-preview-checkpoint`, Windows qualification checkpoint `buildfix9`.
+- Core version: `0.2.10.58`.
+- Qualification date: `2026-09-08`.
+- Fresh Windows x64/MSVC configure and build are confirmed with `LibDataChannel::LibDataChannel` enabled; final link reaches `OpenAstroSuite.exe`.
+- WebRTC runtime DLL staging is automatic from the per-user vcpkg runtime.
+- ZWO EAF Windows linkage rejects the static archive and uses the DLL import library/runtime pair.
+- Vendor runtime staging validates PE Machine against the target architecture.
+- Canon EDSDK Windows pairing locks `EDSDK_64/Library/EDSDK.lib` to sibling AMD64 `EDSDK_64/Dll`, correcting stale x86 runtime cache state.
+- Earlier `.58` runtime smoke confirms node startup after WebRTC staging and OpenCV/UVC Live View. Current buildfix9 node-registry retest for Canon/ZWO EAF is still pending.
+- WebRTC payload remains OALV/JPEG over DataChannel; `/video` is per-role fallback; RTP H.264/H.265/AV1 media tracks are not yet implemented.
+- Static evidence retained: 75/75 general, 43/43 WebRTC, 43/43 high-rate/Dual-Live.
+- Mount coordinate model v9 (`Axis1Sign=+1`, `Axis2Sign=-1`) remains frozen and unchanged.
+- Full current status: `docs/CURRENT_CHECKLIST.md`.
+
+## v0.2.10.56
+
+- Package: `0.2.10.56-handoff-full`
+- Core version: `0.2.10.56`
+- Date: `2026-09-07`
+- Purpose: synchronized repository/documentation/site/handoff checkpoint after high-rate streaming and 2026-09-06 HIL findings.
+- Functional source basis: v0.2.10.55 + v0.2.10.54 HIL hardening.
+- Mount coordinate model v9 remains frozen and unchanged.
+- Current high-rate branch still requires a fresh physical build/HIL cycle.
+
 ## v0.2.10.55
 
 - Package: `0.2.10.55-high-rate-dual-live`
@@ -41,7 +67,7 @@
 - `scripts/build_windows.ps1` loads `vcvars64` automatically and locates Ninja from `PATH` or the Visual Studio CMake-tools installation. Raw presets should be run from an x64 MSVC Developer Command Prompt.
 - Raspberry Pi cross presets hosted on Windows remain GNU/Ninja and are unchanged.
 
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.55
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.58
 
 ## v0.2.10.49
 
