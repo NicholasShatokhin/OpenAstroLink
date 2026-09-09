@@ -1,6 +1,6 @@
-# Documentation index — OpenAstroLink v0.2.10.58-buildfix9
+# Documentation index — OpenAstroLink v0.2.10.59
 
-> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**.
+> Current synchronized snapshot: **v0.2.10.59 (2026-09-09)**.
 
 English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 
@@ -9,7 +9,7 @@ English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 - `../CURRENT_STATUS.md` — frozen current qualification state.
 - `../START_HERE.md` — short entry point.
 - `CURRENT_CHECKLIST.md` — complete current master checklist and Beta blockers.
-- `RELEASE_0.2.10.58.md` — current release/development checkpoint.
+- `RELEASE_0.2.10.59.md` — current release/development checkpoint.
 - `NEW_CHAT_HANDOFF.md` — detailed continuation context.
 - `VALIDATION.md` — current build/runtime/HIL acceptance gates.
 - `ROADMAP_P0_P1_IMPLEMENTATION.md` — Beta and OAL 1.0 priorities.
@@ -70,3 +70,8 @@ English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 - `RELEASE_0.2.10.50.md` … `RELEASE_0.2.10.58.md`
 
 Historical release notes are retained as provenance. Current qualification claims are defined by `../CURRENT_STATUS.md`, `STATUS.md`, `CURRENT_CHECKLIST.md`, `RELEASE_0.2.10.58.md`, and `VALIDATION.md`.
+
+## GUI / presentation
+
+- `NIGHT_VISION.md` — Normal, Night Vision, Strict Night Mode and display-only black→red mono/raw preview.
+- `MOBILE_QML_GUI.md` — OAL 1.0 mobile/touch Qt Quick/QML frontend direction.

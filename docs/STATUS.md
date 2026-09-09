@@ -1,7 +1,9 @@
-# Current status — OpenAstroLink / OpenAstroSuite v0.2.10.58-buildfix9
+> v0.2.10.59 adds desktop Night Vision / Strict Night Mode and a display-only monochrome black→red preview option. Fresh Windows build/UI HIL is pending; v0.2.10.58-buildfix9 remains the last build-qualified Windows checkpoint.
+
+# Current status — OpenAstroLink / OpenAstroSuite v0.2.10.59
 
 **Snapshot date:** 2026-09-08  
-**Core/source version:** `0.2.10.58`  
+**Core/source version:** `0.2.10.59`  
 **Windows qualification checkpoint:** `buildfix9`  
 **Master checklist:** `CURRENT_CHECKLIST.md`
 

@@ -1,6 +1,7 @@
 #include "core/application_controller.h"
 #include "core/remote_observatory_controller.h"
 #include "gui/main_window.h"
+#include "gui/theme_manager.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QComboBox>
@@ -32,7 +33,7 @@ Choice chooseCore(QWidget *parent=nullptr){
 }
 
 int main(int argc,char **argv){
-    QApplication app(argc,argv);QCoreApplication::setApplicationName("OpenAstroSuite");QCoreApplication::setApplicationVersion(OAS_VERSION);QCoreApplication::setOrganizationName("OpenAstroLink");
+    QApplication app(argc,argv);QCoreApplication::setApplicationName("OpenAstroSuite");QCoreApplication::setApplicationVersion(OAS_VERSION);QCoreApplication::setOrganizationName("OpenAstroLink");oas::applyUiTheme(app,oas::loadUiTheme());
     QCommandLineParser parser;parser.addHelpOption();parser.addVersionOption();QCommandLineOption embedded("embedded","Run an in-process core (developer mode).");QCommandLineOption node("node","Connect to an OAL node URL, e.g. http://rpi4:8080.","url");parser.addOption(embedded);parser.addOption(node);parser.process(app);
 
     std::unique_ptr<oas::ObservatoryController> controller;

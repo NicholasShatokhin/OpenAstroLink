@@ -1,3 +1,5 @@
+> **v0.2.10.59 update:** Night Vision / Strict Night Mode and display-only black→red mono/raw preview are implemented; OAL 1.0 mobile GUI is planned as a separate Qt Quick/QML client. Fresh Windows/UI HIL for `.59` is pending; `.58-buildfix9` is the last fresh Windows build-qualified base. Read `NIGHT_VISION.md` and `MOBILE_QML_GUI.md`.
+
 # OpenAstroLink / OpenAstroSuite — new-chat handoff
 
 **Authoritative snapshot:** v0.2.10.58-buildfix9  

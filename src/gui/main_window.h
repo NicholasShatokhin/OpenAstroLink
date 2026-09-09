@@ -1,10 +1,11 @@
 #pragma once
 class QTimer;
 #include "core/observatory_controller.h"
+#include "gui/theme_manager.h"
 #include <QMainWindow>
 #include <QHash>
 
-class QComboBox; class QLineEdit; class QDoubleSpinBox; class QSpinBox; class QLabel; class QTextEdit; class QListWidget; class QGraphicsScene; class QCheckBox; class QPushButton; class QTabWidget; class QDateTimeEdit;
+class QComboBox; class QLineEdit; class QDoubleSpinBox; class QSpinBox; class QLabel; class QTextEdit; class QListWidget; class QGraphicsScene; class QGraphicsView; class QCheckBox; class QPushButton; class QTabWidget; class QDateTimeEdit;
 
 namespace oas {
 class SkyMapWidget;
@@ -14,10 +15,11 @@ public: explicit MainWindow(ObservatoryController *controller,QWidget *parent=nu
 private:
     QWidget *buildDevicesTab(); QWidget *buildLiveFinderTab(); QWidget *buildCaptureTab(); QWidget *buildMountTab(); QWidget *buildFocusTab(); QWidget *buildPolarTab(); QWidget *buildSchedulerTab(); QWidget *buildOperationsTab(); QWidget *buildServerTab(); QWidget *buildProfileTab(); QWidget *buildSkyMapPanel();
     void appendLog(const QString&); void showError(const QString&); void updateAstrometryOverlay(); void updateStarMap(); void updateHistogram(const QImage &image,bool allowAutoApply=true); void renderCameraFrame(const QImage &image); void updateFinderWizardText();
+    void applyTheme(UiTheme theme,bool persist=true); void refreshThemeDependentViews(); QImage displayPreviewImage(const QImage &image,bool debayered) const; QColor themeColor(const QColor &dayColor) const;
     void refreshMountStatus(); void refreshFocuserStatus(); void synchronizeMountCoordinatesFrom(const QString &system); void setAutofocusBusy(bool busy); void setCaptureBusy(bool busy); void setAdaptiveSolveBusy(bool busy); void setLiveViewBusy(bool busy);
     void updateMountStatusFromState(const QJsonObject &state); void updateFocuserStatusFromState(const QJsonObject &state); void updateDeviceStatusFromState(const QJsonObject &state); void updateOperation(const QJsonObject &operation); void updateSkyMapFromState(const QJsonObject &state); void refreshSkyMapContext(); void updateSkySelectionText();
     ObservatoryController *c_{};
-    QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QTextEdit *log_{}; QTabWidget *leftTabs_{}; SkyMapWidget *skyMap_{}; QLineEdit *skySearch_{}; QLabel *skySelection_{}; QLabel *skyFrameInfo_{}; QCheckBox *skyLabels_{}; QCheckBox *skyDsos_{}; QCheckBox *skyConstellations_{}; QCheckBox *skyShowSolvedFrame_{}; QCheckBox *skyShowMainFrame_{}; QCheckBox *skyShowGuideFrame_{}; QCheckBox *skyFrameLabels_{}; QCheckBox *skyPlannerGrid_{}; QDoubleSpinBox *skyMainRotation_{}; QDoubleSpinBox *skyGuideRotation_{}; QComboBox *skyStellariumFrameSource_{}; QLineEdit *stellariumRemoteUrl_{}; QTimer *skyMapTimer_{};
+    QLabel *rawImage_{}; QLabel *astroImage_{}; QGraphicsScene *starScene_{}; QGraphicsView *starMapView_{}; QTextEdit *log_{}; QTabWidget *leftTabs_{}; SkyMapWidget *skyMap_{}; QLineEdit *skySearch_{}; QLabel *skySelection_{}; QLabel *skyFrameInfo_{}; QCheckBox *skyLabels_{}; QCheckBox *skyDsos_{}; QCheckBox *skyConstellations_{}; QCheckBox *skyShowSolvedFrame_{}; QCheckBox *skyShowMainFrame_{}; QCheckBox *skyShowGuideFrame_{}; QCheckBox *skyFrameLabels_{}; QCheckBox *skyPlannerGrid_{}; QDoubleSpinBox *skyMainRotation_{}; QDoubleSpinBox *skyGuideRotation_{}; QComboBox *skyStellariumFrameSource_{}; QLineEdit *stellariumRemoteUrl_{}; QTimer *skyMapTimer_{};
     QImage lastImage_;
     QComboBox *cameraBackend_{}; QLineEdit *cameraEndpoint_{}; QLabel *cameraDeviceStatus_{};
     QComboBox *guideCameraBackend_{}; QLineEdit *guideCameraEndpoint_{}; QLabel *guideCameraDeviceStatus_{};
@@ -25,11 +27,12 @@ private:
     QComboBox *focuserBackend_{}; QLineEdit *focuserEndpoint_{}; QLabel *focuserDeviceStatus_{};
     QComboBox *nativeSerialDriver_{}; QComboBox *nativeSerialPort_{};
     QDoubleSpinBox *liveExposure_{}; QSpinBox *liveGain_{}; QSpinBox *liveOffset_{}; QSpinBox *liveBin_{}; QComboBox *liveBits_{}; QDoubleSpinBox *liveCaptureFps_{}; QDoubleSpinBox *livePreviewFps_{}; QSpinBox *livePreviewWidth_{};
-    QCheckBox *liveAutoStretch_{}; QCheckBox *liveCrosshair_{}; QCheckBox *liveHighlight_{}; QCheckBox *liveDebayer_{}; QCheckBox *liveMilDot_{}; QCheckBox *liveAngularGrid_{}; QCheckBox *liveRecordSer_{}; QComboBox *liveBayerPattern_{}; QLineEdit *liveSerPath_{}; QLabel *liveTargetStatus_{}; QLabel *finderWizardText_{};
+    QCheckBox *liveAutoStretch_{}; QCheckBox *liveCrosshair_{}; QCheckBox *liveHighlight_{}; QCheckBox *liveDebayer_{}; QCheckBox *liveRedMonoPreview_{}; QCheckBox *liveMilDot_{}; QCheckBox *liveAngularGrid_{}; QCheckBox *liveRecordSer_{}; QComboBox *liveBayerPattern_{}; QLineEdit *liveSerPath_{}; QLabel *liveTargetStatus_{}; QLabel *finderWizardText_{};
     QPushButton *liveViewButton_{}; QPushButton *guideLiveViewButton_{}; QPushButton *dualLiveButton_{}; QPushButton *sceneAutofocusButton_{}; QPushButton *finderWizardButton_{}; QPushButton *finderWizardNextButton_{};
     QDoubleSpinBox *guideLiveExposure_{}; QSpinBox *guideLiveGain_{}; QSpinBox *guideLiveBin_{}; QComboBox *guideLiveBits_{}; QDoubleSpinBox *guideLiveCaptureFps_{}; QDoubleSpinBox *guideLivePreviewFps_{}; QSpinBox *guideLivePreviewWidth_{};
     QLabel *dualMainImage_{}; QLabel *dualGuideImage_{}; QLabel *dualLiveStats_{}; QJsonObject lastMainLiveStats_{}; QJsonObject lastGuideLiveStats_{};
     bool liveViewBusy_{false}; QString liveViewOperationId_; bool guideLiveBusy_{false}; QString guideLiveOperationId_; int finderWizardStep_{0};
+    UiTheme uiTheme_{UiTheme::Normal};
     QDoubleSpinBox *exposure_{}; QComboBox *solverBackend_{}; QLineEdit *catalogPath_{}; QLineEdit *modelPath_{}; QSpinBox *gain_{}; QDoubleSpinBox *hintRa_{}; QDoubleSpinBox *hintDec_{}; QDoubleSpinBox *hintRadius_{};
     QSpinBox *solveBin_{}; QSpinBox *solveStackFrames_{}; QSpinBox *solveMinStars_{}; QDoubleSpinBox *solveBaseExposure_{}; QDoubleSpinBox *solveMaxExposure_{};
     QCheckBox *saveScience_{}; QCheckBox *histogramEnabled_{}; QCheckBox *histogramAutoExposure_{}; QLabel *histogramView_{}; QLabel *histogramStats_{}; QDoubleSpinBox *histogramTarget_{}; QPushButton *histogramApplyButton_{}; double histogramSuggestedExposure_{0.0}; double histogramAutoBestExposure_{0.0}; double histogramAutoBestObjective_{1.0e9}; double histogramAutoPreviousSignedError_{0.0}; double histogramAutoPreviousExposure_{0.0}; bool histogramAutoHavePrevious_{false}; bool histogramAutoConverged_{false}; int histogramAutoOutOfBandFrames_{0}; int histogramAutoLastGain_{-1};

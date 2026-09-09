@@ -37,6 +37,7 @@ public:
     void setShowLabels(bool enabled);
     void setShowDsos(bool enabled);
     void setShowConstellations(bool enabled);
+    void setNightVisionMode(bool enabled,bool strict=false) { if(nightVisionMode_!=enabled||strictNightMode_!=strict){ nightVisionMode_=enabled; strictNightMode_=strict; update(); } }
 
     bool selectObjectByName(const QString &text);
     void focusSelected();
@@ -108,6 +109,8 @@ private:
     bool showLabels_{true};
     bool showDsos_{true};
     bool showConstellations_{true};
+    bool nightVisionMode_{false};
+    bool strictNightMode_{false};
     int selectedIndex_{-1};
     std::optional<EquatorialCoord> customSelection_;
     double zoom_{1.0};

@@ -96,3 +96,14 @@ The previous `.58` runtime smoke already confirmed that the node can start after
 - Vendor runtime PE-machine and Canon pairing targeted guards: PASS.
 
 Static checks do not substitute for the HIL gates above.
+
+## v0.2.10.59 Night Vision acceptance
+
+- Fresh Windows MSVC build with Qt 6.10.
+- Normal → Night Vision → Strict Night Mode → Normal via `Ctrl+Shift+N`.
+- Restart while Strict is saved: the core chooser must open in the saved night palette.
+- True-colour UVC preview must remain colour even when black→red preview is enabled.
+- Mono/raw, Debayer OFF + black→red option must render black→red.
+- Debayer ON must suppress the black→red transform.
+- Strict mode must map Sky Map, histogram, reticles, astrometry/star overlays and status accents to red-only.
+- FITS/RAW/SER and OALV/WebRTC payloads must remain byte/data-path independent of GUI palette.

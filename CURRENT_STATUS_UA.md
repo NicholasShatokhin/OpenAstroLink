@@ -1,7 +1,9 @@
-# Поточний стан — OpenAstroLink / OpenAstroSuite v0.2.10.58-buildfix9
+> **v0.2.10.59 Night Vision checkpoint (2026-09-09):** Desktop OpenAstroSuite отримав persistent Normal / Night Vision / Strict Night Mode, `Ctrl+Shift+N` та опціональну чорно-червону display palette для справді монохромного/RAW preview без debayer. Camera/science data не перефарбовуються. Для OAL 1.0 зафіксовано окремий mobile Qt Quick/QML frontend. v0.2.10.59 ще потребує fresh Windows build/UI HIL; останнє fresh Windows build-qualified дерево — v0.2.10.58-buildfix9.
+
+# Поточний стан — OpenAstroLink / OpenAstroSuite v0.2.10.59
 
 **Дата snapshot:** 2026-09-09  
-**Core/source version:** `0.2.10.58`  
+**Core/source version:** `0.2.10.59`  
 **Windows qualification checkpoint:** `buildfix9`  
 **Master checklist:** `docs/uk/CURRENT_CHECKLIST.md`
 

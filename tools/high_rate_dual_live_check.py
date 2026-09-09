@@ -14,11 +14,11 @@ def lacks(path, needle, label):
     ok=needle not in text
     checks.append((ok,label))
 
-has('CMakeLists.txt','VERSION 0.2.10.58','current release version')
+has('CMakeLists.txt','VERSION 0.2.10.59','current release version')
 has('docs/openapi.yaml','captureFpsLimit:','OpenAPI high-rate capture limit')
 has('docs/openapi.yaml','previewFpsLimit:','OpenAPI independent preview limit')
 has('docs/HIGH_RATE_STREAMING.md','OALV v1','streaming architecture documentation')
-has('docs/RELEASE_0.2.10.58.md','WebRTC','release note')
+has('docs/RELEASE_0.2.10.59.md','WebRTC','release note')
 has('src/core/astro_types.h','double captureFpsLimit{0.0};','capture rate independently unlimited by default')
 has('src/core/astro_types.h','double previewFpsLimit{60.0};','preview defaults to 60 FPS')
 has('src/core/astro_types.h','int bitsPerSample{8};','high-rate 8-bit live default')

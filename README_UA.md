@@ -1,4 +1,6 @@
-## v0.2.10.58-buildfix9 — Windows build-qualified WebRTC checkpoint
+> **Night Vision update:** v0.2.10.59 додає desktop Night Vision / Strict Night Mode та display-only black→red mono/raw preview; fresh Windows build/UI HIL pending. Остання fresh Windows build-qualified база: v0.2.10.58-buildfix9.
+
+## v0.2.10.59 — Windows build-qualified WebRTC checkpoint
 
 - Fresh Windows x64/MSVC configure/build тепер PASS з `libdatachannel 0.24.5`; WebRTC runtime DLL stage-яться автоматично.
 - ZWO EAF використовує правильну DLL import library/runtime pair; static archive відхиляється для plugin driver.
@@ -119,7 +121,7 @@ Qt/OpenCV/QHY/ZWO автоматизовані там, де є детермін�
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний пакет: v0.2.10.58 — WebRTC preview checkpoint; static-qualified, fresh build/network/camera HIL pending**
+**Поточний source checkpoint: v0.2.10.59 — Night Vision/Strict Night; fresh Windows/UI HIL pending. Остання fresh Windows build-qualified база: v0.2.10.58-buildfix9.**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

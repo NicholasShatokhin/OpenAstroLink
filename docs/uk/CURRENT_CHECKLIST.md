@@ -1,4 +1,4 @@
-# OpenAstroLink v0.2.10.58-buildfix9 — актуальний master checklist
+# OpenAstroLink v0.2.10.59 — актуальний master checklist
 
 **Snapshot:** 2026-09-09  
 **Canonical:** англійський `../CURRENT_CHECKLIST.md`; цей файл — український mirror.  
@@ -408,6 +408,22 @@ API/profile foundation існує для Filter Wheel, Rotator, Dome/Roof, Weath
 | one-click Refresh guarantee | 🟡 |
 | automatic reconnect policy | ⬜ |
 
+## Desktop GUI / Night Vision
+
+| Можливість | Стан |
+|---|---|
+| Qt Widgets expert/engineering desktop GUI | ✅ |
+| Normal theme | ✅ |
+| Night Vision чорно-червона widget theme | ✅ implementation |
+| Strict Night Mode red-only custom graphics | ✅ implementation |
+| `Ctrl+Shift+N` cycle | ✅ |
+| Persistent theme ще до startup/core chooser | ✅ |
+| Live View за замовчуванням не перефарбовується night mode | ✅ |
+| Optional black→red для mono/raw без debayer | ✅ implementation |
+| True-colour preview захищений від випадкового black→red | ✅ implementation |
+| Fresh Windows/UI HIL для v0.2.10.59 | 🟡 |
+| Mobile Qt Quick/QML GUI | ⬜ OAL 1.0 |
+
 ## Website
 
 | Частина | Стан |
@@ -438,8 +454,9 @@ API/profile foundation існує для Filter Wheel, Rotator, Dome/Roof, Weath
 | Можливість | Стан |
 |---|---|
 | Qt 6.10 / MSVC2022 x64 | ✅ |
-| Current source/core | **v0.2.10.58** |
-| Current Windows working-tree checkpoint | **buildfix9** |
+| Current source/core | **v0.2.10.59** |
+| Last fresh Windows build-qualified checkpoint | **v0.2.10.58-buildfix9** |
+| Current Night Vision source checkpoint | **v0.2.10.59 — fresh Windows/UI HIL pending** |
 | WebRTC/libdatachannel bootstrap | ✅ |
 | vcpkg dependency bootstrap | ✅ |
 | WebRTC configure | ✅ |

@@ -10,7 +10,7 @@ def lacks(path,needle,label):
     text=(root/path).read_text(encoding='utf-8',errors='replace')
     checks.append((needle not in text,label))
 
-has('CMakeLists.txt','VERSION 0.2.10.58','release version')
+has('CMakeLists.txt','VERSION 0.2.10.59','release version')
 has('CMakeLists.txt','OAS_ENABLE_WEBRTC','WebRTC build option')
 has('CMakeLists.txt','find_package(LibDataChannel CONFIG QUIET)','libdatachannel discovery')
 has('CMakeLists.txt','OAS_HAVE_WEBRTC=1','compile feature guard')

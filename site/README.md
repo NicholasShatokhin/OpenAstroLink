@@ -1,4 +1,4 @@
-# Site snapshot — v0.2.10.58-buildfix9
+# Site snapshot — v0.2.10.59
 
 Windows x64/MSVC buildfix9 is fresh-build qualified with WebRTC enabled. libdatachannel runtime staging, ZWO EAF DLL-import linkage, vendor PE-machine validation, and Canon `EDSDK_64` import/runtime pair locking are active. The next immediate runtime gate is loading `oal.canon` and `oal.zwo.eaf` from the corrected build, followed by QHY/WebRTC/Dual-Live HIL.
 

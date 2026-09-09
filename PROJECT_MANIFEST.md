@@ -1,8 +1,10 @@
-## v0.2.10.58-buildfix9
+> **Night Vision update:** v0.2.10.59 adds desktop Night Vision / Strict Night Mode and display-only black→red mono/raw preview; fresh Windows build/UI HIL pending. Last fresh Windows build-qualified base: v0.2.10.58-buildfix9.
+
+## v0.2.10.59
 - Public documentation/site information architecture now includes project rationale, manifesto, user/astronomer guide, OAL core developer guide, third-party integration guide, and native driver SDK entry points.
 
 - Package/source line: `0.2.10.58-webrtc-preview-checkpoint`, Windows qualification checkpoint `buildfix9`.
-- Core version: `0.2.10.58`.
+- Core version: `0.2.10.59`.
 - Qualification date: `2026-09-08`.
 - Fresh Windows x64/MSVC configure and build are confirmed with `LibDataChannel::LibDataChannel` enabled; final link reaches `OpenAstroSuite.exe`.
 - WebRTC runtime DLL staging is automatic from the per-user vcpkg runtime.

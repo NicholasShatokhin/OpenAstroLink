@@ -127,3 +127,8 @@ Specified/planned but not yet complete: TLS/auth/roles/audit, idempotency, durab
 
 ## Immediate Windows gate after buildfix8
 Before the high-rate/QHY WebRTC throughput sequence, clear the two native vendor plugin loader failures: run the AMD64 runtime repair/diagnostic, require Canon EDSDK and ZWO EAF to load without `ERROR_BAD_EXE_FORMAT`, then continue with camera-max/Preview-60 and zero-record-drop SER HIL.
+
+## Desktop night UI and OAL 1.0 mobile GUI
+
+- **v0.2.10.59 / Beta:** Qt Widgets Normal + Night Vision + Strict Night Mode; optional monochrome/raw black→red display palette; complete Windows/UI HIL.
+- **OAL 1.0:** keep the Widgets expert desktop client and add a separate mobile/touch Qt Quick/QML frontend using the same OAL HTTP/events/WebRTC interfaces. Do not move hardware ownership into QML.

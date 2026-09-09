@@ -1,4 +1,4 @@
-# OpenAstroLink v0.2.10.58-buildfix9 — current master checklist
+# OpenAstroLink v0.2.10.59 — current master checklist
 
 **Snapshot:** 2026-09-09  
 **Canonical language:** English. Ukrainian mirror: `uk/CURRENT_CHECKLIST.md`.  
@@ -408,6 +408,22 @@ API/profile foundations exist for Filter Wheel, Rotator, Dome/Roof, Weather, GPS
 | One-click Refresh guarantee | 🟡 |
 | Automatic reconnect policy | ⬜ |
 
+## Desktop GUI / Night Vision
+
+| Capability | State |
+|---|---|
+| Qt Widgets expert/engineering desktop GUI | ✅ |
+| Normal theme | ✅ |
+| Night Vision black/red widget theme | ✅ implementation |
+| Strict Night Mode red-only custom graphics | ✅ implementation |
+| `Ctrl+Shift+N` theme cycle | ✅ |
+| Persistent theme before startup/core chooser | ✅ |
+| Live View unchanged by night mode by default | ✅ |
+| Optional black→red mono/raw non-debayered preview | ✅ implementation |
+| True-colour preview protected from accidental black→red mapping | ✅ implementation |
+| Fresh Windows/UI HIL for v0.2.10.59 | 🟡 |
+| Mobile Qt Quick/QML GUI | ⬜ OAL 1.0 |
+
 ## Website
 
 | Item | State |
@@ -438,8 +454,9 @@ API/profile foundations exist for Filter Wheel, Rotator, Dome/Roof, Weather, GPS
 | Item | State |
 |---|---|
 | Qt 6.10 / MSVC2022 x64 | ✅ |
-| Current source/core | **v0.2.10.58** |
-| Current Windows working-tree checkpoint | **buildfix9** |
+| Current source/core | **v0.2.10.59** |
+| Last fresh Windows build-qualified checkpoint | **v0.2.10.58-buildfix9** |
+| Current Night Vision source checkpoint | **v0.2.10.59 — fresh Windows/UI HIL pending** |
 | WebRTC/libdatachannel bootstrap | ✅ |
 | vcpkg dependency bootstrap | ✅ |
 | WebRTC configure | ✅ |
@@ -494,4 +511,4 @@ Mount geometry is no longer a Beta blocker. Windows compilation is no longer a b
 
 ## Beta → OAL 1.0
 
-After the supervised Beta, the major production track remains: durable FITS/SER/block resume; TLS/auth/RBAC; persistent audit/event journal; production guiding+dither; automatic meridian flip; weather; roof/dome; power; emergency shutdown; unattended safety state machine; thermal focus compensation; filter wheel; calibration manager; disk/storage safeguards; resumable downloads; process-isolated drivers; public driver SDK/conformance suite; production RTP video codecs; and Smart Telescope UX.
+After the supervised Beta, the major production track remains: durable FITS/SER/block resume; TLS/auth/RBAC; persistent audit/event journal; production guiding+dither; automatic meridian flip; weather; roof/dome; power; emergency shutdown; unattended safety state machine; thermal focus compensation; filter wheel; calibration manager; disk/storage safeguards; resumable downloads; process-isolated drivers; public driver SDK/conformance suite; production RTP video codecs; Smart Telescope UX; and a separate mobile/touch Qt Quick/QML GUI frontend.

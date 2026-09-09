@@ -1,4 +1,5 @@
 #include "gui/sky_map_widget.h"
+#include "gui/theme_manager.h"
 
 #include <QLineF>
 #include <QMouseEvent>
@@ -235,16 +236,18 @@ SkyFrame SkyMapWidget::plannerEnvelopeFrame() const {
 void SkyMapWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
-    p.fillRect(rect(), QColor(3, 5, 14));
+    const auto C=[this](const QColor &c){return strictNightMode_?strictNightMappedColor(c):c;};
+    const auto N=[this,&C](const QColor &day,const QColor &night){return strictNightMode_?C(day):(nightVisionMode_?night:day);};
+    p.fillRect(rect(), N(QColor(3, 5, 14),QColor(3,0,0)));
 
     const QPointF c = skyCenter();
     const double r = skyRadius();
-    p.setPen(QPen(QColor(60, 90, 120), 1.2));
-    p.setBrush(QColor(5, 10, 24));
+    p.setPen(QPen(N(QColor(60, 90, 120),QColor(88,24,24)), 1.2));
+    p.setBrush(N(QColor(5,10,24),QColor(8,0,0)));
     p.drawEllipse(c, r, r);
 
     p.setBrush(Qt::NoBrush);
-    p.setPen(QPen(QColor(42, 62, 85), 1.0, Qt::DashLine));
+    p.setPen(QPen(N(QColor(42,62,85),QColor(58,18,18)),1.0,Qt::DashLine));
     for(double alt : {30.0, 60.0}) {
         const double rr = (90.0 - alt) / 90.0 * r;
         p.drawEllipse(c, rr, rr);
@@ -255,7 +258,7 @@ void SkyMapWidget::paintEvent(QPaintEvent *) {
         p.drawLine(c, e);
     }
 
-    p.setPen(QColor(130, 180, 220));
+    p.setPen(N(QColor(130,180,220),QColor(154,42,42)));
     QFont directionFont = p.font();
     directionFont.setBold(true);
     p.setFont(directionFont);
@@ -270,7 +273,7 @@ void SkyMapWidget::paintEvent(QPaintEvent *) {
 
     const auto &objects = catalog();
     if(showConstellations_) {
-        p.setPen(QPen(QColor(55, 78, 115), 1.0));
+        p.setPen(QPen(N(QColor(55,78,115),QColor(72,24,24)),1.0));
         for(const auto &seg : constellationSegments()) {
             if(seg.a < 0 || seg.b < 0 || seg.a >= int(objects.size()) || seg.b >= int(objects.size())) continue;
             const auto &a = objects[size_t(seg.a)]; const auto &b = objects[size_t(seg.b)];
@@ -288,23 +291,23 @@ void SkyMapWidget::paintEvent(QPaintEvent *) {
         const QPointF q = projectHorizontal(h);
         if(!rect().adjusted(-20,-20,20,20).contains(q.toPoint())) continue;
         if(o.kind == "DSO") {
-            p.setPen(QPen(QColor(80, 210, 220), i == selectedIndex_ ? 2.5 : 1.2));
+            p.setPen(QPen(C(QColor(80, 210, 220)), i == selectedIndex_ ? 2.5 : 1.2));
             p.setBrush(Qt::NoBrush);
             const double rr = i == selectedIndex_ ? 6.5 : 4.5;
             p.drawEllipse(q, rr, rr * 0.72);
         } else {
             const double rr = std::clamp(4.8 - o.magnitude * 0.95, 1.2, 5.5);
             p.setPen(Qt::NoPen);
-            p.setBrush(starColor(o.magnitude));
+            p.setBrush(C(starColor(o.magnitude)));
             p.drawEllipse(q, rr, rr);
             if(i == selectedIndex_) {
                 p.setBrush(Qt::NoBrush);
-                p.setPen(QPen(QColor(255, 205, 70), 2.0));
+                p.setPen(QPen(C(QColor(255, 205, 70)), 2.0));
                 p.drawEllipse(q, rr + 5.0, rr + 5.0);
             }
         }
         if(showLabels_ && (i == selectedIndex_ || o.kind == "DSO" || o.magnitude <= 1.8)) {
-            p.setPen(i == selectedIndex_ ? QColor(255, 215, 90) : QColor(180, 200, 220));
+            p.setPen(i==selectedIndex_?C(QColor(255,215,90)):N(QColor(180,200,220),QColor(156,44,44)));
             p.drawText(q + QPointF(7.0, -5.0), o.name);
         }
     }
@@ -320,16 +323,16 @@ void SkyMapWidget::paintEvent(QPaintEvent *) {
         else { QPolygonF d; d << q + QPointF(0,-7) << q + QPointF(7,0) << q + QPointF(0,7) << q + QPointF(-7,0); p.drawPolygon(d); }
         p.drawText(q + QPointF(10,-9), label);
     };
-    drawMarker(customSelection_, QColor(255, 210, 70), "Target", true);
-    drawMarker(mountCoordinate_, QColor(255, 90, 90), "Telescope", true);
-    drawMarker(solvedCoordinate_, QColor(80, 230, 130), "Solved", false);
+    drawMarker(customSelection_, C(QColor(255, 210, 70)), "Target", true);
+    drawMarker(mountCoordinate_, C(QColor(255, 90, 90)), "Telescope", true);
+    drawMarker(solvedCoordinate_, C(QColor(80, 230, 130)), "Solved", false);
 
-    if(planner_.enabled) for(const auto &tile:plannerTiles()) drawSkyFrame(p,tile,QColor(245,180,55,105),Qt::DotLine,QString());
-    if(showMainFrame_) drawSkyFrame(p,mainPlannedFrame_,QColor(70,190,255,210),Qt::DashLine,"Main planned");
-    if(showGuideFrame_) drawSkyFrame(p,guidePlannedFrame_,QColor(220,100,255,210),Qt::DotLine,"Guide planned");
-    if(showSolvedFrame_) drawSkyFrame(p,solvedFrame_,QColor(80,235,135,235),Qt::SolidLine,"Solved");
+    if(planner_.enabled) for(const auto &tile:plannerTiles()) drawSkyFrame(p,tile,C(QColor(245,180,55,105)),Qt::DotLine,QString());
+    if(showMainFrame_) drawSkyFrame(p,mainPlannedFrame_,C(QColor(70,190,255,210)),Qt::DashLine,"Main planned");
+    if(showGuideFrame_) drawSkyFrame(p,guidePlannedFrame_,C(QColor(220,100,255,210)),Qt::DotLine,"Guide planned");
+    if(showSolvedFrame_) drawSkyFrame(p,solvedFrame_,C(QColor(80,235,135,235)),Qt::SolidLine,"Solved");
 
-    p.setPen(QColor(120, 145, 170));
+    p.setPen(N(QColor(120,145,170),QColor(126,36,36)));
     p.drawText(10, height() - 12, QString("UTC %1   site %2°, %3°   zoom %4×")
                .arg(utc_.toString("yyyy-MM-dd HH:mm:ss"))
                .arg(observer_.latitudeDeg,0,'f',3).arg(observer_.longitudeDeg,0,'f',3).arg(zoom_,0,'f',1));

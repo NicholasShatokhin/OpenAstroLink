@@ -78,3 +78,8 @@
 
 ## Immediate Windows gate після buildfix8
 Перед high-rate/QHY WebRTC throughput sequence треба закрити два native vendor plugin loader failures: виконати AMD64 runtime repair/diagnostic, вимагати завантаження Canon EDSDK і ZWO EAF без `ERROR_BAD_EXE_FORMAT`, а вже потім продовжити camera-max/Preview-60 та zero-record-drop SER HIL.
+
+## Desktop night UI та mobile GUI OAL 1.0
+
+- **v0.2.10.59 / Beta:** Qt Widgets Normal + Night Vision + Strict Night Mode; optional black→red display palette для mono/raw; завершити Windows/UI HIL.
+- **OAL 1.0:** залишити Widgets expert desktop client і додати окремий mobile/touch Qt Quick/QML frontend через ті самі OAL HTTP/events/WebRTC interfaces. Hardware ownership у QML не переносити.

@@ -1,4 +1,6 @@
-## v0.2.10.58-buildfix9 — Windows build-qualified WebRTC checkpoint
+> **Night Vision update:** v0.2.10.59 adds desktop Night Vision / Strict Night Mode and display-only black→red mono/raw preview; fresh Windows build/UI HIL pending. Last fresh Windows build-qualified base: v0.2.10.58-buildfix9.
+
+## v0.2.10.59 — Windows build-qualified WebRTC checkpoint
 
 - Fresh Windows x64/MSVC configure and build now pass with `libdatachannel 0.24.5`; WebRTC runtime DLLs are staged automatically.
 - ZWO EAF uses the correct DLL import library/runtime pair; the static archive is rejected for the plugin driver.
@@ -119,7 +121,7 @@ Qt/OpenCV/QHY/ZWO are resolved where deterministic distribution is available. Ca
 - QHY and ZWO ASI native live paths accept hardware ROI. ZWO ASI remains implemented but real-hardware HIL pending.
 - Scheduler restart durability, weather/roof safety, meridian-flip recovery and in-exposure thermal focus compensation remain OAL 1.0 roadmap work.
 
-**Current package: v0.2.10.58 — WebRTC preview checkpoint; static-qualified, fresh build/network/camera HIL pending**
+**Current source checkpoint: v0.2.10.59 — Night Vision/Strict Night; fresh Windows/UI HIL pending. Last fresh Windows build-qualified base: v0.2.10.58-buildfix9.**
 
 ## v0.2.10.46 — ObservationPlan and supervised DSO executor
 

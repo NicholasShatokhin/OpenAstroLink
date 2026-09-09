@@ -1,6 +1,6 @@
-# Індекс документації — OpenAstroLink v0.2.10.58-buildfix9
+# Індекс документації — OpenAstroLink v0.2.10.59
 
-> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**.
+> Поточний synchronized snapshot: **v0.2.10.59 (2026-09-09)**.
 
 English documents — canonical. Українські mirrors знаходяться у `docs/uk/`.
 
@@ -9,7 +9,7 @@ English documents — canonical. Українські mirrors знаходять
 - `../../CURRENT_STATUS_UA.md` — frozen current qualification state.
 - `../../START_HERE_UA.md` — коротка точка входу.
 - `CURRENT_CHECKLIST.md` — повний актуальний master checklist і Beta blockers.
-- `RELEASE_0.2.10.58.md` — current release/development checkpoint.
+- `RELEASE_0.2.10.59.md` — current release/development checkpoint.
 - `NEW_CHAT_HANDOFF.md` — детальний continuation context.
 - `VALIDATION.md` — current build/runtime/HIL acceptance gates.
 - `ROADMAP_P0_P1_IMPLEMENTATION.md` — Beta та OAL 1.0 priorities.
@@ -66,6 +66,11 @@ English documents — canonical. Українські mirrors знаходять
 ## History
 
 - `CONSOLIDATION_NOTES.md`
-- `RELEASE_0.2.10.50.md` … `RELEASE_0.2.10.58.md`
+- `RELEASE_0.2.10.50.md` … `RELEASE_0.2.10.59.md`
 
-Historical release notes зберігаються як provenance. Поточні qualification claims визначаються `../../CURRENT_STATUS_UA.md`, `../STATUS_UA.md`, `CURRENT_CHECKLIST.md`, `RELEASE_0.2.10.58.md` і `VALIDATION.md`.
+Historical release notes зберігаються як provenance. Поточні qualification claims визначаються `../../CURRENT_STATUS_UA.md`, `../STATUS_UA.md`, `CURRENT_CHECKLIST.md`, `RELEASE_0.2.10.59.md` і `VALIDATION.md`.
+
+## GUI / presentation
+
+- `NIGHT_VISION.md` — Normal, Night Vision, Strict Night Mode та display-only black→red mono/raw preview.
+- `MOBILE_QML_GUI.md` — напрям mobile/touch Qt Quick/QML frontend для OAL 1.0.

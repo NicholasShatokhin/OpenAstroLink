@@ -96,3 +96,14 @@
 - Vendor runtime PE-machine та Canon pairing targeted guards: PASS.
 
 Static checks не замінюють HIL gates вище.
+
+## v0.2.10.59 — acceptance Night Vision
+
+- Fresh Windows MSVC build з Qt 6.10.
+- Normal → Night Vision → Strict Night Mode → Normal через `Ctrl+Shift+N`.
+- Restart зі збереженим Strict: core chooser має відкриватися вже в нічній палітрі.
+- Справжній кольоровий UVC preview має лишатися кольоровим навіть при увімкненій black→red опції.
+- Mono/raw, Debayer OFF + black→red має показувати чорно-червону шкалу.
+- Debayer ON має вимикати black→red transform.
+- Strict має переводити Sky Map, histogram, reticle, astrometry/star overlays та status accents у red-only.
+- FITS/RAW/SER та OALV/WebRTC payload не повинні залежати від GUI palette.
