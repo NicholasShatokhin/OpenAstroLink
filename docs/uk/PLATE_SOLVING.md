@@ -1,10 +1,10 @@
 # Plate solving — адаптивний режим для міського неба
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. Adaptive/node-local plate solving лишається реалізованим і використовується scheduler/mosaic workflows.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. Adaptive/node-local plate solving лишається реалізованим і використовується scheduler/mosaic workflows.
 
 Цей документ описує node-local pipeline v0.2.10.17 для міської засвітки, малих сенсорів і монтувань, де один кадр 10–15 с уже дає витягнуті зорі.
 

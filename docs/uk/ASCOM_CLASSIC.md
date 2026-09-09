@@ -1,10 +1,10 @@
 # Сумісність із Classic ASCOM
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. Classic ASCOM лишається опційним Windows compatibility backend; native OAL drivers — default.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. Classic ASCOM лишається опційним Windows compatibility backend; native OAL drivers — default.
 
 OpenAstroLink тепер має Windows-backend **Classic ASCOM** для mount на додачу до ASCOM Alpaca.
 

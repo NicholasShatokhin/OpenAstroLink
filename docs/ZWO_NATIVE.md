@@ -1,10 +1,10 @@
 # Native ZWO ASI camera and EAF focuser drivers
 
-> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
 
 
 
-> **Current release:** v0.2.10.53. Native ZWO ASI/EAF remain default OAL drivers; ARM64 vendor libraries have passed the full Raspberry Pi cross-build.
+> **Current development checkpoint:** v0.2.10.58-buildfix9. Native ZWO ASI/EAF remain default OAL drivers; ARM64 vendor libraries have passed the full Raspberry Pi cross-build.
 
 Version: 0.2.10.5
 

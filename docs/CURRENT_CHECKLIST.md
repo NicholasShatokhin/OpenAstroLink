@@ -1,6 +1,6 @@
 # OpenAstroLink v0.2.10.58-buildfix9 — current master checklist
 
-**Snapshot:** 2026-09-08  
+**Snapshot:** 2026-09-09  
 **Canonical language:** English. Ukrainian mirror: `uk/CURRENT_CHECKLIST.md`.  
 **Meaning of states:** ✅ implemented/qualified; 🟡 implemented but current HIL/runtime regression is still required; ⬜ not complete; 🔒 frozen by HIL evidence.
 
@@ -416,14 +416,21 @@ API/profile foundations exist for Filter Wheel, Rotator, Dome/Roof, Weather, GPS
 | English | ✅ |
 | Ukrainian | ✅ |
 | Feature sections | ✅ |
+| Project rationale / “Why OAL” | ✅ source |
+| Public manifesto | ✅ source |
+| User & astronomer guide | ✅ source |
+| OAL core developer guide | ✅ source |
+| Third-party integration guide | ✅ source |
+| Native driver SDK entry point | ✅ source |
 | High-rate/WebRTC content | ✅ source |
 | Scheduler content | ✅ |
 | Supported Hardware matrix | 🟡 |
 | HIL Pending / Planned matrix | 🟡 |
 | Protocol/API docs | ✅ foundation |
 | Roadmap | ✅ |
-| Deploy `openastro.link` | ⬜ |
-| DNS/HTTPS | ⬜ deployment |
+| `openastro.link` DNS apex + `www` | ✅ live |
+| HTTPS serving | ✅ live |
+| Deploy current v0.2.10.58-buildfix9 site/docs | 🟡 live deployment is stale |
 | Downloads/Releases | ⬜ |
 
 ## Windows release
@@ -481,7 +488,7 @@ The old `Clean Windows build` blocker is closed. Current P0 is:
 14. 🟡 Polar Alignment real-sky HIL.
 15. 🟡 Discovery/hotplug regression.
 16. ⬜ Windows portable release + clean-machine test.
-17. ⬜ Deploy `openastro.link`.
+17. 🟡 Deploy the **current** site/docs to `openastro.link` (DNS/HTTPS are already live; deployed content is stale).
 
 Mount geometry is no longer a Beta blocker. Windows compilation is no longer a blocker. WebRTC implementation is no longer a blocker; **physical transport/camera qualification is**.
 

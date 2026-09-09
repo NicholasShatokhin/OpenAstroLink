@@ -1,6 +1,6 @@
 # Roadmap OpenAstroLink — immediate execution після v0.2.10.58-buildfix9
 
-**Snapshot:** 2026-09-08  
+**Snapshot:** 2026-09-09  
 **Master checklist:** `CURRENT_CHECKLIST.md`
 
 Попередній blocker `fresh Windows build` закритий. Точний current Windows x64/MSVC build тепер успішно configure/link з WebRTC, WebRTC runtime staging, правильним ZWO EAF DLL import library і Canon EDSDK, жорстко спареним з AMD64 `EDSDK_64` runtime.
@@ -23,7 +23,7 @@
 12. Polar Alignment real-sky HIL.
 13. Discovery/hotplug regression.
 14. Portable Windows package + clean-machine test.
-15. Full supervised night qualification і deploy `openastro.link`.
+15. Full supervised night qualification і deploy **current** `site/` source на вже live `openastro.link` DNS/HTTPS endpoint.
 
 Не відкривати знову mount coordinate model v9 без нових суперечливих HIL-доказів. Smart Telescope UX і broad unattended-observatory automation лишаються scope OAL 1.0.
 

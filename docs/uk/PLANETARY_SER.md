@@ -1,10 +1,10 @@
 # Planetary SER та автономні blocks — v0.2.10.47
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. Planetary SER лишається реалізованим; real-hardware hardening продовжується за Beta HIL plan.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. Planetary SER лишається реалізованим; real-hardware hardening продовжується за Beta HIL plan.
 
 `planetary-ser` тепер реально виконується всередині `ObservationPlan`, а не лише як ручний Live View recorder. Supervised flow: `GOTO → full-frame detection планети → опційний planetary autofocus → reacquire → hardware ROI → finite SER`. Native QHY і ZWO ASI streaming приймають ROI. Під час SER fast loop може рухати ROI того самого розміру; кожна зміна пишеться у `<basename>.roi.jsonl` з номером першого кадру. Опційний slow mount loop може сам відкалібрувати локальний RA/DEC→image response малими наведеннями та робити bounded recenter corrections. Mount correction за замовчуванням OFF до HIL; ROI-only tracking — безпечний default.
 

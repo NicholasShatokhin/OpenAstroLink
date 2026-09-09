@@ -1,10 +1,10 @@
 # Plate solving — adaptive urban workflow
 
-> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
 
 
 
-> **Current release:** v0.2.10.53. Adaptive/node-local plate solving remains implemented and is reused by scheduler/mosaic workflows.
+> **Current development checkpoint:** v0.2.10.58-buildfix9. Adaptive/node-local plate solving remains implemented and is reused by scheduler/mosaic workflows.
 
 This document describes the v0.2.10.17 node-local plate-solving path intended for light-polluted sites, small sensors and mounts where a single 10–15 s exposure produces elongated stars.
 

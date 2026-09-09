@@ -921,3 +921,12 @@ Jammy provides Qt 6.2.4 only. Installing more Jammy `qt6-*`/`libqt6*-dev` packag
 ```
 
 The wrapper installs a complete per-user Qt through `aqtinstall` under `~/.local/share/openastrolink/qt` and does not require the Qt GUI installer or a Qt account. Do not run the Qt GUI installer with `sudo`. The Linux wrapper also removes a stale CMake cache automatically when a checkout has moved between WSL (`/mnt/c/...`) and native Linux (`~/...`).
+
+## Public documentation
+
+- [Why OpenAstroLink](docs/WHY_OPENASTROLINK.md)
+- [Manifesto](docs/MANIFESTO.md)
+- [User & astronomer guide](docs/USER_GUIDE.md)
+- [OAL core developer guide](docs/DEVELOPER_GUIDE.md)
+- [Third-party integration guide](docs/INTEGRATION_GUIDE.md)
+- [Native driver SDK](docs/NATIVE_DRIVER_SDK.md)

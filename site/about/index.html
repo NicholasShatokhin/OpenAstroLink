@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="What OpenAstroLink is, why it was created, and what architectural gaps it addresses.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Why OpenAstroLink exists</title>
+</head>
+<body>
+<header><a class="brand" href="/">OpenAstroLink</a><nav><a href="/#why">Why</a><a href="/manifesto/">Manifesto</a><a href="/docs/">Documentation</a><a href="/#status">Status</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/uk/">Українська</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">WHY OPENASTROLINK</p><h1>Protocol first. Node owned. Astronomy focused.</h1><p class="lead">OpenAstroLink is an open control layer for astronomical equipment and observing workflows. It was created because this project needed native hardware access, headless/remote ownership, cancellable workflow operations and a science data plane in one coherent architecture.</p></section>
+<section class="panel"><h2>What it is</h2><p>OpenAstroLink (OAL) separates the observatory control layer from any one GUI. <code>openastrolink-node</code> owns equipment sessions and workflows; OpenAstroSuite is the reference GUI; other software can integrate through the same protocol surfaces.</p></section>
+<section class="panel"><h2>Why not just use an existing astronomy stack?</h2><p>Existing ecosystems such as INDI, ASCOM/Alpaca, N.I.N.A. and KStars/Ekos solve important problems and remain valuable compatibility targets. The missing piece for this project was the combination of node-owned hardware, native-first drivers, explicit long-running operations, independent science/preview data paths, remote APIs and HIL-qualified behaviour in one open stack.</p><div class="grid"><article><h3>Node ownership</h3><p>Hardware lifetime is not tied to a desktop GUI process.</p></article><article><h3>Workflow semantics</h3><p>Slew, solve, autofocus, exposure and scheduler work use operations, locks and cancellation.</p></article><article><h3>Science first</h3><p>Preview may drop frames; authoritative FITS/RAW/SER recording must not depend on GUI/network load.</p></article></div></section>
+<section class="panel"><h2>What OAL is not</h2><p>It is not an argument that existing projects should disappear. Compatibility remains part of the architecture. It is also not yet an unattended-observatory safety platform: the nearest Beta is explicitly supervised.</p></section>
+<section class="panel"><h2>Read the rationale</h2><p>The repository contains the canonical rationale in <code>docs/WHY_OPENASTROLINK.md</code>.</p><div class="actions"><a class="primary" href="/manifesto/">Read the manifesto</a><a href="/docs/">Choose documentation</a></div></section></main>
+<footer>OpenAstroLink · openastro.link · Open-source astronomy control</footer>
+</body></html>

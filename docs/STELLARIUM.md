@@ -1,9 +1,9 @@
 # Stellarium integration
 
-> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
 
 
-> **Current release:** v0.2.10.53. The standard Telescope Control bridge remains the mount-position/GOTO path; v0.2.10.53 additionally supports optional camera-footprint export through Stellarium Remote Control.
+> **Current development checkpoint:** v0.2.10.58-buildfix9. The standard Telescope Control bridge remains the mount-position/GOTO path; v0.2.10.53 additionally supports optional camera-footprint export through Stellarium Remote Control.
 
 OpenAstroLink intentionally has two separate Stellarium integrations.
 

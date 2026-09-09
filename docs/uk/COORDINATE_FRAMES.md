@@ -1,10 +1,10 @@
 # Екваторіальні системи координат
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. J2000 interchange contract і розділення mount frames не змінені HIL-кваліфікацією v9.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. J2000 interchange contract і розділення mount frames не змінені HIL-кваліфікацією v9.
 
 OpenAstroLink використовує **J2000** як канонічну екваторіальну систему координат на межах API, сесій, Stellarium та plate solving.
 

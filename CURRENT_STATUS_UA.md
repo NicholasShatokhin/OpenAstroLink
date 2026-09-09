@@ -1,6 +1,6 @@
 # Поточний стан — OpenAstroLink / OpenAstroSuite v0.2.10.58-buildfix9
 
-**Дата snapshot:** 2026-09-08  
+**Дата snapshot:** 2026-09-09  
 **Core/source version:** `0.2.10.58`  
 **Windows qualification checkpoint:** `buildfix9`  
 **Master checklist:** `docs/uk/CURRENT_CHECKLIST.md`
@@ -27,6 +27,12 @@
 - ✅ Gemini focuser basic motion/status та AF cancel/start-position restore HIL-positive.
 - ✅ SER відкривається в AutoStakkert.
 - ✅ Mount GOTO abort HIL-positive.
+
+## Публічний сайт/документація
+
+- ✅ `openastro.link` і `www.openastro.link` зараз доступні та віддають HTTPS.
+- 🟡 Live deployment, перевірений 2026-09-09, усе ще віддає старіший snapshot сайту, тому DNS більше не blocker; blocker — **deploy current site source**.
+- ✅ Поточний repository site source тепер містить rationale проєкту, public manifesto, документацію для users/astronomers, OAL core developers, third-party integrations та driver-SDK entry points з українськими mirrors.
 
 ## Найближчий runtime/HIL
 

@@ -24,3 +24,7 @@ Sky Map v0.2.10.52 додає наведення у довільну видим�
 Sky Map v0.2.10.53 додає measured solved camera rectangles, predicted main/guide footprints, Scheduler mosaic preview та optional Stellarium Remote Control frame export.
 
 WebRTC checkpoint: `/webrtc` signaling + `oalv-main`/`oalv-guide` OALW v1 DataChannel; `/video` fallback збережено.
+
+## Public information architecture
+
+Сайт тепер публікує rationale проєкту, manifesto та окремі documentation routes для астрономів/users, OAL core developers, third-party integrators і driver authors. Static paths: `/uk/about/`, `/uk/manifesto/`, `/uk/docs/`, `/uk/docs/users/`, `/uk/docs/developers/`, `/uk/docs/integrators/`.

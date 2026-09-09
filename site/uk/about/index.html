@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Що таке OpenAstroLink, навіщо його створено і яку архітектурну прогалину він закриває.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Навіщо існує OpenAstroLink</title>
+</head>
+<body>
+<header><a class="brand" href="/uk">OpenAstroLink</a><nav><a href="/uk/#why">Навіщо</a><a href="/uk/manifesto/">Маніфест</a><a href="/uk/docs/">Документація</a><a href="/uk/#status">Статус</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/">English</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">НАВІЩО OPENASTROLINK</p><h1>Protocol first. Node owned. Astronomy focused.</h1><p class="lead">OpenAstroLink — відкритий control layer для астрономічного обладнання та observing workflows. Він з'явився тому, що проєкту одночасно були потрібні native hardware access, headless/remote ownership, cancellable workflow operations і science data plane в одній coherent architecture.</p></section>
+<section class="panel"><h2>Що це</h2><p>OpenAstroLink (OAL) відділяє observatory control layer від конкретного GUI. <code>openastrolink-node</code> володіє equipment sessions/workflows; OpenAstroSuite — reference GUI; інше ПЗ може інтегруватися через ті самі protocol surfaces.</p></section>
+<section class="panel"><h2>Чому не обмежитися наявним astronomy stack?</h2><p>INDI, ASCOM/Alpaca, N.I.N.A., KStars/Ekos та інші ecosystems вирішують важливі задачі й залишаються цінними compatibility targets. Для цього проєкту бракувало саме комбінації node-owned hardware, native-first drivers, explicit long-running operations, незалежних science/preview paths, remote APIs і HIL-qualified behaviour в одному open stack.</p><div class="grid"><article><h3>Node ownership</h3><p>Hardware lifetime не прив'язаний до desktop GUI process.</p></article><article><h3>Workflow semantics</h3><p>Slew, solve, autofocus, exposure та scheduler використовують operations, locks і cancellation.</p></article><article><h3>Science first</h3><p>Preview може drop-ати frames; authoritative FITS/RAW/SER не повинен залежати від GUI/network load.</p></article></div></section>
+<section class="panel"><h2>Чим OAL не є</h2><p>Це не твердження, що існуючі проєкти треба замінити. Compatibility є частиною architecture. Це також ще не unattended-observatory safety platform: найближча Beta явно supervised.</p></section>
+<section class="panel"><h2>Повне пояснення</h2><p>Canonical rationale зберігається у repository: <code>docs/uk/WHY_OPENASTROLINK.md</code>.</p><div class="actions"><a class="primary" href="/uk/manifesto/">Читати маніфест</a><a href="/uk/docs/">Обрати документацію</a></div></section></main>
+<footer>OpenAstroLink · openastro.link · Відкрите керування астрономічним обладнанням</footer>
+</body></html>

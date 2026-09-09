@@ -24,3 +24,7 @@ Sky Map v0.2.10.52 adds arbitrary visible-sky point targeting with the same OAL 
 Sky Map v0.2.10.53 adds measured solved camera rectangles, predicted main/guide footprints, Scheduler mosaic preview and optional Stellarium Remote Control frame export.
 
 WebRTC checkpoint: `/webrtc` signaling + `oalv-main`/`oalv-guide` OALW v1 DataChannels; `/video` fallback retained.
+
+## Public information architecture
+
+The site now publishes the project rationale, manifesto, and separate documentation routes for astronomers/users, OAL core developers, third-party integrators and driver authors. Static paths: `/about/`, `/manifesto/`, `/docs/`, `/docs/users/`, `/docs/developers/`, `/docs/integrators/` plus Ukrainian `/uk/...` mirrors.

@@ -1,10 +1,10 @@
 # Нативний Canon EOS — v0.2.10.5
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. `oal.canon` лишається native OAL. EDSDK підтримується на Windows і у валідованій Linux/ARM64 vendor-збірці; Linux також може використовувати selectable gphoto2 transport. Canon EDSDK надає користувач, OAL його автоматично не завантажує.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. `oal.canon` лишається native OAL. EDSDK підтримується на Windows і у валідованій Linux/ARM64 vendor-збірці; Linux також може використовувати selectable gphoto2 transport. Canon EDSDK надає користувач, OAL його автоматично не завантажує.
 
 Канонічний документ: `../CANON_EOS.md`.
 

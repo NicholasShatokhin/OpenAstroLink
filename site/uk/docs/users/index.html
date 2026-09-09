@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Як астрономи та operators використовують OpenAstroLink під час current supervised Beta qualification.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>OpenAstroLink — guide користувача й астронома</title>
+</head>
+<body>
+<header><a class="brand" href="/uk">OpenAstroLink</a><nav><a href="/uk/#why">Навіщо</a><a href="/uk/manifesto/">Маніфест</a><a href="/uk/docs/">Документація</a><a href="/uk/#status">Статус</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/">English</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">GUIDE КОРИСТУВАЧА Й АСТРОНОМА</p><h1>Керуйте node, а не набором незалежних device dialogs.</h1><p class="lead">Guide для supervised use поточних OpenAstroLink workflows.</p></section>
+<section class="panel"><h2>1. Два процеси</h2><p><code>openastrolink-node</code> володіє hardware. OpenAstroSuite — reference GUI, local або remote. Stellarium може окремо підключатися до telescope bridge.</p></section>
+<section class="panel"><h2>2. Перший setup</h2><ol><li>Запустити node, потім GUI.</li><li>Refresh/discover devices та призначити roles.</li><li>Налаштувати site й optical train.</li><li>Перевірити короткий supervised motion/exposure до automation.</li></ol></section>
+<section class="panel"><h2>3. Capture і Live View</h2><p>Capture FPS та preview FPS незалежні. Planetary SER пишеться до droppable preview work. Контролюйте <code>captureFps</code>, <code>previewFps</code>, <code>recordFps</code>, <code>previewDropped</code>, <code>recordDropped</code>.</p></section>
+<section class="panel"><h2>4. Mount/navigation</h2><p>GOTO, tracking, park/home, sync, abort, manual motion, Stellarium та built-in Sky Map. Не інтерпретуйте direct-MC axes вручну; proven v9 profile працює node-side і HIL-qualified.</p></section>
+<section class="panel"><h2>5. Autofocus, exposure, Scheduler</h2><p>Scene/star AF, sparse-scene auto exposure, DSO scheduler, planetary SER, mosaic та Polar Alignment мають різний qualification status. Current checklist — authority для HIL/pending.</p></section>
+<section class="panel"><h2>6. Remote/safety</h2><p>Використовуйте trusted LAN/VPN. Pre-1.0 ports не призначені для прямого Internet exposure. Найближча Beta supervised; unattended weather/roof/power safety — OAL 1.0.</p></section>
+<section class="panel"><h2>Troubleshooting</h2><p>Перевіряйте node startup, driver registry, discovery, потім interactive device operation до Scheduler. Для video відділяйте capture rate від preview transport і визначайте WebRTC чи <code>/video</code> fallback.</p><p class="note">Canonical guide: <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/uk/USER_GUIDE.md">docs/uk/USER_GUIDE.md</a></p></section></main>
+<footer>OpenAstroLink · openastro.link · Відкрите керування астрономічним обладнанням</footer>
+</body></html>

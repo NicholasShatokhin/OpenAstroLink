@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="How independent software integrates with an OpenAstroLink node.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>OpenAstroLink Third-party Integration Guide</title>
+</head>
+<body>
+<header><a class="brand" href="/">OpenAstroLink</a><nav><a href="/#why">Why</a><a href="/manifesto/">Manifesto</a><a href="/docs/">Documentation</a><a href="/#status">Status</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/uk/">Українська</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">THIRD-PARTY INTEGRATION</p><h1>Use OAL without depending on OpenAstroSuite.</h1><p class="lead">For planetariums, automation services, mobile/desktop clients, dashboards and other astronomy software.</p></section>
+<section class="panel"><h2>1. Discover, do not guess</h2><p>Start with <code>/api/v1/node/info</code>, backends, drivers, devices, state and per-device capabilities. Do not infer controls from a vendor/display name.</p></section>
+<section class="panel"><h2>2. Follow operations</h2><p>Long-running work transitions <code>queued → running → succeeded|failed|cancelled</code>. Observe operation IDs and cancel explicitly.</p></section>
+<section class="panel"><h2>3. Separate state from pixels</h2><p>JSON events use the event WebSocket. Preview uses binary OALV <code>/video</code> or WebRTC <code>/webrtc</code> DataChannels. Preview loss is not science-data loss.</p></section>
+<section class="panel"><h2>4. Plan for pre-1.0 evolution</h2><p>Query capabilities/version, tolerate unknown fields and avoid undocumented payloads. Durable event replay, final error semantics, TLS/auth/RBAC and some science-data APIs are still OAL 1.0 work.</p></section>
+<section class="panel"><h2>Security</h2><p>Use current development nodes on trusted LAN/VPN only; do not expose unauthenticated ports directly to the public Internet.</p><p class="note">Canonical guide: <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/INTEGRATION_GUIDE.md">docs/INTEGRATION_GUIDE.md</a> · <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/openapi.yaml">OpenAPI</a></p></section></main>
+<footer>OpenAstroLink · openastro.link · Open-source astronomy control</footer>
+</body></html>

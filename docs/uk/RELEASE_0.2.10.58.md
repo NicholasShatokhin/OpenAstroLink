@@ -84,3 +84,7 @@ Windows staging Canon EDSDK тепер жорстко спарює вибран�
 
 Це закриває clean-Windows-build gate для `.58`. Runtime qualification corrected Canon і ZWO EAF plugin load ще pending: наступний node startup має показати `oal.canon` і `oal.zwo.eaf` у native registry без Win32 error 193. WebRTC/QHY high-rate/Dual-Live HIL теж pending. Повний актуальний список gates — `CURRENT_CHECKLIST.md`.
 
+
+## Public website/documentation update (2026-09-09)
+
+Repository site source тепер публікує чітке пояснення, що таке OpenAstroLink, навіщо його створено та чому проєкту була потрібна інша архітектурна комбінація, ніж дають наявні astronomy stacks. Також опубліковані public manifesto та окремі documentation entry points для astronomers/users, OAL core contributors, third-party applications і native driver authors. DNS/HTTPS для `openastro.link` та `www.openastro.link` уже live; актуальна website-задача — deploy current source поверх старішого live snapshot.

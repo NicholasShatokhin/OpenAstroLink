@@ -1,10 +1,10 @@
 # Нативні драйвери ZWO ASI та ZWO EAF
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. Native ZWO ASI/EAF лишаються default OAL drivers; ARM64 vendor libraries пройшли повний Raspberry Pi cross-build.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. Native ZWO ASI/EAF лишаються default OAL drivers; ARM64 vendor libraries пройшли повний Raspberry Pi cross-build.
 
 Версія: 0.2.10
 

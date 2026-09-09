@@ -1,6 +1,6 @@
 # План валідації — v0.2.10.58-buildfix9
 
-**Snapshot:** 2026-09-08  
+**Snapshot:** 2026-09-09  
 **Master checklist:** `CURRENT_CHECKLIST.md`
 
 ## Gate 0 — current Windows build qualification — ✅ ЗАКРИТО

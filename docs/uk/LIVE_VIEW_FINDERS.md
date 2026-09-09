@@ -1,10 +1,10 @@
 # Live View, Scene Autofocus та юстування шукача
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. Live View/finder/scene-autofocus workflow лишається реалізованим; найближча Beta робота — HIL convergence і repeatability.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. Live View/finder/scene-autofocus workflow лишається реалізованим; найближча Beta робота — HIL convergence і repeatability.
 
 OpenAstroLink v0.2.10.35 додає operational-preview workflow для налаштування телескопа, захоплення цілі, юстування шукача, кадрування Місяця/планет і денного фокусування.
 

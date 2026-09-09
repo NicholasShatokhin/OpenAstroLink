@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="How astronomers and operators use OpenAstroLink safely during the current supervised Beta qualification.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>OpenAstroLink User &amp; Astronomer Guide</title>
+</head>
+<body>
+<header><a class="brand" href="/">OpenAstroLink</a><nav><a href="/#why">Why</a><a href="/manifesto/">Manifesto</a><a href="/docs/">Documentation</a><a href="/#status">Status</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/uk/">Українська</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">USER & ASTRONOMER GUIDE</p><h1>Operate the node, not a pile of unrelated device dialogs.</h1><p class="lead">A supervised-use guide to current OpenAstroLink workflows.</p></section>
+<section class="panel"><h2>1. Understand the two processes</h2><p><code>openastrolink-node</code> owns the equipment. OpenAstroSuite is the reference GUI and can be local or remote. Stellarium can connect independently to the telescope bridge.</p></section>
+<section class="panel"><h2>2. First setup</h2><ol><li>Start the node, then the GUI.</li><li>Refresh/discover devices and assign camera/mount/focuser roles.</li><li>Configure observing site and optical train.</li><li>Test short supervised motion/exposure before automation.</li></ol></section>
+<section class="panel"><h2>3. Capture and Live View</h2><p>Capture FPS and preview FPS are independent. Planetary SER is written before droppable preview work. Monitor <code>captureFps</code>, <code>previewFps</code>, <code>recordFps</code>, <code>previewDropped</code> and <code>recordDropped</code>.</p></section>
+<section class="panel"><h2>4. Mount and navigation</h2><p>Use GOTO, tracking, park/home, sync, abort, manual motion, Stellarium or the built-in Sky Map. Do not manually reinterpret direct-MC axis geometry; the proven v9 profile is node-side and HIL-qualified.</p></section>
+<section class="panel"><h2>5. Autofocus, exposure and Scheduler</h2><p>Scene/star AF, sparse-scene auto exposure, DSO scheduling, planetary SER, mosaic and Polar Alignment are implemented at different qualification levels. The current checklist is the authority for what is HIL-qualified versus pending.</p></section>
+<section class="panel"><h2>6. Remote and safety</h2><p>Use a trusted LAN/VPN. Current pre-1.0 ports are not intended for direct public Internet exposure. The nearest Beta is supervised; unattended weather/roof/power safety remains 1.0 work.</p></section>
+<section class="panel"><h2>Troubleshooting</h2><p>Check node startup, driver registry, device discovery, then interactive device operation before Scheduler. For video issues, distinguish capture rate from preview transport and identify whether WebRTC or <code>/video</code> fallback is active.</p><p class="note">Canonical guide: <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/USER_GUIDE.md">docs/USER_GUIDE.md</a></p></section></main>
+<footer>OpenAstroLink · openastro.link · Open-source astronomy control</footer>
+</body></html>

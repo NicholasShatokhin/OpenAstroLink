@@ -1,6 +1,6 @@
 # Current status — OpenAstroLink / OpenAstroSuite v0.2.10.58-buildfix9
 
-**Snapshot date:** 2026-09-08  
+**Snapshot date:** 2026-09-09  
 **Core/source version:** `0.2.10.58`  
 **Windows qualification checkpoint:** `buildfix9`  
 **Master checklist:** `docs/CURRENT_CHECKLIST.md`
@@ -27,6 +27,12 @@ This closes the old **clean Windows build** Beta blocker. The next runtime gate 
 - ✅ Gemini focuser basic motion/status and AF cancel/start-position restore are HIL-positive.
 - ✅ SER opens in AutoStakkert.
 - ✅ Mount GOTO abort is HIL-positive.
+
+## Public site/documentation
+
+- ✅ `openastro.link` and `www.openastro.link` are currently reachable and serve HTTPS.
+- 🟡 The live deployment observed on 2026-09-09 still serves an older site snapshot, so DNS is no longer the blocker; **deploying the current site source is**.
+- ✅ Current repository site source now includes the project rationale, public manifesto, user/astronomer documentation, OAL core developer documentation, third-party integration documentation and driver-SDK entry points, with Ukrainian mirrors.
 
 ## Immediate pending runtime/HIL
 

@@ -1,6 +1,6 @@
 # Native EQDrive support — v0.2.10.50
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 `oal.eqdrive` — native ABI-v2 driver для EQDrive. Він підтримує два low-level transport paths, але астрономічна геометрія лишається в OAL Core:

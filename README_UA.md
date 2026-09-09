@@ -851,3 +851,12 @@ Jammy надає лише Qt 6.2.4. Встановлення додаткови�
 ```
 
 Скрипт встановлює повний per-user Qt через `aqtinstall` у `~/.local/share/openastrolink/qt` і не потребує GUI-інсталятора Qt або Qt Account. Не запускайте GUI-інсталятор Qt через `sudo`. Linux wrapper також автоматично видаляє застарілий CMake cache, якщо checkout було перенесено між WSL (`/mnt/c/...`) і нативним Linux (`~/...`).
+
+## Публічна документація
+
+- [Навіщо OpenAstroLink](docs/uk/WHY_OPENASTROLINK.md)
+- [Маніфест](docs/uk/MANIFESTO.md)
+- [Guide користувача й астронома](docs/uk/USER_GUIDE.md)
+- [Guide core-розробника OAL](docs/uk/DEVELOPER_GUIDE.md)
+- [Guide інтеграції сторонніх програм](docs/uk/INTEGRATION_GUIDE.md)
+- [Native driver SDK](docs/uk/NATIVE_DRIVER_SDK.md)

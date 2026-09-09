@@ -1,6 +1,6 @@
 # Documentation index — OpenAstroLink v0.2.10.58-buildfix9
 
-> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-08)**.
+> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**.
 
 English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 
@@ -13,6 +13,16 @@ English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 - `NEW_CHAT_HANDOFF.md` — detailed continuation context.
 - `VALIDATION.md` — current build/runtime/HIL acceptance gates.
 - `ROADMAP_P0_P1_IMPLEMENTATION.md` — Beta and OAL 1.0 priorities.
+
+
+## Public entry points by audience
+
+- `WHY_OPENASTROLINK.md` — what OAL is, why it exists, and the architectural gap it addresses.
+- `MANIFESTO.md` — public project principles.
+- `USER_GUIDE.md` — ordinary users and astronomers.
+- `DEVELOPER_GUIDE.md` — contributors to OAL/OpenAstroSuite itself.
+- `INTEGRATION_GUIDE.md` — third-party applications that consume OAL.
+- `NATIVE_DRIVER_SDK.md` — third-party/native OAL driver authors.
 
 ## Architecture / protocol
 
@@ -44,6 +54,8 @@ English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 - `STELLARIUM.md`
 - `SKY_MAP.md`
 - `PLATE_SOLVING.md`
+
+- `WEBSITE_DEPLOYMENT.md` — static-site deployment source and post-deploy verification.
 
 ## Workflows / platform
 

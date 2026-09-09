@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Entry point для contributors, які розробляють OpenAstroLink.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>OpenAstroLink — guide core-розробника</title>
+</head>
+<body>
+<header><a class="brand" href="/uk">OpenAstroLink</a><nav><a href="/uk/#why">Навіщо</a><a href="/uk/manifesto/">Маніфест</a><a href="/uk/docs/">Документація</a><a href="/uk/#status">Статус</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/">English</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">OAL CORE DEVELOPMENT</p><h1>Ownership, operations та evidence мають бути явними.</h1><p class="lead">Entry point для contributors node, core, GUI, protocol, algorithms і build system.</p></section>
+<section class="panel"><h2>Read order</h2><p><code>CURRENT_STATUS</code> → <code>CURRENT_CHECKLIST</code> → <code>ARCHITECTURE</code> → <code>OAL_SPECIFICATION</code> → <code>OAL_API</code> → <code>VALIDATION</code>. Перед mount transforms читати <code>MOUNT_GEOMETRY</code>.</p></section>
+<section class="panel"><h2>Core invariants</h2><ul><li>Node володіє device sessions.</li><li>Native drivers default; INDI optional.</li><li>Mount v9 geometry frozen після HIL.</li><li>Main/guide resource locks independent.</li><li>Science recording upstream від preview/network work.</li><li>EN docs canonical, UA mirrors synchronized.</li></ul></section>
+<section class="panel"><h2>Feature workflow</h2><p>Визначити ownership/resources, query vs operation, capabilities, device-specific boundary, cancel/failure semantics, regression coverage, docs sync і реальний qualification level.</p></section>
+<section class="panel"><h2>Driver/protocol work</h2><p>Використовуйте <code>include/oal/driver_api.h</code>, manifest schema, <code>NATIVE_DRIVER_SDK.md</code>, OpenAPI та OAL specification. GUI не повинен бути shadow source protocol state.</p><p class="note">Canonical guide: <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/uk/DEVELOPER_GUIDE.md">docs/uk/DEVELOPER_GUIDE.md</a></p></section></main>
+<footer>OpenAstroLink · openastro.link · Відкрите керування астрономічним обладнанням</footer>
+</body></html>

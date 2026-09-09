@@ -1,6 +1,6 @@
 ## v0.2.10.53 Raspberry Pi 4/5 ARM64 status
 
-> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
 
 
 OpenAstroLink treats 64-bit Raspberry Pi as a generic Linux `aarch64` target. Pi 4 and Pi 5 therefore share the same OAL ABI and vendor ARM64 SDK matrix. The historical `rpi4-*` preset/sysroot names are retained for backward compatibility; they do not encode a Cortex-A72-only binary. The current WSL/Linux→ARM64 build has reached 100% for `openastrolink-node`, `oal-hardware-probe` and native QHY/Canon/ZWO/Gemini/Sky-Watcher/EQDrive drivers. Physical Pi 5 runtime/HIL and the ARM64 `OpenAstroSuite` GUI runtime are still pending.

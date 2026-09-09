@@ -1,6 +1,6 @@
 ## v0.2.10.53 implementation boundary
 
-> Current synchronized snapshot: **v0.2.10.57 (2026-09-07)**. See `STATUS.md` and `RELEASE_0.2.10.57.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
 
 
 The protocol/driver model remains native-first with INDI as opt-in compatibility. Cross-platform build qualification now covers Windows x64, Linux x86_64 and Raspberry Pi/Linux ARM64 node targets. Direct-MC mount coordinate model v9 is HIL-qualified and unchanged; the EQDrive transport no longer carries a hidden temporary sky-GOTO qualification envelope. Operator safety belongs to Core/profile policy, while raw-axis calls expose their explicit mechanical guard.

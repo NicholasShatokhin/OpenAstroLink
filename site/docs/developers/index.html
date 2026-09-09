@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Entry point for contributors developing OpenAstroLink itself.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>OpenAstroLink Core Developer Guide</title>
+</head>
+<body>
+<header><a class="brand" href="/">OpenAstroLink</a><nav><a href="/#why">Why</a><a href="/manifesto/">Manifesto</a><a href="/docs/">Documentation</a><a href="/#status">Status</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/uk/">Українська</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">OAL CORE DEVELOPMENT</p><h1>Keep ownership, operations and evidence explicit.</h1><p class="lead">Entry point for contributors to the node, core, GUI, protocol, algorithms and build system.</p></section>
+<section class="panel"><h2>Read order</h2><p><code>CURRENT_STATUS</code> → <code>CURRENT_CHECKLIST</code> → <code>ARCHITECTURE</code> → <code>OAL_SPECIFICATION</code> → <code>OAL_API</code> → <code>VALIDATION</code>. Read <code>MOUNT_GEOMETRY</code> before mount transforms.</p></section>
+<section class="panel"><h2>Core invariants</h2><ul><li>Node owns device sessions.</li><li>Native drivers default; INDI optional.</li><li>Mount v9 geometry frozen after HIL.</li><li>Main/guide resource locks independent.</li><li>Science recording stays upstream of preview/network work.</li><li>EN docs canonical with UA mirrors.</li></ul></section>
+<section class="panel"><h2>Feature workflow</h2><p>Define ownership/resources, decide query vs operation, publish capabilities, isolate device-specific code, define cancel/failure semantics, add regression coverage, synchronize documentation and record the real qualification level.</p></section>
+<section class="panel"><h2>Driver and protocol work</h2><p>Use <code>include/oal/driver_api.h</code>, the driver manifest schema, <code>NATIVE_DRIVER_SDK.md</code>, OpenAPI and the OAL specification. Do not make the GUI a shadow source of protocol state.</p><p class="note">Canonical guide: <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/DEVELOPER_GUIDE.md">docs/DEVELOPER_GUIDE.md</a></p></section></main>
+<footer>OpenAstroLink · openastro.link · Open-source astronomy control</footer>
+</body></html>

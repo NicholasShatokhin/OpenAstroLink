@@ -1,10 +1,10 @@
 # Перший hardware запуск на Raspberry Pi — v0.2.10.5
 
-> Поточний synchronized snapshot: **v0.2.10.57 (2026-09-07)**. Див. `STATUS.md` та `RELEASE_0.2.10.57.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
 
 
 
-> **Поточний реліз:** v0.2.10.53. Raspberry Pi 4 і Pi 5 трактуються як generic Linux `aarch64` target; ARM64 node/probe/native-driver build підтверджений, physical Pi 5 runtime/HIL ще pending.
+> **Поточний development checkpoint:** v0.2.10.58-buildfix9. Raspberry Pi 4 і Pi 5 трактуються як generic Linux `aarch64` target; ARM64 node/probe/native-driver build підтверджений, physical Pi 5 runtime/HIL ще pending.
 
 Канонічний документ: `../RPI_FIRST_HARDWARE.md`.
 

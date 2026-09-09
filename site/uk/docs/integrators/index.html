@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Як незалежне ПЗ інтегрується з OpenAstroLink node.">
+  <link rel="stylesheet" href="/styles.css">
+  <title>OpenAstroLink — integration guide</title>
+</head>
+<body>
+<header><a class="brand" href="/uk">OpenAstroLink</a><nav><a href="/uk/#why">Навіщо</a><a href="/uk/manifesto/">Маніфест</a><a href="/uk/docs/">Документація</a><a href="/uk/#status">Статус</a><a href="https://github.com/NicholasShatokhin/OpenAstroLink">GitHub</a><a href="/">English</a></nav></header>
+<main class="docs-page"><section class="hero compact"><p class="eyebrow">THIRD-PARTY INTEGRATION</p><h1>Використовуйте OAL без залежності від OpenAstroSuite.</h1><p class="lead">Для planetariums, automation services, mobile/desktop clients, dashboards та іншого astronomy software.</p></section>
+<section class="panel"><h2>1. Discover, не guess</h2><p>Починайте з <code>/api/v1/node/info</code>, backends, drivers, devices, state і per-device capabilities. Не виводьте controls з vendor/display name.</p></section>
+<section class="panel"><h2>2. Follow operations</h2><p>Long-running work: <code>queued → running → succeeded|failed|cancelled</code>. Слідкуйте за operation IDs і cancel explicitly.</p></section>
+<section class="panel"><h2>3. State окремо від pixels</h2><p>JSON events — event WebSocket. Preview — binary OALV <code>/video</code> або WebRTC <code>/webrtc</code> DataChannels. Preview loss не дорівнює science-data loss.</p></section>
+<section class="panel"><h2>4. Pre-1.0 evolution</h2><p>Query capabilities/version, tolerate unknown fields, не залежати від undocumented payloads. Durable event replay, final error semantics, TLS/auth/RBAC і частина science-data APIs ще OAL 1.0.</p></section>
+<section class="panel"><h2>Security</h2><p>Current development nodes — trusted LAN/VPN only; не expose-те unauthenticated ports прямо в Internet.</p><p class="note">Canonical guide: <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/uk/INTEGRATION_GUIDE.md">docs/uk/INTEGRATION_GUIDE.md</a> · <a href="https://github.com/NicholasShatokhin/OpenAstroLink/blob/main/docs/openapi.yaml">OpenAPI</a></p></section></main>
+<footer>OpenAstroLink · openastro.link · Відкрите керування астрономічним обладнанням</footer>
+</body></html>

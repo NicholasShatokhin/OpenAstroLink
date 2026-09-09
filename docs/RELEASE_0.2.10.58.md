@@ -18,7 +18,7 @@ SER/raw recording still occurs upstream of preview processing. JPEG is encoded o
 
 ## Qualification boundary
 
-Source/static qualification is separate from hardware qualification. Fresh Windows build, QHY high-rate HIL, Dual Live HIL, network fallback HIL and 5–10 minute SER validation are still required before build/HIL qualification.
+Source/static qualification is separate from hardware qualification. The **fresh Windows v0.2.10.58-buildfix9 configure/build is now confirmed**. QHY high-rate HIL, Dual Live HIL, network fallback HIL, 5–10 minute zero-drop SER validation, and Canon/ZWO-EAF node-registry runtime retest remain pending.
 
 Mount direct-MC geometry v9 is frozen and unchanged (`Axis1Sign=+1`, `Axis2Sign=-1`).
 
@@ -84,3 +84,7 @@ The exact current Windows x64/MSVC tree now configures and builds successfully w
 
 This closes the clean-Windows-build gate for the `.58` branch. Runtime qualification is still pending for the corrected Canon and ZWO EAF plugin loads; the next node startup must show `oal.canon` and `oal.zwo.eaf` in the native registry without Win32 error 193. WebRTC/QHY high-rate/Dual-Live HIL remains pending. The full current gate list lives in `CURRENT_CHECKLIST.md`.
 
+
+## Public website/documentation update (2026-09-09)
+
+The repository site source now publishes a clear explanation of what OpenAstroLink is, why it was created, and why the project needed a different architectural combination than existing astronomy stacks. It also publishes a public manifesto and separate documentation entry points for astronomers/users, OAL core contributors, third-party applications, and native driver authors. DNS/HTTPS for `openastro.link` and `www.openastro.link` are live; the remaining website task is deploying this current source over the older live snapshot.

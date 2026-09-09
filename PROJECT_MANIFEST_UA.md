@@ -1,4 +1,5 @@
 ## v0.2.10.58-buildfix9
+- Публічна документація/site information architecture тепер включає rationale проєкту, manifesto, user/astronomer guide, OAL core developer guide, third-party integration guide та native driver SDK entry points.
 
 - Package/source line: `0.2.10.58-webrtc-preview-checkpoint`, Windows qualification checkpoint `buildfix9`.
 - Core version: `0.2.10.58`.
