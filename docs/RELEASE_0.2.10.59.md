@@ -21,4 +21,4 @@ OAL 1.0 plans a separate mobile/touch Qt Quick/QML client on top of the same nod
 
 ## Qualification
 
-Source/static qualification only until a fresh Windows build and UI HIL are completed. v0.2.10.58-buildfix9 remains the last fresh Windows build-qualified checkpoint.
+Windows UI HIL on 2026-09-10 confirms Night Vision, Strict Night Mode, red-only custom graphics and the optional black→red monochrome Live View palette. A capture/solve image remained grayscale under Strict mode, confirming display-only separation. Remaining explicit acceptance: saved-theme restart/core chooser, true-colour UVC protection and RAW/Bayer Debayer gating. v0.2.10.58-buildfix9 remains the last fully logged fresh-clean Windows build-qualified checkpoint.

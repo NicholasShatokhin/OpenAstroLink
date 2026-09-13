@@ -414,14 +414,18 @@ API/profile foundation існує для Filter Wheel, Rotator, Dome/Roof, Weath
 |---|---|
 | Qt Widgets expert/engineering desktop GUI | ✅ |
 | Normal theme | ✅ |
-| Night Vision чорно-червона widget theme | ✅ implementation |
-| Strict Night Mode red-only custom graphics | ✅ implementation |
+| Night Vision чорно-червона widget theme | ✅ Windows HIL 2026-09-10 |
+| Strict Night Mode red-only custom graphics | ✅ Windows HIL 2026-09-10 |
 | `Ctrl+Shift+N` cycle | ✅ |
 | Persistent theme ще до startup/core chooser | ✅ |
 | Live View за замовчуванням не перефарбовується night mode | ✅ |
-| Optional black→red для mono/raw без debayer | ✅ implementation |
+| Optional black→red для mono preview | ✅ Windows HIL на simulated mono Live View |
 | True-colour preview захищений від випадкового black→red | ✅ implementation |
-| Fresh Windows/UI HIL для v0.2.10.59 | 🟡 |
+| v0.2.10.59 Windows UI HIL — основні visual modes | ✅ |
+| Strict не перефарбовує capture/solve image pixels | ✅ visual HIL |
+| Persist Strict після restart/core chooser | 🟡 acceptance |
+| True-colour UVC лишається кольоровим з black→red option | 🟡 acceptance |
+| RAW/Bayer Debayer OFF→red, Debayer ON→original colour | 🟡 acceptance |
 | Mobile Qt Quick/QML GUI | ⬜ OAL 1.0 |
 
 ## Website
@@ -455,8 +459,8 @@ API/profile foundation існує для Filter Wheel, Rotator, Dome/Roof, Weath
 |---|---|
 | Qt 6.10 / MSVC2022 x64 | ✅ |
 | Current source/core | **v0.2.10.59** |
-| Last fresh Windows build-qualified checkpoint | **v0.2.10.58-buildfix9** |
-| Current Night Vision source checkpoint | **v0.2.10.59 — fresh Windows/UI HIL pending** |
+| Last fully logged fresh Windows build-qualified checkpoint | **v0.2.10.58-buildfix9** |
+| Current Night Vision checkpoint | **v0.2.10.59 — Windows UI HIL-positive; persistence/UVC/RAW gating acceptance ще pending** |
 | WebRTC/libdatachannel bootstrap | ✅ |
 | vcpkg dependency bootstrap | ✅ |
 | WebRTC configure | ✅ |

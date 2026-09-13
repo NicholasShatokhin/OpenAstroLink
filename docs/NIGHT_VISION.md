@@ -24,4 +24,4 @@ This transform is presentation-only. It does **not** change FITS, RAW, SER, OALV
 
 ## Qualification boundary
 
-v0.2.10.59 is a source/static checkpoint until a fresh Windows MSVC build and desktop HIL are completed. The last confirmed fresh Windows build is the v0.2.10.58-buildfix9 lineage.
+Windows desktop HIL on 2026-09-10 confirms the core visual behavior: Night Vision/Strict switching, Strict red-only custom graphics and black→red monochrome Live View. The supplied capture/solve view remained grayscale under Strict, confirming display-only separation. Remaining explicit acceptance is saved-mode restart behavior, true-colour UVC protection and RAW/Bayer Debayer gating. The last fully logged fresh-clean Windows build remains the v0.2.10.58-buildfix9 lineage.

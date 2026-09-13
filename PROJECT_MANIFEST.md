@@ -1,4 +1,4 @@
-> **Night Vision update:** v0.2.10.59 adds desktop Night Vision / Strict Night Mode and display-only black→red mono/raw preview; fresh Windows build/UI HIL pending. Last fresh Windows build-qualified base: v0.2.10.58-buildfix9.
+> **Night Vision HIL update (2026-09-10):** v0.2.10.59 Night Vision / Strict Night Mode and black→red monochrome Live View are Windows HIL-positive. Capture/solve image pixels remain in their original palette. Pending: restart persistence, true-colour UVC protection and RAW/Bayer Debayer gating. Last fully logged fresh-clean Windows build-qualified base: v0.2.10.58-buildfix9.
 
 ## v0.2.10.59
 - Public documentation/site information architecture now includes project rationale, manifesto, user/astronomer guide, OAL core developer guide, third-party integration guide, and native driver SDK entry points.

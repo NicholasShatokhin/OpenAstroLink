@@ -1,6 +1,6 @@
-# План валідації — v0.2.10.58-buildfix9
+# План валідації — v0.2.10.59
 
-**Snapshot:** 2026-09-09  
+**Snapshot:** 2026-09-10  
 **Master checklist:** `CURRENT_CHECKLIST.md`
 
 ## Gate 0 — current Windows build qualification — ✅ ЗАКРИТО
@@ -107,3 +107,16 @@ Static checks не замінюють HIL gates вище.
 - Debayer ON має вимикати black→red transform.
 - Strict має переводити Sky Map, histogram, reticle, astrometry/star overlays та status accents у red-only.
 - FITS/RAW/SER та OALV/WebRTC payload не повинні залежати від GUI palette.
+
+
+## v0.2.10.59 Night Vision acceptance
+
+HIL update 2026-09-10:
+
+- ✅ Night Vision і Strict Night Mode видимо перемикаються у Windows.
+- ✅ Strict custom graphics — red-only.
+- ✅ Optional black→red monochrome Live View palette працює на simulated star camera.
+- ✅ Capture/solve image лишається grayscale: display-only separation підтверджено візуально.
+- 🟡 Persistence після restart/core chooser.
+- 🟡 True-colour UVC protection.
+- 🟡 RAW/Bayer Debayer OFF/ON gating.

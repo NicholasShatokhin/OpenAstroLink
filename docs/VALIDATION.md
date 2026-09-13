@@ -1,6 +1,6 @@
-# Validation plan — v0.2.10.58-buildfix9
+# Validation plan — v0.2.10.59
 
-**Snapshot:** 2026-09-09  
+**Snapshot:** 2026-09-10  
 **Master checklist:** `CURRENT_CHECKLIST.md`
 
 ## Gate 0 — current Windows build qualification — ✅ CLOSED
@@ -99,11 +99,15 @@ Static checks do not substitute for the HIL gates above.
 
 ## v0.2.10.59 Night Vision acceptance
 
-- Fresh Windows MSVC build with Qt 6.10.
-- Normal → Night Vision → Strict Night Mode → Normal via `Ctrl+Shift+N`.
-- Restart while Strict is saved: the core chooser must open in the saved night palette.
-- True-colour UVC preview must remain colour even when black→red preview is enabled.
-- Mono/raw, Debayer OFF + black→red option must render black→red.
-- Debayer ON must suppress the black→red transform.
-- Strict mode must map Sky Map, histogram, reticles, astrometry/star overlays and status accents to red-only.
-- FITS/RAW/SER and OALV/WebRTC payloads must remain byte/data-path independent of GUI palette.
+HIL update 2026-09-10:
+
+- ✅ Night Vision and Strict Night Mode visibly switch on Windows.
+- ✅ Strict maps custom UI/graphics, including star-map/histogram/reticle surfaces visible in the supplied screenshots, to red-only.
+- ✅ Optional black→red monochrome Live View palette works on the simulated star camera.
+- ✅ Capture/solve image pixels remain in their original grayscale palette while the surrounding Strict UI remains red-only, visually confirming display-only separation.
+- 🟡 Restart while Strict is saved: the core chooser must open in the saved night palette.
+- 🟡 True-colour UVC preview must remain colour even when black→red preview is enabled.
+- 🟡 RAW/Bayer Debayer OFF + black→red must render black→red; Debayer ON must suppress the transform.
+- 🟡 FITS/RAW/SER and OALV/WebRTC payload independence remains an architecture/static invariant; add byte/data-path HIL where practical.
+
+Evidence: `evidence/hil/night_vision_2026-09-10/`.

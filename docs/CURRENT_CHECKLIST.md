@@ -414,14 +414,18 @@ API/profile foundations exist for Filter Wheel, Rotator, Dome/Roof, Weather, GPS
 |---|---|
 | Qt Widgets expert/engineering desktop GUI | ✅ |
 | Normal theme | ✅ |
-| Night Vision black/red widget theme | ✅ implementation |
-| Strict Night Mode red-only custom graphics | ✅ implementation |
+| Night Vision black/red widget theme | ✅ Windows HIL 2026-09-10 |
+| Strict Night Mode red-only custom graphics | ✅ Windows HIL 2026-09-10 |
 | `Ctrl+Shift+N` theme cycle | ✅ |
 | Persistent theme before startup/core chooser | ✅ |
 | Live View unchanged by night mode by default | ✅ |
-| Optional black→red mono/raw non-debayered preview | ✅ implementation |
+| Optional black→red monochrome preview | ✅ Windows HIL on simulated mono Live View |
 | True-colour preview protected from accidental black→red mapping | ✅ implementation |
-| Fresh Windows/UI HIL for v0.2.10.59 | 🟡 |
+| v0.2.10.59 Windows UI HIL — core visual modes | ✅ |
+| Strict mode leaves capture/solve image pixels unmodified | ✅ visual HIL |
+| Persist Strict across restart/core chooser | 🟡 acceptance |
+| True-colour UVC remains colour with black→red option | 🟡 acceptance |
+| RAW/Bayer Debayer OFF→red, Debayer ON→original colour | 🟡 acceptance |
 | Mobile Qt Quick/QML GUI | ⬜ OAL 1.0 |
 
 ## Website
@@ -455,8 +459,8 @@ API/profile foundations exist for Filter Wheel, Rotator, Dome/Roof, Weather, GPS
 |---|---|
 | Qt 6.10 / MSVC2022 x64 | ✅ |
 | Current source/core | **v0.2.10.59** |
-| Last fresh Windows build-qualified checkpoint | **v0.2.10.58-buildfix9** |
-| Current Night Vision source checkpoint | **v0.2.10.59 — fresh Windows/UI HIL pending** |
+| Last fully logged fresh Windows build-qualified checkpoint | **v0.2.10.58-buildfix9** |
+| Current Night Vision checkpoint | **v0.2.10.59 — Windows UI HIL-positive; remaining persistence/UVC/RAW gating acceptance pending** |
 | WebRTC/libdatachannel bootstrap | ✅ |
 | vcpkg dependency bootstrap | ✅ |
 | WebRTC configure | ✅ |

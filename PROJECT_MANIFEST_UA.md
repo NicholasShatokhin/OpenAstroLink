@@ -1,4 +1,4 @@
-> **Night Vision update:** v0.2.10.59 додає desktop Night Vision / Strict Night Mode та display-only black→red mono/raw preview; fresh Windows build/UI HIL pending. Остання fresh Windows build-qualified база: v0.2.10.58-buildfix9.
+> **Night Vision HIL update (2026-09-10):** v0.2.10.59 Night Vision / Strict Night Mode і black→red mono Live View Windows HIL-positive. Capture/solve image лишається у вихідній палітрі. Pending: restart persistence, true-colour UVC protection і RAW/Bayer Debayer gating. Остання повністю задокументована fresh-clean Windows build-qualified база: v0.2.10.58-buildfix9.
 
 ## v0.2.10.59
 - Публічна документація/site information architecture тепер включає rationale проєкту, manifesto, user/astronomer guide, OAL core developer guide, third-party integration guide та native driver SDK entry points.

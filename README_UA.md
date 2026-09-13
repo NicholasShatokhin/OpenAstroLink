@@ -1,4 +1,4 @@
-> **Night Vision update:** v0.2.10.59 додає desktop Night Vision / Strict Night Mode та display-only black→red mono/raw preview; fresh Windows build/UI HIL pending. Остання fresh Windows build-qualified база: v0.2.10.58-buildfix9.
+> **Night Vision HIL update (2026-09-10):** v0.2.10.59 Night Vision / Strict Night Mode і black→red mono Live View Windows HIL-positive. Capture/solve image лишається у вихідній палітрі. Pending: restart persistence, true-colour UVC protection і RAW/Bayer Debayer gating. Остання повністю задокументована fresh-clean Windows build-qualified база: v0.2.10.58-buildfix9.
 
 ## v0.2.10.59 — Windows build-qualified WebRTC checkpoint
 
@@ -121,7 +121,7 @@ Qt/OpenCV/QHY/ZWO автоматизовані там, де є детермін�
 - Native QHY і ZWO ASI live paths приймають hardware ROI. ZWO ASI реалізований, але HIL на реальному залізі ще не виконаний.
 - Durable restart scheduler, weather/roof safety, meridian-flip recovery та thermal focus compensation під час експозиції лишаються roadmap OAL 1.0.
 
-**Поточний source checkpoint: v0.2.10.59 — Night Vision/Strict Night; fresh Windows/UI HIL pending. Остання fresh Windows build-qualified база: v0.2.10.58-buildfix9.**
+**Поточний checkpoint: v0.2.10.59 — Night Vision/Strict Night core visual HIL ✅; persistence/UVC/RAW gating ще pending. Остання fully logged fresh-clean Windows build-qualified база: v0.2.10.58-buildfix9.**
 
 ## v0.2.10.46 — ObservationPlan та supervised DSO executor
 

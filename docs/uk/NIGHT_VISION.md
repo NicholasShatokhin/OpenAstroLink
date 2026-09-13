@@ -24,4 +24,4 @@ Night/Strict **не змінюють пікселі камери автомат�
 
 ## Межа кваліфікації
 
-v0.2.10.59 поки є source/static checkpoint до fresh Windows MSVC build і desktop HIL. Останній підтверджений fresh Windows build — lineage v0.2.10.58-buildfix9.
+Windows desktop HIL 2026-09-10 підтвердив основну візуальну поведінку: перемикання Night Vision/Strict, red-only custom-графіку Strict і black→red mono Live View. На наданому capture/solve view зображення лишилося grayscale під Strict, що підтверджує display-only separation. Окремо ще треба перевірити saved-mode restart, true-colour UVC protection і RAW/Bayer Debayer gating. Останній повністю задокументований fresh-clean Windows build — lineage v0.2.10.58-buildfix9.

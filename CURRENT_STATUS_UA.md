@@ -1,8 +1,8 @@
-> **v0.2.10.59 Night Vision checkpoint (2026-09-09):** Desktop OpenAstroSuite отримав persistent Normal / Night Vision / Strict Night Mode, `Ctrl+Shift+N` та опціональну чорно-червону display palette для справді монохромного/RAW preview без debayer. Camera/science data не перефарбовуються. Для OAL 1.0 зафіксовано окремий mobile Qt Quick/QML frontend. v0.2.10.59 ще потребує fresh Windows build/UI HIL; останнє fresh Windows build-qualified дерево — v0.2.10.58-buildfix9.
+> **v0.2.10.59 Night Vision HIL update (2026-09-10):** Night Vision і Strict Night Mode у desktop OpenAstroSuite тепер Windows runtime/HIL-positive. Надані HIL-скриншоти підтверджують red-only custom-графіку в Strict і чорно-червоний монохромний Live View, тоді як capture/solve image лишається у вихідній сірій палітрі. Це підтверджує задумане display-only розділення. Окремо ще треба перевірити persistence після restart, захист true-colour UVC та RAW/Debayer gating. Останнє повністю задокументоване fresh Windows build-qualified дерево — v0.2.10.58-buildfix9.
 
 # Поточний стан — OpenAstroLink / OpenAstroSuite v0.2.10.59
 
-**Дата snapshot:** 2026-09-09  
+**Дата snapshot:** 2026-09-10  
 **Core/source version:** `0.2.10.59`  
 **Windows qualification checkpoint:** `buildfix9`  
 **Master checklist:** `docs/uk/CURRENT_CHECKLIST.md`
@@ -22,6 +22,9 @@
 - ✅ Canon EDSDK pair locking: AMD64 `EDSDK_64/Library/EDSDK.lib` спарена з `EDSDK_64/Dll`, stale x86 `EDSDK/Dll` замінений; staged дві AMD64 Canon DLL.
 - ✅ Fresh Windows buildfix9 build доходить до фінального link `OpenAstroSuite.exe`.
 - ✅ Попередній `.58` runtime smoke: node стартує після WebRTC DLL staging, OpenCV/UVC Live View працює з `Capture FPS=MAX`, `Preview=60`.
+- ✅ v0.2.10.59 Windows UI HIL: Night Vision і Strict Night Mode видимо перемикаються, Strict custom-графіка відображається red-only.
+- ✅ v0.2.10.59 HIL чорно-червоного монохромного Live View на simulated star camera.
+- ✅ Візуально підтверджено display-only separation: capture/solve image лишається grayscale, а Strict UI/histogram — red-only.
 - ✅ Direct-MC mount coordinate model **v9** HIL-кваліфікована на реальному монтуванні з `Axis1Sign=+1`, `Axis2Sign=-1`.
 - ✅ Free-point Sky Map GOTO фізично рухає реальне монтування.
 - ✅ Sky Map target → Scheduler transfer працює.
@@ -37,6 +40,8 @@
 - ✅ Поточний repository site source тепер містить rationale проєкту, public manifesto, документацію для users/astronomers, OAL core developers, third-party integrations та driver-SDK entry points з українськими mirrors.
 
 ## Найближчий runtime/HIL
+
+Основний візуальний HIL Night Vision тепер позитивний. Для повного acceptance Night Vision лишаються: saved Strict після restart/core chooser, true-colour UVC не має ставати червоним при ввімкненій black→red option, а також RAW/Debayer OFF/ON gating.
 
 1. Запустити buildfix9 node і вимагати `oal.canon` + `oal.zwo.eaf` у native registry без `ERROR_BAD_EXE_FORMAT` / `%1 is not a valid Win32 application`.
 2. Підтвердити, що Live View telemetry показує actual `webrtc-datachannel`, а не лише `/video` fallback.
@@ -68,6 +73,8 @@ Static branch evidence: **75/75 general scripts PASS**, **43/43 WebRTC PASS**, *
 - 🟡 Scene AF: bright-tail metering + tiled contrast + compact search + repeatability gate.
 - 🟡 Sparse-scene still auto-exposure P99.5 + hysteresis/crossing + gain-change reset.
 - 🟡 Camera footprints, mosaic overlay і Stellarium FOV export.
+- ✅ Основна поведінка Night Vision / Strict Night Mode та mono black→red Live View palette Windows HIL-positive.
+- 🟡 Для Night Vision ще лишаються persistence, true-colour UVC protection і RAW/Debayer gating.
 - 🟡 Actual WebRTC transport/fallback, high-rate QHY, zero-drop SER і simultaneous Main+Guide Dual Live.
 
 ## Frozen facts монтування
