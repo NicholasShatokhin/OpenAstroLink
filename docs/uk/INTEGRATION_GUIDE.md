@@ -92,3 +92,17 @@ Current development nodes призначені для trusted LAN/VPN. **Не** 
 - `HIGH_RATE_STREAMING.md`
 - `COORDINATE_FRAMES.md`
 - `CURRENT_CHECKLIST.md`
+
+## Restricted-sky API у v0.2.10.60
+
+Сторонній OAL client може використовувати ті самі supervised restricted-sky workflows, що й OpenAstroSuite. Telescope profile містить `observableSky`, а node має POST endpoints для керування/оцінювання Assisted Polar samples і для запису/очищення кутів Observable Sky. Машиночитний контракт — `openapi.yaml`, короткий опис routes — `OAL_API.md`.
+
+Важлива семантика для інтеграторів:
+
+- Observable Sky — це **visibility/planning constraint**, а не mechanical safety;
+- automated GOTO може бути відхилений, якщо policy gate увімкнений;
+- manual joystick лишається доступним;
+- Scheduler може відкласти ціль лише на завершеній межі exposure/SER і перейти до іншого видимого block;
+- pre-1.0 crash persistence використовує conservative unfinished-index cursor: після restart пізніший out-of-order completed block може повторитися, але deferred unfinished block не має бути тихо пропущений.
+
+Перед власним UX для цих endpoints див. `ASSISTED_POLAR_ALIGNMENT.md` і `OBSERVABLE_SKY_REGION.md`.

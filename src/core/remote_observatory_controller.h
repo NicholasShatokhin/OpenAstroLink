@@ -86,6 +86,14 @@ public:
     PolarAlignmentResult estimatePolarAlignment() override;
     QString startPolarAlignment(const PolarAlignmentRunRequest &request, QString *error = nullptr) override;
 
+    void clearAssistedPolarSamples() override;
+    bool addAssistedPolarTargetSample(const EquatorialCoord &target, QString *error = nullptr) override;
+    bool addAssistedPolarSolvedSample(QString *error = nullptr) override;
+    AssistedPolarResult estimateAssistedPolarAlignment() override;
+    int assistedPolarSampleCount() const override { return assistedPolarSampleCount_; }
+    bool captureObservableSkyCorner(int corner, QString *error = nullptr) override;
+    bool clearObservableSkyRegion(QString *error = nullptr) override;
+
     bool setObservationPlan(const ObservationPlan &plan,QString *error=nullptr) override;
     ObservationPlan observationPlan() const override;
     bool setSessionPlan(const QString &name,const std::vector<SessionTarget> &targets,
@@ -187,6 +195,7 @@ private:
     GuidingStatus guiding_;
     SessionStatus session_;
     ObservationPlan pendingPlan_;
+    int assistedPolarSampleCount_{0};
     bool stellariumRunning_{false};
     quint16 stellariumPort_{10000};
 };

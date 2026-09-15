@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenAstroLink API
-  version: 0.2.10.59
+  version: 0.2.10.60
   description: Reference API exposed by OpenAstroSuite. Native OpenAstroLink ABI-v2 drivers are the preferred hardware path; INDI/Alpaca/LX200 remain compatibility adapters.
 servers:
   - url: http://localhost:8080/api/v1
@@ -417,6 +417,51 @@ paths:
                 rateLevel: { type: integer, minimum: 0, maximum: 9 }
       responses:
         '200': { description: Manual motion command accepted }
+  /assisted-polar/clear:
+    post:
+      summary: Clear Assisted Polar manual-recenter samples
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /assisted-polar/sample-target:
+    post:
+      summary: Record the selected/known target after manual joystick centering
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EquatorialCoord' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Success' }
+  /assisted-polar/sample-solved:
+    post:
+      summary: Record the last successful plate-solved centre against current mount-reported coordinates
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Success' }
+  /assisted-polar/estimate:
+    post:
+      summary: Fit local-horizontal pointing rotation and estimate signed polar Alt/Az correction
+      responses:
+        '200':
+          description: Assisted polar estimate, including success/confidence diagnostics
+          content:
+            application/json:
+              schema: { type: object }
+  /observable-sky/corner/{corner}:
+    post:
+      summary: Capture one of the two local Alt/Az corners of the visible-sky rectangle
+      parameters:
+        - in: path
+          name: corner
+          required: true
+          schema: { type: integer, enum: [1, 2] }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Success' }
+  /observable-sky/clear:
+    post:
+      summary: Disable and clear the calibrated Observable Sky Region
+      responses: { '200': { $ref: '#/components/responses/Success' } }
 components:
   parameters:
     OperationId:
@@ -526,6 +571,21 @@ components:
             maxAzDeg: { type: number, minimum: 0, maximum: 360, default: 360 }
             minAltDeg: { type: number, minimum: -90, maximum: 90, default: 0 }
             maxAltDeg: { type: number, minimum: -90, maximum: 90, default: 90 }
+        observableSky:
+          type: object
+          description: >-
+            Operator-calibrated local Alt/Az visibility window. This is a planning/GOTO
+            eligibility constraint, not the raw-axis mechanical safety guard. A wrapped
+            azimuth interval is represented by minAzDeg > maxAzDeg.
+          properties:
+            enabled: { type: boolean, default: false }
+            minAzDeg: { type: number, minimum: 0, maximum: 360, default: 0 }
+            maxAzDeg: { type: number, minimum: 0, maximum: 360, default: 360 }
+            minAltDeg: { type: number, minimum: -90, maximum: 90, default: -5 }
+            maxAltDeg: { type: number, minimum: -90, maximum: 90, default: 90 }
+            rejectAutomatedGoto: { type: boolean, default: false }
+            schedulerEligibility: { type: boolean, default: true }
+            recheckSeconds: { type: integer, minimum: 5, maximum: 3600, default: 30 }
     ExposureRequest:
       type: object
       properties:

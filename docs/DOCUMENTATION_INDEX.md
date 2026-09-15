@@ -1,6 +1,6 @@
-# Documentation index — OpenAstroLink v0.2.10.59
+# Documentation index — OpenAstroLink v0.2.10.60
 
-> Current synchronized snapshot: **v0.2.10.59 (2026-09-09)**.
+> Current synchronized snapshot: **v0.2.10.60 (2026-09-14)**.
 
 English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 
@@ -9,7 +9,9 @@ English documents are canonical. Ukrainian mirrors live under `docs/uk/`.
 - `../CURRENT_STATUS.md` — frozen current qualification state.
 - `../START_HERE.md` — short entry point.
 - `CURRENT_CHECKLIST.md` — complete current master checklist and Beta blockers.
-- `RELEASE_0.2.10.59.md` — current release/development checkpoint.
+- `RELEASE_0.2.10.60.md` — current release/development checkpoint.
+- `ASSISTED_POLAR_ALIGNMENT.md` — manual-recenter/plate-solve restricted-sky polar-alignment workflow.
+- `OBSERVABLE_SKY_REGION.md` — operator-calibrated visible-sky region and Scheduler/GOTO policy.
 - `NEW_CHAT_HANDOFF.md` — detailed continuation context.
 - `VALIDATION.md` — current build/runtime/HIL acceptance gates.
 - `ROADMAP_P0_P1_IMPLEMENTATION.md` — Beta and OAL 1.0 priorities.

@@ -43,6 +43,7 @@ void SkyMapWidget::setShowMainFrame(bool enabled) { showMainFrame_ = enabled; up
 void SkyMapWidget::setShowGuideFrame(bool enabled) { showGuideFrame_ = enabled; update(); }
 void SkyMapWidget::setShowFrameLabels(bool enabled) { showFrameLabels_ = enabled; update(); }
 void SkyMapWidget::setPlannerMosaic(const SkyFrame &mainFrame,int columns,int rows,double overlapPercent,bool enabled) { planner_.mainFrame=mainFrame;planner_.columns=std::max(1,columns);planner_.rows=std::max(1,rows);planner_.overlapPercent=std::clamp(overlapPercent,0.0,90.0);planner_.enabled=enabled&&mainFrame.valid;update(); }
+void SkyMapWidget::setObservableSkyRegion(const ObservableSkyRegion &region){observableSky_=region;update();}
 void SkyMapWidget::setShowLabels(bool enabled) { showLabels_ = enabled; update(); }
 void SkyMapWidget::setShowDsos(bool enabled) { showDsos_ = enabled; update(); }
 void SkyMapWidget::setShowConstellations(bool enabled) { showConstellations_ = enabled; update(); }
@@ -332,6 +333,21 @@ void SkyMapWidget::paintEvent(QPaintEvent *) {
     if(showGuideFrame_) drawSkyFrame(p,guidePlannedFrame_,C(QColor(220,100,255,210)),Qt::DotLine,"Guide planned");
     if(showSolvedFrame_) drawSkyFrame(p,solvedFrame_,C(QColor(80,235,135,235)),Qt::SolidLine,"Solved");
 
+    if(observableSky_.enabled){
+        QPolygonF poly;
+        double a0=observableSky_.minAzDeg,a1=observableSky_.maxAzDeg;
+        if(a0>a1)a1+=360.0;
+        constexpr int n=24;
+        for(int i=0;i<=n;++i){const double t=double(i)/n,az=a0+(a1-a0)*t;poly<<projectHorizontal({std::fmod(az+360.0,360.0),observableSky_.minAltDeg});}
+        for(int i=0;i<=n;++i){const double t=double(i)/n;poly<<projectHorizontal({std::fmod(a1+360.0,360.0),observableSky_.minAltDeg+(observableSky_.maxAltDeg-observableSky_.minAltDeg)*t});}
+        for(int i=0;i<=n;++i){const double t=double(i)/n,az=a1-(a1-a0)*t;poly<<projectHorizontal({std::fmod(az+360.0,360.0),observableSky_.maxAltDeg});}
+        for(int i=0;i<=n;++i){const double t=double(i)/n;poly<<projectHorizontal({std::fmod(a0+360.0,360.0),observableSky_.maxAltDeg-(observableSky_.maxAltDeg-observableSky_.minAltDeg)*t});}
+        QColor fill=strictNightMode_?QColor(150,0,0):QColor(60,190,120);fill.setAlpha(45);
+        QColor edge=fill;edge.setAlpha(210);
+        p.setBrush(fill);p.setPen(QPen(edge,2,Qt::DashLine));p.drawPolygon(poly);
+        p.setBrush(Qt::NoBrush);p.drawText(poly.boundingRect().adjusted(4,4,-4,-4),Qt::AlignTop|Qt::AlignLeft,"Observable sky");
+    }
+
     p.setPen(N(QColor(120,145,170),QColor(126,36,36)));
     p.drawText(10, height() - 12, QString("UTC %1   site %2°, %3°   zoom %4×")
                .arg(utc_.toString("yyyy-MM-dd HH:mm:ss"))
@@ -438,3 +454,4 @@ const std::vector<SkyMapWidget::ConstellationSegment> &SkyMapWidget::constellati
 }
 
 } // namespace oas
+

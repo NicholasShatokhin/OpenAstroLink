@@ -1,6 +1,20 @@
+
+## Assisted Polar / Observable Sky API
+
+У v0.2.10.60 додано:
+
+- `POST /assisted-polar/clear`
+- `POST /assisted-polar/sample-target`
+- `POST /assisted-polar/sample-solved`
+- `POST /assisted-polar/estimate`
+- `POST /observable-sky/corner/{corner}`
+- `POST /observable-sky/clear`
+
+`TelescopeProfile.observableSky` передає persisted visible-region policy. Кількість/result Assisted sample також broadcast через event stream.
+
 # OAL API — v0.2.10.25
 
-> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.60 (2026-09-14)**. `openapi.yaml` має version 0.2.10.60.
 
 
 

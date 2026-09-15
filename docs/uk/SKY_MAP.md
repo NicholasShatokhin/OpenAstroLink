@@ -1,6 +1,11 @@
+
+## Observable Sky Region overlay
+
+Починаючи з v0.2.10.60 Sky Map показує calibrated local Alt/Az rectangle доступного неба, включно з областями, що переходять через північ. Це planning/visibility overlay, а не mechanical collision boundary. Вибрана на Sky Map ціль також може використовуватися як target Assisted Polar перед ручним joystick-centering.
+
 # Sky Map — offline-навігація та кадрування
 
-> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.60 (2026-09-14)**. Observable Sky overlay описано в `OBSERVABLE_SKY_REGION.md`.
 
 
 **Додано:** v0.2.10.51  

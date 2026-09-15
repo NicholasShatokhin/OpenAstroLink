@@ -1,5 +1,16 @@
 > **Night Vision HIL update (2026-09-10):** v0.2.10.59 Night Vision / Strict Night Mode і black→red mono Live View Windows HIL-positive. Capture/solve image лишається у вихідній палітрі. Pending: restart persistence, true-colour UVC protection і RAW/Bayer Debayer gating. Остання повністю задокументована fresh-clean Windows build-qualified база: v0.2.10.58-buildfix9.
 
+## v0.2.10.60
+
+- Версія core/source: `0.2.10.60`; дата snapshot: `2026-09-14`.
+- Додано Assisted Polar Alignment за ручними доведеннями або свіжими plate solve. Fit визначається як найкращий 3-D поворот у локальній горизонтальній системі та повертає поправки полярної осі по Alt/Az, RMS, кутовий рознос sample і confidence.
+- Додано persisted `TelescopeProfile.observableSky`: двокутову локальну Alt/Az-зону з підтримкою переходу через північ, overlay на Sky Map, optional eligibility для automated GOTO та Scheduler visibility deferral.
+- Scheduler переходить на іншу ціль лише на межі завершеного exposure/SER; активна science acquisition не переривається лише через вихід цілі із видимої області.
+- Ручний джойстик доступний і поза Observable Sky для калібрування/відновлення; raw-axis/mechanical safety лишається окремим hard guard.
+- Нові API endpoints відкривають Assisted Polar sample/estimate і Observable Sky corner/clear для remote clients.
+- Qualification: source/static-qualified; fresh Windows build і real-sky/mount HIL pending. Остання повністю залогована clean Windows build — `v0.2.10.58-buildfix9`; Night Vision `.59` Windows runtime/HIL-positive.
+- Frozen direct-MC mount geometry v9 не змінювалася.
+
 ## v0.2.10.59
 - Публічна документація/site information architecture тепер включає rationale проєкту, manifesto, user/astronomer guide, OAL core developer guide, third-party integration guide та native driver SDK entry points.
 
@@ -70,7 +81,7 @@
 - `scripts/build_windows.ps1` сам завантажує `vcvars64` і знаходить Ninja у `PATH` або в Visual Studio CMake tools. Сирий preset запускайте з x64 MSVC Developer Command Prompt.
 - Windows-hosted Raspberry Pi cross presets залишаються GNU/Ninja і не змінювались.
 
-# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.58
+# Маніфест проєкту — OpenAstroSuite / OpenAstroLink v0.2.10.60
 
 ## v0.2.10.49
 

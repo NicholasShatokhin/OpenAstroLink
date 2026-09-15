@@ -96,3 +96,17 @@ A minimal third-party client should:
 - `HIGH_RATE_STREAMING.md`
 - `COORDINATE_FRAMES.md`
 - `CURRENT_CHECKLIST.md`
+
+## Restricted-sky API additions (v0.2.10.60)
+
+Third-party OAL clients can drive the same supervised restricted-sky workflows as OpenAstroSuite. The telescope profile exposes `observableSky`, and the node provides POST endpoints for Assisted Polar sample management/estimation and Observable Sky corner capture/clear. Use `openapi.yaml` as the machine-readable contract and `OAL_API.md` for the human-readable route summary.
+
+Important semantics for integrators:
+
+- Observable Sky is a **visibility/planning constraint**, not mechanical safety.
+- automated GOTO may be rejected when the profile policy enables the gate;
+- manual joystick motion remains available;
+- Scheduler may defer a target at a completed exposure/SER boundary and choose another currently visible block;
+- current pre-1.0 crash persistence uses a conservative unfinished-index cursor; a later out-of-order completed block may repeat after restart rather than silently skipping a deferred unfinished block.
+
+See `ASSISTED_POLAR_ALIGNMENT.md` and `OBSERVABLE_SKY_REGION.md` before implementing custom UX around these endpoints.

@@ -1,11 +1,20 @@
-# Validation plan — v0.2.10.59
+# Validation plan — v0.2.10.60
 
-**Snapshot:** 2026-09-10  
+**Snapshot:** 2026-09-14  
 **Master checklist:** `CURRENT_CHECKLIST.md`
+
+## Gate R — Restricted-sky source gate — ✅ STATIC / 🟡 HIL
+
+- Assisted Polar manual-target and plate-solve sample paths are implemented.
+- Local-horizontal SVD/Kabsch fit reports signed Alt/Az correction, RMS, sky span and confidence.
+- Observable Sky two-corner persistence, north-wrap, Sky Map overlay and local/remote API are implemented.
+- Automated GOTO rejection covers both synchronous and async operation paths when enabled.
+- Scheduler defers outside-region targets only at safe acquisition boundaries; manual joystick remains unrestricted.
+- Required next: fresh Windows `.60` build + real-mount/real-sky HIL.
 
 ## Gate 0 — current Windows build qualification — ✅ CLOSED
 
-The exact current Windows x64/MSVC tree has a fresh successful configure and build with WebRTC enabled.
+The last fully logged fresh Windows x64/MSVC build-qualified base is v0.2.10.58-buildfix9. v0.2.10.59 is Windows runtime/HIL-positive for Night Vision; v0.2.10.60 still needs its own fresh build.
 
 Confirmed by the 2026-09-08 host log:
 
@@ -111,3 +120,11 @@ HIL update 2026-09-10:
 - 🟡 FITS/RAW/SER and OALV/WebRTC payload independence remains an architecture/static invariant; add byte/data-path HIL where practical.
 
 Evidence: `evidence/hil/night_vision_2026-09-10/`.
+
+## v0.2.10.60 static qualification record — 2026-09-14
+
+- 86/86 Python regression scripts passed.
+- Restricted-sky / Assisted Polar dedicated guard: 70 assertions plus synthetic 3-D SVD rotation recovery passed.
+- `docs/openapi.yaml` parses successfully as OpenAPI 3.x with the new Assisted Polar / Observable Sky routes and `observableSky` profile schema.
+- Frozen `src/core/mount_geometry.cpp` and `drivers/eqdrive/oal_driver_eqdrive.cpp` are byte-identical to the v0.2.10.59 HIL1 base.
+- This is **source/static qualification only**: a fresh Windows build and real mount/sky HIL are still required before v0.2.10.60 can be called build/HIL-qualified.

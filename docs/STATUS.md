@@ -1,11 +1,15 @@
-> v0.2.10.59 adds desktop Night Vision / Strict Night Mode and a display-only monochrome black→red preview option. Fresh Windows build/UI HIL is pending; v0.2.10.58-buildfix9 remains the last build-qualified Windows checkpoint.
+> v0.2.10.60 adds Assisted Polar Alignment from manual-recenter/plate-solve samples plus a persisted Observable Sky Region with Sky Map overlay, optional automated-GOTO policy and Scheduler deferral at completed exposure/SER boundaries. `.60` is source/static-qualified; fresh Windows build and real-sky/mount HIL remain pending.
 
-# Current status — OpenAstroLink / OpenAstroSuite v0.2.10.59
+# Current status — OpenAstroLink / OpenAstroSuite v0.2.10.60
 
-**Snapshot date:** 2026-09-08  
-**Core/source version:** `0.2.10.59`  
+**Snapshot date:** 2026-09-14  
+**Core/source version:** `0.2.10.60`  
 **Windows qualification checkpoint:** `buildfix9`  
 **Master checklist:** `CURRENT_CHECKLIST.md`
+
+## v0.2.10.60 headline
+
+The new restricted-sky workflow records manual post-GOTO joystick recenter samples, estimates signed Alt/Az polar correction using a local 3-D fit, and reports RMS/span/confidence. Observable Sky Region is calibrated from two current Alt/Az pointings, persisted in the telescope profile, rendered on Sky Map and optionally used as a visibility constraint for automated GOTO and Scheduler. Manual joystick motion is not restricted by this region; the mechanical guard remains a separate hard-safety layer.
 
 ## Current headline
 

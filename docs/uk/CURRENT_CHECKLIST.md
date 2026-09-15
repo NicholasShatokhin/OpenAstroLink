@@ -1,10 +1,32 @@
-# OpenAstroLink v0.2.10.59 — актуальний master checklist
+# OpenAstroLink v0.2.10.60 — актуальний master checklist
 
-**Snapshot:** 2026-09-09  
+**Snapshot:** 2026-09-14  
 **Canonical:** англійський `../CURRENT_CHECKLIST.md`; цей файл — український mirror.  
 **Позначення:** ✅ реалізовано/кваліфіковано; 🟡 реалізовано, але потрібен актуальний HIL/runtime regression; ⬜ не завершено; 🔒 frozen за HIL-доказами.
 
 Цей checklist є оперативним release-status view для поточного repository. Історичні release notes зберігають provenance, але поточні gates визначають цей файл, `../../CURRENT_STATUS_UA.md`, `../STATUS_UA.md`, `VALIDATION.md` і `ROADMAP_P0_P1_IMPLEMENTATION.md`.
+
+## v0.2.10.60 — Assisted Polar Alignment / Observable Sky
+
+| Можливість | Стан |
+|---|---|
+| Assisted Polar: manual recenter samples | ✅ implementation |
+| Assisted Polar: plate-solved sample | ✅ implementation |
+| Local Alt/Az SVD/Kabsch fit | ✅ implementation |
+| RMS / sky span / confidence diagnostics | ✅ |
+| Assisted Polar remote/API path | ✅ |
+| Assisted Polar real-sky convergence HIL | 🟡 |
+| Observable Sky: two-corner Alt/Az rectangle | ✅ implementation |
+| North-wrap visible window | ✅ |
+| Observable Sky persistence/profile | ✅ |
+| Sky Map visible-region overlay | ✅ implementation |
+| Optional automated-GOTO reject outside region | ✅ implementation |
+| Manual joystick outside region | ✅ remains unrestricted |
+| Scheduler eligibility + safe-boundary deferral | ✅ implementation |
+| Scheduler deferred partial progress in-process | ✅ |
+| Durable out-of-order completion journal | ⬜ OAL 1.0 |
+| Observable Sky / Scheduler HIL | 🟡 |
+| Fresh Windows v0.2.10.60 build | 🟡 |
 
 ## Core / архітектура
 

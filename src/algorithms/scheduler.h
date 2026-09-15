@@ -3,6 +3,8 @@
 #include "core/astro_types.h"
 #include <QObject>
 #include <optional>
+#include <QHash>
+#include <deque>
 
 namespace oas {
 
@@ -29,6 +31,14 @@ public:
     void clearOperation();
     void markFrameCompleted();
     void advanceBlock();
+    bool deferCurrentBlock();
+    int pendingBlockCount() const { return int(pendingOrder_.size()); }
+    // Compatibility hint for the existing linear crash-resume cursor.  When
+    // Observable Sky reorders blocks at runtime this returns the earliest
+    // unfinished plan index, so a crash may repeat a later completed block but
+    // never silently skip a deferred unfinished one.  A durable per-block
+    // completion journal remains an OAL 1.0 item.
+    int resumeIndexHint() const;
 
 signals:
     void statusChanged(const oas::SessionStatus &status);
@@ -40,6 +50,8 @@ private:
 
     ObservationPlan plan_;
     SessionStatus status_{};
+    std::deque<int> pendingOrder_;
+    QHash<int,int> runtimeProgress_;
 };
 
 } // namespace oas

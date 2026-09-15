@@ -1,9 +1,13 @@
+> **v0.2.10.60 static qualification (2026-09-14):** 86/86 Python regression scripts PASS. Dedicated Assisted Polar / Observable Sky guard: 70 assertions plus synthetic SVD rotation recovery PASS. Public docs/site, WebRTC, high-rate/Dual Live, Night Vision and mount-v9 guards remain green. Fresh Windows build and real-sky/mount HIL for `.60` are still pending.
+
+> **v0.2.10.60 Assisted Polar / Observable Sky source checkpoint (2026-09-14):** Added manual-recenter Assisted Polar Alignment with local-horizontal 3-D rotation fitting, fit RMS/sky-span/confidence diagnostics, and both selected-target and plate-solved sampling. Added a persisted two-corner local Alt/Az Observable Sky Region, Sky Map overlay, automated-GOTO visibility policy, and scheduler deferral/transition at safe exposure/SER boundaries. These features are source/static-qualified; fresh Windows build and real-mount/real-sky HIL remain pending. Frozen direct-MC geometry v9 is unchanged.
+
 > **v0.2.10.59 Night Vision HIL update (2026-09-10):** Desktop OpenAstroSuite Night Vision and Strict Night Mode are now Windows runtime/HIL-positive. The supplied HIL screenshots confirm red-only Strict custom graphics and a black→red monochrome Live View while a capture/solve image remains in its original grayscale palette. This confirms the intended display-only separation. Persistence across restart, true-colour UVC protection and RAW/Debayer gating still need explicit acceptance. The last fully logged fresh Windows build-qualified tree remains v0.2.10.58-buildfix9.
 
-# Current status — OpenAstroLink / OpenAstroSuite v0.2.10.59
+# Current status — OpenAstroLink / OpenAstroSuite v0.2.10.60
 
-**Snapshot date:** 2026-09-10  
-**Core/source version:** `0.2.10.59`  
+**Snapshot date:** 2026-09-14  
+**Core/source version:** `0.2.10.60`  
 **Last fresh Windows build-qualified checkpoint:** `v0.2.10.58-buildfix9`  
 **Master checklist:** `docs/CURRENT_CHECKLIST.md`
 

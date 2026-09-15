@@ -1,6 +1,11 @@
+
+## Observable Sky Region overlay
+
+From v0.2.10.60 the Sky Map renders the operator-calibrated local Alt/Az visible-sky rectangle, including windows that wrap through north. The overlay is a planning/visibility surface, not a mechanical collision boundary. The same Sky Map selection can be used as an Assisted Polar target before manual joystick recentering.
+
 # Sky Map — offline mount navigation and framing
 
-> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.60 (2026-09-14)**. Observable Sky overlay is described in `OBSERVABLE_SKY_REGION.md`.
 
 
 **Introduced:** v0.2.10.51  

@@ -58,6 +58,7 @@ void Scheduler::setPlan(ObservationPlan plan) {
         }
     }
 
+    pendingOrder_.clear();runtimeProgress_.clear();
     status_ = {};
     status_.name = plan_.name;
     status_.blockCount = int(plan_.blocks.size());
@@ -104,6 +105,7 @@ bool Scheduler::start(int blockIndex) {
     blockIndex=std::clamp(blockIndex,0,int(plan_.blocks.size())-1);
     status_.id = "session-" + QDateTime::currentDateTimeUtc().toString("yyyyMMddTHHmmsszzz");
     status_.active = true;
+    pendingOrder_.clear();runtimeProgress_.clear();for(int i=blockIndex;i<int(plan_.blocks.size());++i)pendingOrder_.push_back(i);
     status_.blockIndex = blockIndex;
     status_.targetIndex = blockIndex;
     status_.completedFrames = 0;
@@ -160,28 +162,29 @@ void Scheduler::clearOperation() {
 void Scheduler::markFrameCompleted() {
     ++status_.completedFrames;
     ++status_.currentBlockCompletedFrames;
+    runtimeProgress_[status_.blockIndex]=status_.currentBlockCompletedFrames;
     refreshCurrentBlockFields();
     publish();
 }
 
 void Scheduler::advanceBlock() {
     if (!status_.active) return;
-    if (status_.blockIndex + 1 < status_.blockCount) {
-        ++status_.blockIndex;
-        status_.targetIndex = status_.blockIndex;
-        status_.currentBlockCompletedFrames = 0;
-        status_.currentOperationId.clear();
-        refreshCurrentBlockFields();
-        prepareCurrentBlockStart(false);
+    if(!pendingOrder_.empty()&&pendingOrder_.front()==status_.blockIndex)pendingOrder_.pop_front();
+    runtimeProgress_.remove(status_.blockIndex);
+    if (!pendingOrder_.empty()) {
+        status_.blockIndex=pendingOrder_.front();status_.targetIndex=status_.blockIndex;status_.currentBlockCompletedFrames=runtimeProgress_.value(status_.blockIndex,0);status_.currentOperationId.clear();refreshCurrentBlockFields();prepareCurrentBlockStart(false);
     } else {
-        status_.active = false;
-        status_.state = "completed";
-        status_.currentStep = "completed";
-        status_.currentOperationId.clear();
-        status_.scheduledStartUtc={};
-        refreshCurrentBlockFields();
+        status_.active = false;status_.state = "completed";status_.currentStep = "completed";status_.currentOperationId.clear();status_.scheduledStartUtc={};refreshCurrentBlockFields();
     }
     publish();
+}
+bool Scheduler::deferCurrentBlock(){
+    if(!status_.active||pendingOrder_.size()<2)return false;if(pendingOrder_.front()!=status_.blockIndex)return false;const int current=pendingOrder_.front();pendingOrder_.pop_front();pendingOrder_.push_back(current);status_.blockIndex=pendingOrder_.front();status_.targetIndex=status_.blockIndex;status_.currentBlockCompletedFrames=runtimeProgress_.value(status_.blockIndex,0);status_.currentOperationId.clear();refreshCurrentBlockFields();prepareCurrentBlockStart(false);publish();return true;
+}
+
+int Scheduler::resumeIndexHint() const {
+    if(pendingOrder_.empty())return int(plan_.blocks.size());
+    return *std::min_element(pendingOrder_.begin(),pendingOrder_.end());
 }
 
 void Scheduler::refreshCurrentBlockFields() {

@@ -86,3 +86,15 @@ Green build не дорівнює HIL. HIL старої revision не є авт�
 - EN + UA docs synchronized;
 - qualification claim відповідає evidence;
 - build/generated artifacts не потрапили випадково в commit.
+
+## Restricted-sky design invariants (v0.2.10.60)
+
+У коді й review не змішувати три різні шари:
+
+1. **Mechanical/raw-axis guard** — hard physical safety; visibility UX не має його послаблювати.
+2. **Polar-alignment motion limits** — optional limits лише для alignment workflow.
+3. **Observable Sky Region** — persisted visibility/planning policy; може відхиляти automated GOTO та впливати на Scheduler, але не повинна блокувати звичайний manual joystick.
+
+Assisted Polar samples fit-яться в локальній горизонтальній системі на timestamp кожного sample. Не замінювати це постійним J2000 offset: фізична похибка полярної осі фіксована в local frame, тоді як equatorial coordinates обертаються із sidereal time. Поточний fit оцінює effective pointing-frame rotation і повертає residual/span/confidence; cone, flexure, refraction та інші pointing-model errors все ще можуть зміщувати оцінку.
+
+Scheduler out-of-order visibility deferral навмисно conservative щодо crash. До появи у 1.0 durable per-block journal краще після restart повторити пізніший block, ніж пересунути persistent cursor за незавершений deferred block і тихо його пропустити.

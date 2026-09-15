@@ -1,6 +1,7 @@
 #pragma once
 #include "algorithms/autofocus_engine.h"
 #include "algorithms/adaptive_plate_solve.h"
+#include "algorithms/assisted_polar_alignment.h"
 #include "algorithms/guiding_engine.h"
 #include "algorithms/motion_estimator.h"
 #include "algorithms/planet_detector.h"
@@ -103,6 +104,13 @@ public:
     PolarAlignmentResult estimatePolarAlignment() override;
     QString startPolarAlignment(const PolarAlignmentRunRequest &request, QString *error = nullptr) override;
     int polarSampleCount() const{return int(polarSamples_.size());}
+    void clearAssistedPolarSamples() override;
+    bool addAssistedPolarTargetSample(const EquatorialCoord &target,QString *error=nullptr) override;
+    bool addAssistedPolarSolvedSample(QString *error=nullptr) override;
+    AssistedPolarResult estimateAssistedPolarAlignment() override;
+    int assistedPolarSampleCount() const override{return int(assistedPolarSamples_.size());}
+    bool captureObservableSkyCorner(int corner,QString *error=nullptr) override;
+    bool clearObservableSkyRegion(QString *error=nullptr) override;
 
     bool setObservationPlan(const ObservationPlan &plan,QString *error=nullptr) override;
     ObservationPlan observationPlan() const override{return scheduler_.plan();}
@@ -155,6 +163,8 @@ private:
     void scheduleCanonHotplugRediscovery(quint64 generation);
     bool nativeDriverHasCachedDevice(const QString &driverId) const;
     void scheduleSessionStep();
+    bool currentTargetInsideObservableSky(const ObservationBlock &block,QString *reason=nullptr) const;
+    bool selectObservableSchedulerBlock();
     void armScheduledSessionStart(const QString &sessionId);
     void continueSessionAfterBlockAdvance();
     void completeCurrentObservationBlock();
@@ -202,6 +212,9 @@ private:
     GuidingEngine guiding_;
     PolarAlignmentEstimator polarEstimator_;
     std::vector<PolarSample> polarSamples_;
+    AssistedPolarAlignmentEstimator assistedPolarEstimator_;
+    std::vector<AssistedPolarSample> assistedPolarSamples_;
+    std::optional<HorizontalCoord> observableCorner1_;
     Scheduler scheduler_;
     OperationManager operations_;
     int sessionRecenterAttempt_{0};

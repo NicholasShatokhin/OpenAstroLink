@@ -86,3 +86,15 @@ A green build is not HIL. A HIL result from an old revision is not automatically
 - EN + UA docs synchronized;
 - qualification claim matches evidence;
 - no generated/build artifacts accidentally committed.
+
+## Restricted-sky design invariants (v0.2.10.60)
+
+Keep these layers separate in code and review:
+
+1. **Mechanical/raw-axis guard** — hard physical safety; never weakened by visibility UX.
+2. **Polar-alignment motion limits** — optional limits for the alignment workflow.
+3. **Observable Sky Region** — persisted visibility/planning policy; may reject automated GOTO and influence Scheduler selection, but must not block normal manual joystick motion.
+
+Assisted Polar samples are fitted in the local horizontal frame at each sample timestamp. Do not replace this with a constant J2000 offset model: a fixed physical polar-axis error is fixed in the local frame, while equatorial coordinates rotate with sidereal time. The current fit estimates an effective pointing-frame rotation and reports residual/span/confidence; cone, flexure, refraction and other pointing-model errors can still bias the estimate.
+
+Scheduler out-of-order visibility deferral is intentionally conservative across a crash. Until the 1.0 durable per-block journal exists, prefer repeating a later block after restart over advancing the persistent cursor past an unfinished deferred block.

@@ -1,11 +1,22 @@
-# OpenAstroLink roadmap — immediate execution after v0.2.10.58-buildfix9
+# OpenAstroLink roadmap — immediate execution after v0.2.10.60
 
-**Snapshot:** 2026-09-09  
+**Snapshot:** 2026-09-14  
 **Master checklist:** `CURRENT_CHECKLIST.md`
 
 The previous `fresh Windows build` blocker is closed. The exact current Windows x64/MSVC build now configures and links successfully with WebRTC enabled, WebRTC runtime staging active, ZWO EAF using the correct DLL import library, and Canon EDSDK locked to the AMD64 `EDSDK_64` runtime pair.
 
 The immediate program is now **runtime/HIL qualification**, not another broad architecture rewrite.
+
+## v0.2.10.60 restricted-sky acceptance
+
+1. Fresh Windows configure/build of `.60`.
+2. Assisted Polar: 3–5 manual-recenter/plate-solve samples on real sky.
+3. Apply reported physical Alt/Az correction and repeat; error should decrease.
+4. Observable Sky: capture two corners and verify Sky Map overlay, including north-wrap if available.
+5. Enable automated-GOTO rejection and verify an outside target is rejected before motion.
+6. Verify manual joystick still moves outside the visibility region.
+7. Scheduler: let a target leave the region during FITS/SER; active acquisition must finish before deferral.
+8. Verify another due/visible target is selected, then deferred partial work can resume when visible again.
 
 ## v0.2.10.58-buildfix9 execution order
 

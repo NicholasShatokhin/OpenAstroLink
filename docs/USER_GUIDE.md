@@ -87,3 +87,12 @@ The nearest Beta is **supervised**. Keep physical access or an independent stop 
 - `HIGH_RATE_STREAMING.md` / `WEBRTC_STREAMING.md` — camera transport details.
 - `MOUNT_GEOMETRY.md` — direct-MC geometry evidence.
 - `SCHEDULER.md` — scheduler model.
+
+## Restricted-sky observing (v0.2.10.60)
+
+Two supervised workflows are available for sites with only a small visible patch of sky:
+
+- **Assisted Polar Alignment** — select a known target, let the mount slew approximately, centre it manually with the normal joystick, then record the centred sample. Repeat with several separated targets and request an estimate. A fresh plate-solved centre can be recorded instead of the selected target when available. The result reports signed altitude/azimuth adjustment, total error, fit RMS, sky span and confidence. See `ASSISTED_POLAR_ALIGNMENT.md`.
+- **Observable Sky Region** — move to one visible corner, capture it, move to the opposite corner and capture again. The persisted local Alt/Az rectangle is shown on Sky Map and can constrain automated GOTO and Scheduler target eligibility. Manual joystick motion is deliberately not blocked. See `OBSERVABLE_SKY_REGION.md`.
+
+The Observable Sky Region is **not** a mechanical collision guard. Mechanical/raw-axis safety remains a separate hard-safety layer.

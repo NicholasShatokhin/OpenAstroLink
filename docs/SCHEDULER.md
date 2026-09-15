@@ -1,6 +1,11 @@
+
+### v0.2.10.60 Observable Sky scheduling
+
+When the profile enables `observableSky.schedulerEligibility`, the scheduler treats the calibrated local Alt/Az rectangle as a visibility constraint. It checks DSO/planetary targets and the current mosaic tile centre before starting the next acquisition stage. If a target crosses the boundary during an active FITS exposure or SER recording, OAL does not abort that acquisition; deferral occurs at the next safe boundary. Another due/visible block may run, while partial progress of the deferred block is retained in-process. Future `startAtUtc` blocks are not started early merely because they are visible. See `OBSERVABLE_SKY_REGION.md` for crash-resume limitations.
+
 # OpenAstroLink scheduler and autonomous acquisition specification
 
-> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.60 (2026-09-14)**. See `STATUS.md`, `CURRENT_CHECKLIST.md`, `OBSERVABLE_SKY_REGION.md` and `RELEASE_0.2.10.60.md` for current qualification boundaries.
 
 
 **Canonical language:** English  

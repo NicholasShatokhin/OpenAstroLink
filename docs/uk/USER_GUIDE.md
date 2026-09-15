@@ -87,3 +87,12 @@ Pre-1.0 node призначений для trusted LAN/VPN. Не forward-те de
 - `HIGH_RATE_STREAMING.md` / `WEBRTC_STREAMING.md` — camera transports.
 - `MOUNT_GEOMETRY.md` — direct-MC geometry evidence.
 - `SCHEDULER.md` — scheduler model.
+
+## Робота з обмеженою ділянкою неба (v0.2.10.60)
+
+Для балкона, двору або іншого місця, де видно лише невелику частину неба, є два supervised workflows:
+
+- **Assisted Polar Alignment** — виберіть відому ціль, дайте монтуванню приблизно навестися, вручну доведіть ціль у центр штатним joystick і запишіть sample. Повторіть для кількох рознесених цілей та попросіть оцінку. За наявності свіжого plate solve можна записати plate-solved центр замість вибраної цілі. Результат містить signed поправки altitude/azimuth, повну похибку, RMS fit, sky span і confidence. Див. `ASSISTED_POLAR_ALIGNMENT.md`.
+- **Observable Sky Region** — наведіть монтування на один видимий кут, запишіть його, потім на протилежний кут і запишіть другий. Збережений локальний Alt/Az rectangle показується на Sky Map і може обмежувати automated GOTO та eligibility цілей у Scheduler. Ручний joystick навмисно не блокується. Див. `OBSERVABLE_SKY_REGION.md`.
+
+Observable Sky Region **не** є mechanical collision guard. Mechanical/raw-axis safety лишається окремим hard-safety layer.

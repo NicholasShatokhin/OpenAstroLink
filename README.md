@@ -1,6 +1,8 @@
+> **v0.2.10.60 restricted-sky source checkpoint (2026-09-14):** Assisted Polar Alignment now fits a local-horizontal 3-D rotation from manual recenter/plate-solve samples and reports signed Alt/Az polar correction with RMS, sky-span and confidence diagnostics. Observable Sky Region stores a two-corner local Alt/Az window, draws it on Sky Map, can reject automated GOTO outside it, and can defer Scheduler blocks at completed exposure/SER boundaries while manual joystick motion remains available. These additions are source/static-qualified; fresh Windows build and real-sky/mount HIL are pending. Frozen mount geometry v9 is unchanged.
+
 > **Night Vision HIL update (2026-09-10):** v0.2.10.59 Night Vision / Strict Night Mode and black→red monochrome Live View are Windows HIL-positive. Capture/solve image pixels remain in their original palette. Pending: restart persistence, true-colour UVC protection and RAW/Bayer Debayer gating. Last fully logged fresh-clean Windows build-qualified base: v0.2.10.58-buildfix9.
 
-## v0.2.10.59 — Windows build-qualified WebRTC checkpoint
+## v0.2.10.58-buildfix9 — Windows build-qualified WebRTC checkpoint
 
 - Fresh Windows x64/MSVC configure and build now pass with `libdatachannel 0.24.5`; WebRTC runtime DLLs are staged automatically.
 - ZWO EAF uses the correct DLL import library/runtime pair; the static archive is rejected for the plugin driver.

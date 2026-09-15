@@ -1,6 +1,6 @@
-# Індекс документації — OpenAstroLink v0.2.10.59
+# Індекс документації — OpenAstroLink v0.2.10.60
 
-> Поточний synchronized snapshot: **v0.2.10.59 (2026-09-09)**.
+> Поточний synchronized snapshot: **v0.2.10.60 (2026-09-14)**.
 
 English documents — canonical. Українські mirrors знаходяться у `docs/uk/`.
 
@@ -9,7 +9,9 @@ English documents — canonical. Українські mirrors знаходять
 - `../../CURRENT_STATUS_UA.md` — frozen current qualification state.
 - `../../START_HERE_UA.md` — коротка точка входу.
 - `CURRENT_CHECKLIST.md` — повний актуальний master checklist і Beta blockers.
-- `RELEASE_0.2.10.59.md` — current release/development checkpoint.
+- `RELEASE_0.2.10.60.md` — current release/development checkpoint.
+- `ASSISTED_POLAR_ALIGNMENT.md` — restricted-sky polar alignment через manual recenter/plate solve.
+- `OBSERVABLE_SKY_REGION.md` — calibrated visible-sky region та policy для Scheduler/GOTO.
 - `NEW_CHAT_HANDOFF.md` — детальний continuation context.
 - `VALIDATION.md` — current build/runtime/HIL acceptance gates.
 - `ROADMAP_P0_P1_IMPLEMENTATION.md` — Beta та OAL 1.0 priorities.

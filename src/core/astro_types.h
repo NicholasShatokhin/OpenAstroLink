@@ -113,6 +113,20 @@ struct PolarMotionLimits {
     double maxAltDeg{85.0};
 };
 
+struct ObservableSkyRegion {
+    bool enabled{false};
+    // Optional operator-defined visible-sky window. This is NOT a mechanical
+    // safety limit: manual joystick motion is never blocked by this region.
+    // A wrapped azimuth interval is represented by minAzDeg > maxAzDeg.
+    double minAzDeg{0.0};
+    double maxAzDeg{360.0};
+    double minAltDeg{-5.0};
+    double maxAltDeg{90.0};
+    bool rejectAutomatedGoto{false};
+    bool schedulerEligibility{true};
+    int recheckSeconds{30};
+};
+
 struct TelescopeProfile {
     QString name{"Default"};
 
@@ -138,6 +152,7 @@ struct TelescopeProfile {
     ObserverLocation observer{};
     MountGeometryConfig mount{};
     PolarMotionLimits polarMotionLimits{};
+    ObservableSkyRegion observableSky{};
 
     double focalRatio() const {
         return apertureMm > 0.0 ? focalLengthMm / apertureMm : 0.0;
@@ -375,6 +390,32 @@ struct PolarAlignmentResult {
     double totalErrorArcmin{0.0};
     double altitudeAdjustmentArcmin{0.0};
     double azimuthAdjustmentArcmin{0.0};
+    QString message;
+};
+
+struct AssistedPolarSample {
+    // target is the real sky direction after the operator has manually centred
+    // the selected object (or a fresh plate-solve centre). mountReported is the
+    // coordinate reported by the mount at the same instant.
+    EquatorialCoord target{};
+    EquatorialCoord mountReported{};
+    QDateTime utc;
+    QString source{"manual-target"};
+};
+
+struct AssistedPolarResult {
+    bool success{false};
+    int sampleCount{0};
+    double axisAzDeg{0.0};
+    double axisAltDeg{0.0};
+    double idealAzDeg{0.0};
+    double idealAltDeg{0.0};
+    double azimuthAdjustmentArcmin{0.0};
+    double altitudeAdjustmentArcmin{0.0};
+    double totalErrorArcmin{0.0};
+    double rmsResidualArcmin{0.0};
+    double skySpanDeg{0.0};
+    QString confidence{"poor"};
     QString message;
 };
 

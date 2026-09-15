@@ -1,11 +1,20 @@
-# План валідації — v0.2.10.59
+# План валідації — v0.2.10.60
 
-**Snapshot:** 2026-09-10  
+**Snapshot:** 2026-09-14  
 **Master checklist:** `CURRENT_CHECKLIST.md`
+
+## Gate R — Restricted-sky source gate — ✅ STATIC / 🟡 HIL
+
+- Реалізовано Assisted Polar sample за selected target і plate solve.
+- Local-horizontal SVD/Kabsch fit повертає signed Alt/Az correction, RMS, sky span і confidence.
+- Реалізовано Observable Sky two-corner persistence, north-wrap, Sky Map overlay та local/remote API.
+- За увімкненої policy automated GOTO reject працює для synchronous та async path.
+- Scheduler відкладає цілі поза region лише на безпечних acquisition boundaries; manual joystick не обмежується.
+- Далі потрібні fresh Windows `.60` build + real-mount/real-sky HIL.
 
 ## Gate 0 — current Windows build qualification — ✅ ЗАКРИТО
 
-Точне поточне Windows x64/MSVC tree має fresh successful configure і build з увімкненим WebRTC.
+Остання повністю задокументована fresh Windows x64/MSVC build-qualified база — v0.2.10.58-buildfix9. v0.2.10.59 runtime/HIL-positive для Night Vision; v0.2.10.60 ще потребує власного fresh build.
 
 Підтверджено host log 2026-09-08:
 
@@ -120,3 +129,11 @@ HIL update 2026-09-10:
 - 🟡 Persistence після restart/core chooser.
 - 🟡 True-colour UVC protection.
 - 🟡 RAW/Bayer Debayer OFF/ON gating.
+
+## Static qualification v0.2.10.60 — 2026-09-14
+
+- 86/86 Python regression scripts PASS.
+- Dedicated restricted-sky / Assisted Polar guard: 70 assertions + synthetic 3-D SVD rotation recovery PASS.
+- `docs/openapi.yaml` успішно parse-иться як OpenAPI 3.x з новими Assisted Polar / Observable Sky routes і schema `observableSky` у profile.
+- Frozen `src/core/mount_geometry.cpp` та `drivers/eqdrive/oal_driver_eqdrive.cpp` byte-identical до бази v0.2.10.59 HIL1.
+- Це **лише source/static qualification**: до build/HIL-qualified статусу v0.2.10.60 ще потрібні fresh Windows build і real mount/sky HIL.

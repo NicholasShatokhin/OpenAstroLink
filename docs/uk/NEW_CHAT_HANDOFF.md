@@ -1,9 +1,11 @@
+> **v0.2.10.60 update:** додано Assisted Polar Alignment і Observable Sky Region. Читати `ASSISTED_POLAR_ALIGNMENT.md`, `OBSERVABLE_SKY_REGION.md`, `RELEASE_0.2.10.60.md`. `.60` source/static-qualified; Windows build/HIL pending.
+
 > **v0.2.10.59 update:** реалізовано Night Vision / Strict Night Mode та display-only black→red mono/raw preview; mobile GUI OAL 1.0 запланований як окремий Qt Quick/QML client. Fresh Windows/UI HIL для `.59` pending; `.58-buildfix9` — остання fresh Windows build-qualified база. Читати `NIGHT_VISION.md` і `MOBILE_QML_GUI.md`.
 
 # OpenAstroLink / OpenAstroSuite — handoff у новий чат
 
-**Authoritative snapshot:** v0.2.10.58-buildfix9  
-**Дата snapshot:** 2026-09-08  
+**Authoritative snapshot:** v0.2.10.60 source checkpoint  
+**Дата snapshot:** 2026-09-14  
 **Правило repository:** дерево `repository/` у FULL HANDOFF package є authoritative. Не відновлювати код зі старих фрагментів чату, якщо repository уже містить новішу реалізацію.
 
 ## Поточна qualification boundary — 2026-09-08

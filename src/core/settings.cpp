@@ -43,6 +43,14 @@ TelescopeProfile AppSettings::loadProfile() const {
     p.polarMotionLimits.maxAzDeg = settings_.value("polarMotion/maxAzDeg", p.polarMotionLimits.maxAzDeg).toDouble();
     p.polarMotionLimits.minAltDeg = settings_.value("polarMotion/minAltDeg", p.polarMotionLimits.minAltDeg).toDouble();
     p.polarMotionLimits.maxAltDeg = settings_.value("polarMotion/maxAltDeg", p.polarMotionLimits.maxAltDeg).toDouble();
+    p.observableSky.enabled = settings_.value("observableSky/enabled", p.observableSky.enabled).toBool();
+    p.observableSky.minAzDeg = settings_.value("observableSky/minAzDeg", p.observableSky.minAzDeg).toDouble();
+    p.observableSky.maxAzDeg = settings_.value("observableSky/maxAzDeg", p.observableSky.maxAzDeg).toDouble();
+    p.observableSky.minAltDeg = settings_.value("observableSky/minAltDeg", p.observableSky.minAltDeg).toDouble();
+    p.observableSky.maxAltDeg = settings_.value("observableSky/maxAltDeg", p.observableSky.maxAltDeg).toDouble();
+    p.observableSky.rejectAutomatedGoto = settings_.value("observableSky/rejectAutomatedGoto", p.observableSky.rejectAutomatedGoto).toBool();
+    p.observableSky.schedulerEligibility = settings_.value("observableSky/schedulerEligibility", p.observableSky.schedulerEligibility).toBool();
+    p.observableSky.recheckSeconds = std::clamp(settings_.value("observableSky/recheckSeconds", p.observableSky.recheckSeconds).toInt(),5,3600);
     return p;
 }
 void AppSettings::saveProfile(const TelescopeProfile &p) const {
@@ -84,6 +92,14 @@ void AppSettings::saveProfile(const TelescopeProfile &p) const {
     settings_.setValue("polarMotion/maxAzDeg", p.polarMotionLimits.maxAzDeg);
     settings_.setValue("polarMotion/minAltDeg", p.polarMotionLimits.minAltDeg);
     settings_.setValue("polarMotion/maxAltDeg", p.polarMotionLimits.maxAltDeg);
+    settings_.setValue("observableSky/enabled", p.observableSky.enabled);
+    settings_.setValue("observableSky/minAzDeg", p.observableSky.minAzDeg);
+    settings_.setValue("observableSky/maxAzDeg", p.observableSky.maxAzDeg);
+    settings_.setValue("observableSky/minAltDeg", p.observableSky.minAltDeg);
+    settings_.setValue("observableSky/maxAltDeg", p.observableSky.maxAltDeg);
+    settings_.setValue("observableSky/rejectAutomatedGoto", p.observableSky.rejectAutomatedGoto);
+    settings_.setValue("observableSky/schedulerEligibility", p.observableSky.schedulerEligibility);
+    settings_.setValue("observableSky/recheckSeconds", std::clamp(p.observableSky.recheckSeconds,5,3600));
 }
 bool AppSettings::oalEnabled() const { return settings_.value("server/enabled", false).toBool(); }
 quint16 AppSettings::oalPort() const { return settings_.value("server/port", 8080).value<quint16>(); }

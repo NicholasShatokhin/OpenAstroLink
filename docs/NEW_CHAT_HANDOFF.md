@@ -1,9 +1,11 @@
+> **v0.2.10.60 update:** Assisted Polar Alignment and Observable Sky Region are implemented. Read `ASSISTED_POLAR_ALIGNMENT.md`, `OBSERVABLE_SKY_REGION.md`, and `RELEASE_0.2.10.60.md`. `.60` is source/static-qualified; Windows build/HIL pending.
+
 > **v0.2.10.59 update:** Night Vision / Strict Night Mode and display-only black→red mono/raw preview are implemented; OAL 1.0 mobile GUI is planned as a separate Qt Quick/QML client. Fresh Windows/UI HIL for `.59` is pending; `.58-buildfix9` is the last fresh Windows build-qualified base. Read `NIGHT_VISION.md` and `MOBILE_QML_GUI.md`.
 
 # OpenAstroLink / OpenAstroSuite — new-chat handoff
 
-**Authoritative snapshot:** v0.2.10.58-buildfix9  
-**Snapshot date:** 2026-09-08  
+**Authoritative snapshot:** v0.2.10.60 source checkpoint  
+**Snapshot date:** 2026-09-14  
 **Repository rule:** the `repository/` tree in the FULL HANDOFF package is authoritative. Do not reconstruct code from older chat snippets when the repository already contains a newer implementation.
 
 ## Mandatory read order

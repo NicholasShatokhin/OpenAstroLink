@@ -1,5 +1,16 @@
 > **Night Vision HIL update (2026-09-10):** v0.2.10.59 Night Vision / Strict Night Mode and black→red monochrome Live View are Windows HIL-positive. Capture/solve image pixels remain in their original palette. Pending: restart persistence, true-colour UVC protection and RAW/Bayer Debayer gating. Last fully logged fresh-clean Windows build-qualified base: v0.2.10.58-buildfix9.
 
+## v0.2.10.60
+
+- Core/source version: `0.2.10.60`; snapshot date: `2026-09-14`.
+- Added Assisted Polar Alignment from manual recenter or fresh plate-solve samples. The fit is solved as a best 3-D rotation in the local horizontal frame and reports polar-axis Alt/Az correction, RMS residual, sample sky span and confidence.
+- Added persisted `TelescopeProfile.observableSky`: two-corner local Alt/Az rectangle with north-wrap support, Sky Map overlay, optional automated-GOTO eligibility and Scheduler visibility deferral.
+- Scheduler transitions only at completed exposure/SER boundaries; no active science acquisition is aborted merely because a target crosses the visibility boundary.
+- Manual joystick remains available outside Observable Sky for calibration/recovery; hard raw-axis/mechanical safety remains a separate mechanism.
+- New API endpoints expose Assisted Polar sample/estimate and Observable Sky corner/clear operations to remote clients.
+- Qualification: source/static-qualified; fresh Windows build and real-sky/mount HIL pending. Last fully logged clean Windows build remains `v0.2.10.58-buildfix9`; Night Vision `.59` is Windows runtime/HIL-positive.
+- Frozen direct-MC mount geometry v9 is unchanged.
+
 ## v0.2.10.59
 - Public documentation/site information architecture now includes project rationale, manifesto, user/astronomer guide, OAL core developer guide, third-party integration guide, and native driver SDK entry points.
 
@@ -70,7 +81,7 @@
 - `scripts/build_windows.ps1` loads `vcvars64` automatically and locates Ninja from `PATH` or the Visual Studio CMake-tools installation. Raw presets should be run from an x64 MSVC Developer Command Prompt.
 - Raspberry Pi cross presets hosted on Windows remain GNU/Ninja and are unchanged.
 
-# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.58
+# Project manifest — OpenAstroSuite / OpenAstroLink v0.2.10.60
 
 ## v0.2.10.49
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpenAstroSuite VERSION 0.2.10.59 LANGUAGES CXX)
+project(OpenAstroSuite VERSION 0.2.10.60 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -336,6 +336,8 @@ set(OAS_CORE_SOURCES
     src/algorithms/autofocus_engine.cpp
     src/algorithms/guiding_engine.cpp
     src/algorithms/polar_alignment.cpp
+    src/algorithms/assisted_polar_alignment.cpp
+    src/algorithms/assisted_polar_alignment.h
     src/algorithms/scheduler.cpp
     src/algorithms/neural_solver.cpp
     src/oal/oal_server.cpp

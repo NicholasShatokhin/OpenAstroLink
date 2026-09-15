@@ -1,6 +1,11 @@
+
+### v0.2.10.60 Observable Sky scheduling
+
+Якщо profile має `observableSky.schedulerEligibility`, Scheduler використовує calibrated local Alt/Az rectangle як visibility constraint. Перед новим acquisition stage перевіряються DSO/planetary target та центр поточного mosaic tile. Якщо ціль перетнула межу під час активного FITS exposure або SER, запис не обривається; deferral виконується на наступній безпечній межі. Інший due/visible block може виконуватися, а partial progress deferred block зберігається в поточному process. Майбутній `startAtUtc` block не запускається раніше лише через видимість. Crash-resume limitation описано в `OBSERVABLE_SKY_REGION.md`.
+
 # Специфікація scheduler та автономної зйомки OpenAstroLink
 
-> Поточний synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md` та `RELEASE_0.2.10.58.md` щодо current qualification boundaries.
+> Поточний synchronized snapshot: **v0.2.10.60 (2026-09-14)**. Див. `STATUS.md`, `CURRENT_CHECKLIST.md`, `OBSERVABLE_SKY_REGION.md` та `RELEASE_0.2.10.60.md`.
 
 
 **Канонічна мова:** англійська; цей файл є українським дзеркалом.  

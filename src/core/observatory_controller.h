@@ -90,6 +90,14 @@ public:
     virtual PolarAlignmentResult estimatePolarAlignment() = 0;
     virtual QString startPolarAlignment(const PolarAlignmentRunRequest &request, QString *error = nullptr) = 0;
 
+    virtual void clearAssistedPolarSamples() = 0;
+    virtual bool addAssistedPolarTargetSample(const EquatorialCoord &target, QString *error = nullptr) = 0;
+    virtual bool addAssistedPolarSolvedSample(QString *error = nullptr) = 0;
+    virtual AssistedPolarResult estimateAssistedPolarAlignment() = 0;
+    virtual int assistedPolarSampleCount() const = 0;
+    virtual bool captureObservableSkyCorner(int corner, QString *error = nullptr) = 0;
+    virtual bool clearObservableSkyRegion(QString *error = nullptr) = 0;
+
     virtual bool setObservationPlan(const ObservationPlan &plan, QString *error = nullptr) = 0;
     virtual ObservationPlan observationPlan() const = 0;
     // Compatibility wrapper for v0.2.10.45 and earlier clients. Implementations
@@ -143,6 +151,8 @@ signals:
     void guidingChanged(const QJsonObject &status);
     void polarSampleCountChanged(int count);
     void polarAlignmentCompleted(const QJsonObject &result);
+    void assistedPolarSampleCountChanged(int count);
+    void assistedPolarAlignmentCompleted(const QJsonObject &result);
     void sessionChanged(const QJsonObject &status);
     void stateChanged(const QJsonObject &state);
     void motionEstimated(const QJsonObject &motion);

@@ -50,6 +50,7 @@
 #endif
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace oas {
 namespace {
@@ -317,6 +318,10 @@ static bool polarPathAllowed(const EquatorialCoord &start,double deltaRaDeg,cons
     }
     if(error)error->clear();return true;
 }
+static bool observableAzContains(double az,const ObservableSkyRegion&r){az=std::fmod(az+360.0,360.0);double a=std::fmod(r.minAzDeg+360.0,360.0),b=std::fmod(r.maxAzDeg+360.0,360.0);return a<=b?(az>=a&&az<=b):(az>=a||az<=b);}
+static bool observableContains(const HorizontalCoord&h,const ObservableSkyRegion&r){return !r.enabled||(h.altDeg>=r.minAltDeg&&h.altDeg<=r.maxAltDeg&&observableAzContains(h.azDeg,r));}
+static double azForward(double a,double b){double d=std::fmod(b-a+360.0,360.0);if(d<0)d+=360.0;return d;}
+
 ApplicationController::ApplicationController(QObject *parent):ObservatoryController(parent),scheduler_(this),operations_(this){
     profile_=settings_.loadProfile();
     // Persisted serial overrides are applied before native drivers perform their
@@ -476,7 +481,15 @@ void ApplicationController::setProfile(const TelescopeProfile&p){
         old.mount.preferredPierSide.compare(p.mount.preferredPierSide,Qt::CaseInsensitive)!=0 ||
         std::abs(old.observer.latitudeDeg-p.observer.latitudeDeg)>1e-10 ||
         std::abs(old.observer.longitudeDeg-p.observer.longitudeDeg)>1e-10;
-    profile_=p;settings_.saveProfile(p);if(mount_)mount_->configureGeometry(profile_.mount,profile_.observer);
+    profile_=p;
+    auto normAz=[](double v){v=std::fmod(v,360.0);if(v<0.0)v+=360.0;return v;};
+    profile_.observableSky.minAzDeg=normAz(profile_.observableSky.minAzDeg);
+    profile_.observableSky.maxAzDeg=normAz(profile_.observableSky.maxAzDeg);
+    profile_.observableSky.minAltDeg=std::clamp(profile_.observableSky.minAltDeg,-90.0,90.0);
+    profile_.observableSky.maxAltDeg=std::clamp(profile_.observableSky.maxAltDeg,-90.0,90.0);
+    if(profile_.observableSky.minAltDeg>profile_.observableSky.maxAltDeg)std::swap(profile_.observableSky.minAltDeg,profile_.observableSky.maxAltDeg);
+    profile_.observableSky.recheckSeconds=std::clamp(profile_.observableSky.recheckSeconds,5,3600);
+    settings_.saveProfile(profile_);if(mount_)mount_->configureGeometry(profile_.mount,profile_.observer);
     emit profileChanged();
     if(transformChanged)emit logMessage("Mount coordinate-transform profile changed; native/direct mount Sync is invalidated");
     else emit logMessage("Mount operational/profile settings updated; existing Sync preserved");
@@ -1156,6 +1169,7 @@ bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){
     const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000,utc);
     const auto targetJNow=convertEquatorialFrame(target,EquatorialFrame::JNow,utc);
     const auto targetHor=equatorialToHorizontal(target,profile_.observer,utc);
+    if(profile_.observableSky.enabled&&profile_.observableSky.rejectAutomatedGoto&&!observableContains(targetHor,profile_.observableSky)){if(e)*e=QString("Automated GOTO rejected by Observable Sky Region: Az=%1 Alt=%2").arg(targetHor.azDeg,0,'f',2).arg(targetHor.altDeg,0,'f',2);emit logMessage("Mount GOTO rejected by Observable Sky Region");return false;}
     MountStatus before;QString statusError;
     if(mountStatus(before,&statusError)&&before.parked){QString ue;if(!mount_->park(false,&ue)){if(e)*e="Mount is parked and automatic unpark failed: "+ue;emit logMessage("Mount GOTO rejected: "+(e?*e:QString()));return false;}emit logMessage("Mount auto-unparked for GOTO");before={};statusError.clear();}
     if(mountStatus(before,&statusError)&&before.coordinateValid){
@@ -1185,8 +1199,16 @@ bool ApplicationController::slewMount(const EquatorialCoord&t,QString*e){
 QString ApplicationController::startMountSlew(const EquatorialCoord&t,QString*e){
     if(!mount_){if(e)*e="No mount connected";return{};}
     if(!ensureMountBackendSiteTime(e))return{};
+    const QDateTime guardUtc=QDateTime::currentDateTimeUtc();
+    const auto guardTarget=convertEquatorialFrame(t,EquatorialFrame::J2000,guardUtc);
+    const auto guardHorizontal=equatorialToHorizontal(guardTarget,profile_.observer,guardUtc);
+    if(profile_.observableSky.enabled&&profile_.observableSky.rejectAutomatedGoto&&!observableContains(guardHorizontal,profile_.observableSky)){
+        if(e)*e=QString("Automated GOTO rejected by Observable Sky Region: Az=%1 Alt=%2").arg(guardHorizontal.azDeg,0,'f',2).arg(guardHorizontal.altDeg,0,'f',2);
+        emit logMessage("Async mount GOTO rejected by Observable Sky Region");
+        return{};
+    }
     {MountStatus st;QString se;if(mountStatus(st,&se)&&st.parked){if(!mount_->park(false,&se)){if(e)*e="Mount is parked and automatic unpark failed: "+se;return{};}emit logMessage("Mount auto-unparked for GOTO operation");}}
-    const auto target=convertEquatorialFrame(t,EquatorialFrame::J2000);auto mount=mount_;const bool ascomDiagnostics=mount->backendName()=="ascom-classic";
+    const auto target=guardTarget;auto mount=mount_;const bool ascomDiagnostics=mount->backendName()=="ascom-classic";
     const QString id=operations_.submit("mount.slew",{"mount"},true,[this,mount,target,ascomDiagnostics](OperationContext&ctx){
         ThreadMarshalledMount proxy(this,mount);QString err;OperationOutcome out;ctx.reportProgress(0.05,"commanding",{{"raDeg",target.raDeg},{"decDeg",target.decDeg},{"coordinateFrame","J2000"}});
         if(!proxy.slewTo(target,&err)){out.problem={{"code","MOUNT_SLEW_FAILED"},{"message",err}};return out;}
@@ -1319,29 +1341,53 @@ QString ApplicationController::startPolarAlignment(const PolarAlignmentRunReques
     emit logMessage(QString("Automatic polar-alignment operation accepted: %1 — %2 samples, RA step %3 deg, safe-region constraint %4")
                     .arg(id).arg(r.sampleCount).arg(r.raStepDeg,0,'f',2).arg(profile_.polarMotionLimits.enabled?"ON":"OFF"));return id;
 }
-bool ApplicationController::setObservationPlan(const ObservationPlan&plan,QString*e){
-    if(plan.blocks.empty()){if(e)*e="Observation plan has no blocks";return false;}
-    if(scheduler_.status().active){if(e)*e="Cannot replace an active observation plan";return false;}
-    for(const auto &block:plan.blocks){
-        if(block.name.trimmed().isEmpty()){if(e)*e="Observation block name is required";return false;}
-        if(block.coordinate.decDeg < -90.0 || block.coordinate.decDeg > 90.0){if(e)*e="Observation block DEC is outside [-90,+90]";return false;}
-        if(block.mode==ObservationMode::DsoFits){
-            if(block.dso.frameCount<1){if(e)*e="DSO block frameCount must be >= 1";return false;}
-            if(block.dso.exposure.exposureSec<=0.0){if(e)*e="DSO exposure must be > 0";return false;}
-        }else if(block.mode==ObservationMode::PlanetarySer){
-            if(block.planetary.serRuns<1){if(e)*e="Planetary block serRuns must be >= 1";return false;}
-            if(block.planetary.durationSec<=0.0){if(e)*e="Planetary SER duration must be > 0";return false;}
-            if(block.planetary.stream.exposureSec<=0.0){if(e)*e="Planetary stream exposure must be > 0";return false;}
-            if(block.planetary.roiWidth<0||block.planetary.roiHeight<0){if(e)*e="Planetary ROI dimensions cannot be negative";return false;}
-        }else{
-            if(block.mosaic.columns<1||block.mosaic.rows<1){if(e)*e="Mosaic rows/columns must be >= 1";return false;}
-            if(block.mosaic.tile.frameCount<1||block.mosaic.tile.exposure.exposureSec<=0.0){if(e)*e="Mosaic tile exposure/frame count is invalid";return false;}
-            if(block.mosaic.overlapPercent<0.0||block.mosaic.overlapPercent>=95.0){if(e)*e="Mosaic overlap must be in [0,95) percent";return false;}
+void ApplicationController::clearAssistedPolarSamples(){assistedPolarSamples_.clear();emit assistedPolarSampleCountChanged(0);if(oalWsServer_)oalWsServer_->broadcast("assistedPolarSampleCount",QJsonObject{{"count",0}});}
+bool ApplicationController::addAssistedPolarTargetSample(const EquatorialCoord&target,QString*e){MountStatus m;if(!mountStatus(m,e)||!m.coordinateValid){if(e&&e->isEmpty())*e="Mount coordinate is unavailable";return false;}AssistedPolarSample x;x.target=convertEquatorialFrame(target,EquatorialFrame::J2000);x.mountReported=convertEquatorialFrame(m.coordinate,EquatorialFrame::J2000);x.utc=QDateTime::currentDateTimeUtc();x.source="manual-target";assistedPolarSamples_.push_back(x);emit assistedPolarSampleCountChanged(int(assistedPolarSamples_.size()));if(oalWsServer_)oalWsServer_->broadcast("assistedPolarSampleCount",QJsonObject{{"count",int(assistedPolarSamples_.size())}});emit logMessage(QString("Assisted polar sample %1 recorded: target RA=%2 DEC=%3, mount RA=%4 DEC=%5").arg(assistedPolarSamples_.size()).arg(x.target.raDeg,0,'f',4).arg(x.target.decDeg,0,'f',4).arg(x.mountReported.raDeg,0,'f',4).arg(x.mountReported.decDeg,0,'f',4));return true;}
+bool ApplicationController::addAssistedPolarSolvedSample(QString*e){if(!lastSolve_.success){if(e)*e="No successful plate solve is available";return false;}EquatorialCoord t{lastSolve_.raDeg,lastSolve_.decDeg,lastSolve_.frame};const bool ok=addAssistedPolarTargetSample(t,e);if(ok&&!assistedPolarSamples_.empty())assistedPolarSamples_.back().source="plate-solve";return ok;}
+AssistedPolarResult ApplicationController::estimateAssistedPolarAlignment(){const auto r=assistedPolarEstimator_.estimate(assistedPolarSamples_,profile_.observer);QJsonObject j{{"success",r.success},{"sampleCount",r.sampleCount},{"axisAzDeg",r.axisAzDeg},{"axisAltDeg",r.axisAltDeg},{"idealAzDeg",r.idealAzDeg},{"idealAltDeg",r.idealAltDeg},{"azimuthAdjustmentArcmin",r.azimuthAdjustmentArcmin},{"altitudeAdjustmentArcmin",r.altitudeAdjustmentArcmin},{"totalErrorArcmin",r.totalErrorArcmin},{"rmsResidualArcmin",r.rmsResidualArcmin},{"skySpanDeg",r.skySpanDeg},{"confidence",r.confidence},{"message",r.message}};emit assistedPolarAlignmentCompleted(j);if(oalWsServer_)oalWsServer_->broadcast("assistedPolarResult",j);return r;}
+bool ApplicationController::captureObservableSkyCorner(int corner,QString*e){if(corner!=1&&corner!=2){if(e)*e="Corner must be 1 or 2";return false;}MountStatus m;if(!mountStatus(m,e)||!m.coordinateValid){if(e&&e->isEmpty())*e="Mount coordinate is unavailable";return false;}const auto h=equatorialToHorizontal(m.coordinate,profile_.observer,QDateTime::currentDateTimeUtc());if(corner==1){observableCorner1_=h;emit logMessage(QString("Observable Sky corner 1 captured: Az=%1 Alt=%2").arg(h.azDeg,0,'f',2).arg(h.altDeg,0,'f',2));return true;}if(!observableCorner1_){if(e)*e="Capture corner 1 first";return false;}auto a=*observableCorner1_,b=h;profile_.observableSky.minAltDeg=std::min(a.altDeg,b.altDeg);profile_.observableSky.maxAltDeg=std::max(a.altDeg,b.altDeg);const double forward=azForward(a.azDeg,b.azDeg);if(forward<=180.0){profile_.observableSky.minAzDeg=a.azDeg;profile_.observableSky.maxAzDeg=b.azDeg;}else{profile_.observableSky.minAzDeg=b.azDeg;profile_.observableSky.maxAzDeg=a.azDeg;}profile_.observableSky.enabled=true;settings_.saveProfile(profile_);observableCorner1_.reset();emit profileChanged();emitState();emit logMessage(QString("Observable Sky rectangle saved: Az=%1..%2 Alt=%3..%4%5").arg(profile_.observableSky.minAzDeg,0,'f',1).arg(profile_.observableSky.maxAzDeg,0,'f',1).arg(profile_.observableSky.minAltDeg,0,'f',1).arg(profile_.observableSky.maxAltDeg,0,'f',1).arg(profile_.observableSky.minAzDeg>profile_.observableSky.maxAzDeg?" (wraps north)":""));return true;}
+bool ApplicationController::clearObservableSkyRegion(QString*){observableCorner1_.reset();profile_.observableSky.enabled=false;settings_.saveProfile(profile_);emit profileChanged();emitState();emit logMessage("Observable Sky Region disabled and cleared");return true;}
+bool ApplicationController::currentTargetInsideObservableSky(const ObservationBlock&block,QString*reason)const{if(!profile_.observableSky.enabled||!profile_.observableSky.schedulerEligibility)return true;EquatorialCoord target=block.coordinate;if(block.mode==ObservationMode::MosaicFits)target=currentImagingTarget(block);const auto h=equatorialToHorizontal(target,profile_.observer,QDateTime::currentDateTimeUtc());const bool ok=observableContains(h,profile_.observableSky);if(!ok&&reason)*reason=QString("target outside Observable Sky Region (Az=%1 Alt=%2)").arg(h.azDeg,0,'f',1).arg(h.altDeg,0,'f',1);return ok;}
+bool ApplicationController::selectObservableSchedulerBlock(){
+    if(!profile_.observableSky.enabled||!profile_.observableSky.schedulerEligibility)return true;
+    const auto first=scheduler_.currentBlock();
+    if(!first)return false;
+    const QString firstId=first->id;
+    const int attempts=std::max(1,scheduler_.pendingBlockCount());
+    const QDateTime now=QDateTime::currentDateTimeUtc();
+    qint64 earliestFutureMs=std::numeric_limits<qint64>::max();
+    for(int i=0;i<attempts;++i){
+        const auto b=scheduler_.currentBlock();
+        if(!b)return false;
+        QString why;
+        const bool visible=currentTargetInsideObservableSky(*b,&why);
+        const bool future=b->startAtUtc.isValid()&&b->startAtUtc.toUTC()>now.addMSecs(250);
+        if(visible&&!future)return true;
+        if(visible&&future){
+            earliestFutureMs=std::min(earliestFutureMs,std::max<qint64>(1,now.msecsTo(b->startAtUtc.toUTC())));
+            why=QString("target is visible but scheduled for %1").arg(b->startAtUtc.toUTC().toString(Qt::ISODate));
         }
+        emit logMessage(QString("Scheduler deferring %1: %2").arg(b->name,why));
+        if(!scheduler_.deferCurrentBlock())break;
+        const auto n=scheduler_.currentBlock();
+        if(n&&n->id==firstId)break;
     }
-    scheduler_.setPlan(plan);settings_.saveObservationPlan(scheduler_.plan());settings_.saveSchedulerNextBlockIndex(0);
-    emit logMessage(QString("Observation calendar loaded and persisted: %1 (%2 block(s))").arg(plan.name).arg(plan.blocks.size()));
-    return true;
+    // A complete rotation returns the currently due block to the front.  Keep
+    // the scheduler in a running wait state rather than leaving a stale
+    // 'scheduled' state inherited from a candidate we inspected and deferred.
+    if(scheduler_.status().state=="scheduled")scheduler_.beginScheduled();
+    scheduler_.setStep("waiting-observable-sky");
+    qint64 delayMs=qint64(std::clamp(profile_.observableSky.recheckSeconds,5,3600))*1000;
+    if(earliestFutureMs!=std::numeric_limits<qint64>::max())delayMs=std::min(delayMs,earliestFutureMs);
+    delayMs=std::max<qint64>(250,delayMs);
+    QTimer::singleShot(int(std::min<qint64>(delayMs,std::numeric_limits<int>::max())),this,[this](){
+        if(scheduler_.status().active&&scheduler_.status().currentStep=="waiting-observable-sky"){
+            scheduler_.setStep("prepare-block");
+            scheduleSessionStep();
+        }
+    });
+    emit logMessage(QString("Scheduler waiting for a due target inside Observable Sky Region; recheck in %1 s").arg(double(delayMs)/1000.0,0,'f',1));
+    return false;
 }
 bool ApplicationController::setSessionPlan(const QString&name,const std::vector<SessionTarget>&targets,QString*e){
     if(targets.empty()){if(e)*e="No targets supplied";return false;}
@@ -1387,12 +1433,12 @@ void ApplicationController::pollInterBlockPark(){
     const auto st=scheduler_.status();if(!st.active||st.currentStep!="park-after-block")return;
     MountStatus m;QString e;if(!mountStatus(m,&e)){scheduler_.fail("Could not verify inter-block park: "+e);return;}
     if(m.slewing||!m.parked){QTimer::singleShot(500,this,[this](){pollInterBlockPark();});return;}
-    emit logMessage(QString("Scheduler inter-block park completed after %1").arg(st.currentBlockName));settings_.saveSchedulerNextBlockIndex(st.blockIndex+1);scheduler_.advanceBlock();continueSessionAfterBlockAdvance();
+    emit logMessage(QString("Scheduler inter-block park completed after %1").arg(st.currentBlockName));scheduler_.advanceBlock();settings_.saveSchedulerNextBlockIndex(scheduler_.resumeIndexHint());continueSessionAfterBlockAdvance();
 }
 void ApplicationController::completeCurrentObservationBlock(){
     const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("Completed observation block disappeared");return;}
     if(block->parkAfter){QString e;if(!parkMount(true,&e)){scheduler_.fail("Inter-block park could not start: "+e);return;}scheduler_.setStep("park-after-block");QTimer::singleShot(500,this,[this](){pollInterBlockPark();});return;}
-    settings_.saveSchedulerNextBlockIndex(scheduler_.status().blockIndex+1);scheduler_.advanceBlock();continueSessionAfterBlockAdvance();
+    scheduler_.advanceBlock();settings_.saveSchedulerNextBlockIndex(scheduler_.resumeIndexHint());continueSessionAfterBlockAdvance();
 }
 void ApplicationController::stopSession(){
     const auto st=scheduler_.status();
@@ -1550,6 +1596,8 @@ void ApplicationController::scheduleSessionStep(){
     const auto st=scheduler_.status();if(!st.active)return;
     if(st.state=="scheduled"||st.currentStep=="waiting-start"||st.currentStep=="waiting-block-start")return;
     const auto block=scheduler_.currentBlock();if(!block){scheduler_.fail("Observation plan cursor is outside the block list");return;}
+    if(st.currentStep=="waiting-observable-sky")return;
+    if((st.currentStep=="prepare-block"||st.currentStep=="capture-pending"||st.currentStep=="planetary-acquire-pending")&&!currentTargetInsideObservableSky(*block,nullptr)){if(!selectObservableSchedulerBlock())return;QTimer::singleShot(0,this,[this](){scheduleSessionStep();});return;}
     if(st.currentStep=="waiting-camera"){
         // At the actual execution time a plan owns the camera lifecycle. Cancel
         // queued/running interactive Live View so it cannot jump ahead of the

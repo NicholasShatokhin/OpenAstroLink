@@ -30,6 +30,7 @@ public:
     void setShowGuideFrame(bool enabled);
     void setShowFrameLabels(bool enabled);
     void setPlannerMosaic(const SkyFrame &mainFrame, int columns, int rows, double overlapPercent, bool enabled);
+    void setObservableSkyRegion(const ObservableSkyRegion &region);
     SkyFrame solvedFrame() const { return solvedFrame_; }
     SkyFrame mainPlannedFrame() const { return mainPlannedFrame_; }
     SkyFrame guidePlannedFrame() const { return guidePlannedFrame_; }
@@ -102,6 +103,7 @@ private:
     SkyFrame mainPlannedFrame_{};
     SkyFrame guidePlannedFrame_{};
     PlannerGrid planner_{};
+    ObservableSkyRegion observableSky_{};
     bool showSolvedFrame_{true};
     bool showMainFrame_{true};
     bool showGuideFrame_{false};

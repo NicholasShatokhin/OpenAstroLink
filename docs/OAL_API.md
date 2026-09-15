@@ -1,6 +1,20 @@
+
+## Assisted Polar / Observable Sky API
+
+Added in v0.2.10.60:
+
+- `POST /assisted-polar/clear`
+- `POST /assisted-polar/sample-target`
+- `POST /assisted-polar/sample-solved`
+- `POST /assisted-polar/estimate`
+- `POST /observable-sky/corner/{corner}`
+- `POST /observable-sky/clear`
+
+`TelescopeProfile.observableSky` carries the persisted visible-region policy. Assisted sample counts/results are also broadcast through the event stream.
+
 # OpenAstroLink HTTP API — v0.2.10.47 reference implementation
 
-> Current synchronized snapshot: **v0.2.10.58-buildfix9 (2026-09-09)**. See `STATUS.md`, `CURRENT_CHECKLIST.md` and `RELEASE_0.2.10.58.md` for current qualification boundaries.
+> Current synchronized snapshot: **v0.2.10.60 (2026-09-14)**. `openapi.yaml` is versioned 0.2.10.60.
 
 
 

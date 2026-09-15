@@ -10,7 +10,7 @@ def need(rel,*tokens):
         assert token in text, f"{rel}: missing {token!r}"
         checks+=1
 
-need('CMakeLists.txt','VERSION 0.2.10.59','src/gui/theme_manager.cpp','src/gui/theme_manager.h')
+need('CMakeLists.txt','VERSION 0.2.10.60','src/gui/theme_manager.cpp','src/gui/theme_manager.h')
 need('src/app/main.cpp','applyUiTheme(app,oas::loadUiTheme())')
 need('src/gui/theme_manager.h','enum class UiTheme','NightVision','StrictNight')
 need('src/gui/theme_manager.cpp','ui/theme','Night Vision','Strict Night Mode','QToolTip','strictNightMappedColor')
@@ -20,4 +20,4 @@ need('docs/NIGHT_VISION.md','Camera pixels are not recoloured','Strict Night Mod
 need('docs/MOBILE_QML_GUI.md','Qt Quick/QML','OAL 1.0','second presentation layer')
 need('docs/uk/NIGHT_VISION.md','Night Vision','Strict Night Mode','не змінює')
 need('docs/uk/MOBILE_QML_GUI.md','Qt Quick/QML','OAL 1.0')
-print(f'PASS v0.2.10.59 Night Vision/QML roadmap: {checks} assertions')
+print(f'PASS v0.2.10.60 Night Vision/QML roadmap: {checks} assertions')
